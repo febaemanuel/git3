@@ -220,10 +220,9 @@
                             <small class="text-muted">0 = ate acabar todos os contatos</small>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label class="form-label">Tempo entre Envios (segundos)</label>
-                            <input type="number" class="form-control" name="tempo_entre_envios"
-                                   value="15" min="5" max="300">
-                            <small class="text-muted">Intervalo minimo entre mensagens</small>
+                            <label class="form-label">Tempo entre Envios (calculado)</label>
+                            <div class="form-control bg-light" id="tempo-calculado">~12 minutos</div>
+                            <small class="text-muted">Calculado automaticamente</small>
                         </div>
                     </div>
 
@@ -259,5 +258,41 @@
         {% endif %}
     {% endfor %}
 {% endif %}
+
+// Calcular tempo entre envios automaticamente
+function calcularTempoEnvio() {
+    const limiteDiario = parseInt(document.querySelector('input[name="limite_diario"]').value) || 50;
+    const horaInicio = parseInt(document.querySelector('input[name="hora_inicio"]').value) || 8;
+    const horaFim = parseInt(document.querySelector('input[name="hora_fim"]').value) || 18;
+
+    let horas = horaFim - horaInicio;
+    if (horas <= 0) horas = 8;
+
+    const segundos = Math.max(5, Math.floor((horas * 3600) / limiteDiario));
+    const minutos = Math.floor(segundos / 60);
+    const segsRestantes = segundos % 60;
+
+    let texto = '';
+    if (minutos > 0) {
+        texto = `~${minutos} min`;
+        if (segsRestantes > 0) texto += ` ${segsRestantes}s`;
+    } else {
+        texto = `~${segundos} segundos`;
+    }
+
+    document.getElementById('tempo-calculado').textContent = texto;
+}
+
+// Adicionar listeners aos campos
+document.addEventListener('DOMContentLoaded', function() {
+    const campos = ['limite_diario', 'hora_inicio', 'hora_fim'];
+    campos.forEach(nome => {
+        const input = document.querySelector(`input[name="${nome}"]`);
+        if (input) {
+            input.addEventListener('input', calcularTempoEnvio);
+        }
+    });
+    calcularTempoEnvio(); // Calcular inicial
+});
 </script>
 {% endblock %}

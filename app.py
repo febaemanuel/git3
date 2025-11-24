@@ -953,10 +953,9 @@ def enviar_campanha_bg(campanha_id):
                     camp.atualizar_stats()
                     db.session.commit()
 
-                    # Usar tempo entre envios calculado ou configurado
-                    tempo_espera = max(tempo_entre, camp.tempo_entre_envios)
+                    # Aguardar tempo calculado entre envios
                     if i < total - 1:
-                        time.sleep(tempo_espera)
+                        time.sleep(tempo_entre)
 
             # Verificar se acabou
             restantes = camp.contatos.filter(Contato.status.in_(['pendente', 'pronto_envio'])).count()
@@ -1073,7 +1072,6 @@ def criar_campanha():
     nome = request.form.get('nome', '').strip()
     msg = request.form.get('mensagem', MENSAGEM_PADRAO).strip()
     limite = int(request.form.get('limite_diario', 50))
-    tempo = int(request.form.get('tempo_entre_envios', 15))
     hora_inicio = int(request.form.get('hora_inicio', 8))
     hora_fim = int(request.form.get('hora_fim', 18))
     dias_duracao = int(request.form.get('dias_duracao', 0))
@@ -1096,7 +1094,6 @@ def criar_campanha():
         descricao=request.form.get('descricao', ''),
         mensagem=msg,
         limite_diario=limite,
-        tempo_entre_envios=tempo,
         hora_inicio=hora_inicio,
         hora_fim=hora_fim,
         dias_duracao=dias_duracao,

@@ -31,10 +31,10 @@
                             <input type="text" class="form-control" name="nome" value="{{ contato.nome }}" required>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label class="form-label">Data de Nascimento *</label>
+                            <label class="form-label">Data de Nascimento</label>
                             <input type="date" class="form-control" name="data_nascimento"
-                                value="{{ contato.data_nascimento.isoformat() if contato.data_nascimento else '' }}"
-                                required>
+                                value="{{ contato.data_nascimento.isoformat() if contato.data_nascimento else '' }}">
+                            <small class="text-muted">Usada para verificação de identidade</small>
                         </div>
                     </div>
 
@@ -95,8 +95,9 @@
                 <p><strong>Status:</strong> <span class="badge {{ contato.status_badge() }}">{{ contato.status_texto()
                         }}</span></p>
                 <p><strong>Data de Criação:</strong> {{ contato.data_criacao.strftime('%d/%m/%Y %H:%M') }}</p>
-                {% if contato.data_envio %}
-                <p><strong>Data de Envio:</strong> {{ contato.data_envio.strftime('%d/%m/%Y %H:%M') }}</p>
+                {% set telefones_enviados = contato.telefones.filter_by(enviado=True).all() %}
+                {% if telefones_enviados %}
+                <p><strong>Data de Envio:</strong> {{ telefones_enviados[0].data_envio.strftime('%d/%m/%Y %H:%M') if telefones_enviados[0].data_envio else '-' }}</p>
                 {% endif %}
                 {% if contato.data_resposta %}
                 <p><strong>Data de Resposta:</strong> {{ contato.data_resposta.strftime('%d/%m/%Y %H:%M') }}</p>

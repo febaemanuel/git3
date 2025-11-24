@@ -1188,8 +1188,8 @@ def exportar_campanha(id):
             'Telefones': c.telefones_str(),
             'Procedimento': c.procedimento,
             'Status': c.status_texto(),
-            'Enviado': 'Sim' if c.status == 'enviado' or c.confirmado or c.rejeitado else 'Nao',
-            'Data Envio': c.data_envio.strftime('%d/%m/%Y %H:%M') if c.data_envio else '',
+            'Enviado': 'Sim' if c.status in ['enviado', 'aguardando_nascimento', 'concluido'] or c.confirmado or c.rejeitado else 'Nao',
+            'Data Envio': max([t.data_envio for t in c.telefones if t.data_envio], default=None).strftime('%d/%m/%Y %H:%M') if any(t.data_envio for t in c.telefones) else '',
             'Confirmado': 'SIM' if c.confirmado else '',
             'Rejeitado': 'SIM' if c.rejeitado else '',
             'Resposta': c.resposta or '',
@@ -1296,7 +1296,7 @@ def api_reenviar(id):
             
     if sucesso:
         c.status = 'enviado'
-        c.data_envio = datetime.utcnow()
+        c.erro = None
         db.session.commit()
         return jsonify({'sucesso': True})
     else:
@@ -1360,6 +1360,8 @@ def editar_contato(id):
             except:
                 flash('Data de nascimento inválida', 'danger')
                 return redirect(url_for('editar_contato', id=id))
+        else:
+            c.data_nascimento = None
         
         # Telefones - remover todos e recriar
         for t in c.telefones.all():
@@ -1549,11 +1551,13 @@ def webhook():
                 pass
             
             if dt_input:
-                if c.data_nascimento and dt_input == c.data_nascimento:
-                    # Data Correta - Verificar intencao original
+                # Verificar se temos data de nascimento cadastrada
+                if not c.data_nascimento:
+                    # Sem data cadastrada - aceitar qualquer data e prosseguir
+                    # (ou pode-se rejeitar - depende da regra de negócio)
                     intent_up = (c.resposta or '').upper()
                     msg_final = "✅ Obrigado."
-                    
+
                     if any(r in intent_up for r in RESPOSTAS_SIM):
                         c.confirmado = True
                         c.rejeitado = False
@@ -1562,13 +1566,36 @@ def webhook():
                         c.confirmado = False
                         c.rejeitado = True
                         msg_final = "✅ Obrigado. Registramos que você não tem interesse."
-                    
+
                     c.status = 'concluido'
                     c.data_resposta = datetime.utcnow()
                     db.session.commit()
                     c.campanha.atualizar_stats()
                     db.session.commit()
-                    
+
+                    ws.enviar(numero, msg_final)
+                    logger.info(f"Contato {c.id} confirmado sem data de nascimento cadastrada")
+
+                elif dt_input == c.data_nascimento:
+                    # Data Correta - Verificar intencao original
+                    intent_up = (c.resposta or '').upper()
+                    msg_final = "✅ Obrigado."
+
+                    if any(r in intent_up for r in RESPOSTAS_SIM):
+                        c.confirmado = True
+                        c.rejeitado = False
+                        msg_final = "✅ *Confirmado*! Obrigado por confirmar seu interesse."
+                    elif any(r in intent_up for r in RESPOSTAS_NAO):
+                        c.confirmado = False
+                        c.rejeitado = True
+                        msg_final = "✅ Obrigado. Registramos que você não tem interesse."
+
+                    c.status = 'concluido'
+                    c.data_resposta = datetime.utcnow()
+                    db.session.commit()
+                    c.campanha.atualizar_stats()
+                    db.session.commit()
+
                     ws.enviar(numero, msg_final)
                 else:
                     # Data incorreta

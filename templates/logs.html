@@ -34,8 +34,8 @@
                         <label class="form-label">Direcao</label>
                         <select class="form-select" name="direcao">
                             <option value="">Todas</option>
-                            <option value="out" {% if direcao == 'out' %}selected{% endif %}>Enviadas</option>
-                            <option value="in" {% if direcao == 'in' %}selected{% endif %}>Recebidas</option>
+                            <option value="enviada" {% if direcao == 'enviada' %}selected{% endif %}>Enviadas</option>
+                            <option value="recebida" {% if direcao == 'recebida' %}selected{% endif %}>Recebidas</option>
                         </select>
                     </div>
                     <div class="col-md-3">
@@ -79,7 +79,7 @@
                                     <small>{{ log.data.strftime('%d/%m/%Y %H:%M:%S') }}</small>
                                 </td>
                                 <td>
-                                    {% if log.direcao == 'out' %}
+                                    {% if log.direcao == 'enviada' %}
                                     <span class="badge bg-primary">
                                         <i class="bi bi-arrow-up-right"></i> Enviada
                                     </span>
@@ -107,9 +107,9 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if log.campanha %}
-                                    <a href="{{ url_for('campanha_detalhes', id=log.campanha_id) }}">
-                                        {{ log.campanha.nome[:20] }}
+                                    {% if log.campanha_id %}
+                                    <a href="{{ url_for('campanha_detalhe', id=log.campanha_id) }}">
+                                        Campanha #{{ log.campanha_id }}
                                     </a>
                                     {% else %}
                                     <small class="text-muted">-</small>

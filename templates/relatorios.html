@@ -2,261 +2,680 @@
 
 {% block title %}Relatórios{% endblock %}
 
+{% block extra_css %}
+<style>
+    /* Header Gradient */
+    .report-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 15px;
+        padding: 30px;
+        margin-bottom: 25px;
+        box-shadow: 0 10px 40px rgba(102, 126, 234, 0.3);
+    }
+
+    .report-header h2 {
+        font-weight: 700;
+        margin-bottom: 5px;
+    }
+
+    /* KPI Cards */
+    .kpi-card {
+        border: none;
+        border-radius: 15px;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+        transition: all 0.3s ease;
+        overflow: hidden;
+    }
+
+    .kpi-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+    }
+
+    .kpi-card .card-body {
+        padding: 25px;
+    }
+
+    .kpi-icon {
+        width: 60px;
+        height: 60px;
+        border-radius: 12px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.8rem;
+        margin-bottom: 15px;
+    }
+
+    .kpi-value {
+        font-size: 2.5rem;
+        font-weight: 700;
+        line-height: 1;
+        margin-bottom: 5px;
+    }
+
+    .kpi-label {
+        font-size: 0.9rem;
+        color: #6c757d;
+        font-weight: 500;
+    }
+
+    .kpi-change {
+        font-size: 0.85rem;
+        margin-top: 10px;
+    }
+
+    /* Status Badge */
+    .status-badge {
+        padding: 8px 16px;
+        border-radius: 50px;
+        font-weight: 600;
+        font-size: 0.85rem;
+    }
+
+    /* Chart Cards */
+    .chart-card {
+        border: none;
+        border-radius: 15px;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+    }
+
+    .chart-card .card-header {
+        background: white;
+        border-bottom: 1px solid #f0f0f0;
+        padding: 20px 25px;
+        font-weight: 600;
+        border-radius: 15px 15px 0 0;
+    }
+
+    .chart-card .card-body {
+        padding: 25px;
+    }
+
+    /* Progress Bar Estilizado */
+    .progress-xl {
+        height: 25px;
+        border-radius: 50px;
+        overflow: hidden;
+        background: #f0f0f0;
+    }
+
+    .progress-xl .progress-bar {
+        border-radius: 50px;
+        font-weight: 600;
+        font-size: 0.8rem;
+        line-height: 25px;
+    }
+
+    /* Mini Stats */
+    .mini-stat {
+        padding: 15px;
+        border-radius: 10px;
+        background: #f8f9fa;
+        text-align: center;
+        transition: all 0.3s;
+    }
+
+    .mini-stat:hover {
+        background: #e9ecef;
+    }
+
+    .mini-stat-value {
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+
+    .mini-stat-label {
+        font-size: 0.75rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    /* Campanha Info Card */
+    .campaign-info {
+        background: linear-gradient(135deg, #f5f7fa 0%, #e4e8eb 100%);
+        border-radius: 15px;
+        padding: 25px;
+        border: none;
+    }
+
+    /* Selector Estilizado */
+    .campaign-selector {
+        border: none;
+        border-radius: 15px;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.08);
+        padding: 25px;
+    }
+
+    .campaign-selector select {
+        border-radius: 10px;
+        padding: 15px 20px;
+        font-size: 1.1rem;
+        border: 2px solid #e0e0e0;
+        transition: all 0.3s;
+    }
+
+    .campaign-selector select:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+    }
+
+    /* Table Estilizada */
+    .table-report {
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+
+    .table-report thead th {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        font-weight: 600;
+        padding: 15px;
+        border: none;
+    }
+
+    .table-report thead th:first-child {
+        border-radius: 10px 0 0 0;
+    }
+
+    .table-report thead th:last-child {
+        border-radius: 0 10px 0 0;
+    }
+
+    .table-report tbody td {
+        padding: 15px;
+        border-bottom: 1px solid #f0f0f0;
+    }
+
+    .table-report tbody tr:hover {
+        background: #f8f9fa;
+    }
+
+    /* Empty State */
+    .empty-state {
+        padding: 80px 40px;
+        text-align: center;
+    }
+
+    .empty-state-icon {
+        font-size: 5rem;
+        color: #dee2e6;
+        margin-bottom: 20px;
+    }
+
+    /* Print Styles */
+    @media print {
+        .no-print { display: none !important; }
+        .kpi-card, .chart-card { box-shadow: none !important; border: 1px solid #ddd !important; }
+    }
+
+    /* Gauge Chart Container */
+    .gauge-container {
+        position: relative;
+        text-align: center;
+    }
+
+    .gauge-value {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        font-size: 2rem;
+        font-weight: 700;
+    }
+
+    /* Color utilities */
+    .bg-gradient-success { background: linear-gradient(135deg, #28a745 0%, #20c997 100%); }
+    .bg-gradient-info { background: linear-gradient(135deg, #17a2b8 0%, #6610f2 100%); }
+    .bg-gradient-warning { background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%); }
+    .bg-gradient-danger { background: linear-gradient(135deg, #dc3545 0%, #e83e8c 100%); }
+    .bg-gradient-primary { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+    .bg-gradient-secondary { background: linear-gradient(135deg, #6c757d 0%, #495057 100%); }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="row">
-    <!-- Cabeçalho -->
-    <div class="col-12 mb-4">
-        <div class="d-flex justify-content-between align-items-center">
-            <div>
-                <h2><i class="bi bi-bar-chart-fill"></i> Relatórios</h2>
-                <p class="text-muted mb-0">Acompanhe o desempenho das campanhas</p>
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="report-header">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h2><i class="bi bi-graph-up-arrow me-2"></i>Central de Relatórios</h2>
+                <p class="mb-0 opacity-75">Análise completa de desempenho das campanhas</p>
+            </div>
+            <div class="col-md-4 text-md-end no-print">
+                {% if campanha_selecionada %}
+                <button onclick="window.print()" class="btn btn-light btn-sm me-2">
+                    <i class="bi bi-printer"></i> Imprimir
+                </button>
+                <a href="{{ url_for('exportar_campanha', id=campanha_selecionada.id) }}" class="btn btn-light btn-sm">
+                    <i class="bi bi-file-earmark-excel"></i> Excel
+                </a>
+                {% endif %}
             </div>
         </div>
     </div>
 
     <!-- Seletor de Campanha -->
-    <div class="col-12 mb-4">
-        <div class="card">
-            <div class="card-body">
-                <form method="GET" class="row g-3 align-items-end">
-                    <div class="col-md-8">
-                        <label class="form-label"><strong>Selecione a Campanha</strong></label>
-                        <select class="form-select form-select-lg" name="campanha_id" onchange="this.form.submit()">
-                            <option value="">-- Selecione uma campanha --</option>
-                            {% for camp in campanhas %}
-                            <option value="{{ camp.id }}" {% if campanha_selecionada and campanha_selecionada.id == camp.id %}selected{% endif %}>
-                                {{ camp.nome }} ({{ camp.total_contatos }} contatos)
-                            </option>
-                            {% endfor %}
-                        </select>
-                    </div>
-                    <div class="col-md-4">
-                        {% if campanha_selecionada %}
-                        <a href="{{ url_for('campanha_detalhe', id=campanha_selecionada.id) }}" class="btn btn-outline-primary">
-                            <i class="bi bi-eye"></i> Ver Campanha
-                        </a>
-                        <a href="{{ url_for('exportar_campanha', id=campanha_selecionada.id) }}" class="btn btn-success">
-                            <i class="bi bi-download"></i> Exportar Excel
-                        </a>
-                        {% endif %}
-                    </div>
-                </form>
+    <div class="campaign-selector bg-white mb-4 no-print">
+        <form method="GET" class="row g-3 align-items-center">
+            <div class="col-md-6">
+                <label class="form-label text-muted small text-uppercase fw-bold">Selecionar Campanha</label>
+                <select class="form-select" name="campanha_id" onchange="this.form.submit()">
+                    <option value="">Escolha uma campanha para análise...</option>
+                    {% for camp in campanhas %}
+                    <option value="{{ camp.id }}" {% if campanha_selecionada and campanha_selecionada.id == camp.id %}selected{% endif %}>
+                        {{ camp.nome }} — {{ camp.total_contatos }} contatos — {{ camp.status.replace('_', ' ').title() }}
+                    </option>
+                    {% endfor %}
+                </select>
             </div>
-        </div>
+            <div class="col-md-6 text-md-end">
+                {% if campanha_selecionada %}
+                <a href="{{ url_for('campanha_detalhe', id=campanha_selecionada.id) }}" class="btn btn-outline-primary">
+                    <i class="bi bi-eye"></i> Ver Detalhes
+                </a>
+                <a href="{{ url_for('logs') }}?campanha_id={{ campanha_selecionada.id }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-list-ul"></i> Ver Logs
+                </a>
+                {% endif %}
+            </div>
+        </form>
     </div>
 
     {% if campanha_selecionada %}
-    <!-- Informações da Campanha -->
-    <div class="col-12 mb-4">
-        <div class="card bg-light">
-            <div class="card-body">
-                <div class="row align-items-center">
-                    <div class="col-md-6">
-                        <h4 class="mb-1">{{ campanha_selecionada.nome }}</h4>
-                        <p class="text-muted mb-0">
-                            Criada em {{ campanha_selecionada.data_criacao.strftime('%d/%m/%Y') }}
-                            | Status:
-                            <span class="badge bg-{{ 'success' if campanha_selecionada.status == 'concluida' else 'warning' if campanha_selecionada.status == 'pausada' else 'info' if campanha_selecionada.status == 'em_andamento' else 'secondary' }}">
-                                {{ campanha_selecionada.status.replace('_', ' ').title() }}
-                            </span>
-                        </p>
+
+    {% set total_respondidos = campanha_selecionada.total_confirmados + campanha_selecionada.total_rejeitados %}
+    {% set taxa_confirmacao = (campanha_selecionada.total_confirmados / total_respondidos * 100) if total_respondidos > 0 else 0 %}
+    {% set taxa_resposta = (total_respondidos / campanha_selecionada.total_enviados * 100) if campanha_selecionada.total_enviados > 0 else 0 %}
+    {% set taxa_envio = campanha_selecionada.percentual_conclusao() %}
+
+    <!-- Info da Campanha -->
+    <div class="campaign-info mb-4">
+        <div class="row align-items-center">
+            <div class="col-md-6">
+                <h4 class="fw-bold mb-2">
+                    <i class="bi bi-megaphone me-2 text-primary"></i>
+                    {{ campanha_selecionada.nome }}
+                </h4>
+                <div class="d-flex flex-wrap gap-3 text-muted">
+                    <span><i class="bi bi-calendar3 me-1"></i> Criada: {{ campanha_selecionada.data_criacao.strftime('%d/%m/%Y às %H:%M') }}</span>
+                    {% if campanha_selecionada.data_inicio %}
+                    <span><i class="bi bi-play-circle me-1"></i> Iniciada: {{ campanha_selecionada.data_inicio.strftime('%d/%m/%Y às %H:%M') }}</span>
+                    {% endif %}
+                    {% if campanha_selecionada.data_fim %}
+                    <span><i class="bi bi-check-circle me-1"></i> Concluída: {{ campanha_selecionada.data_fim.strftime('%d/%m/%Y às %H:%M') }}</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="col-md-6 text-md-end">
+                <span class="status-badge
+                    {% if campanha_selecionada.status == 'concluida' %}bg-success text-white
+                    {% elif campanha_selecionada.status == 'em_andamento' %}bg-primary text-white
+                    {% elif campanha_selecionada.status == 'pausada' %}bg-warning text-dark
+                    {% elif campanha_selecionada.status == 'erro' %}bg-danger text-white
+                    {% else %}bg-secondary text-white{% endif %}">
+                    <i class="bi bi-circle-fill me-1" style="font-size: 0.5rem;"></i>
+                    {{ campanha_selecionada.status.replace('_', ' ').upper() }}
+                </span>
+                <div class="mt-2 text-muted small">
+                    <i class="bi bi-clock me-1"></i> {{ campanha_selecionada.limite_diario }} pessoas/dia
+                    <span class="mx-2">|</span>
+                    <i class="bi bi-sun me-1"></i> {{ campanha_selecionada.hora_inicio }}h às {{ campanha_selecionada.hora_fim }}h
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPI Cards - Principais -->
+    <div class="row g-4 mb-4">
+        <!-- Total de Contatos -->
+        <div class="col-xl-3 col-md-6">
+            <div class="card kpi-card h-100">
+                <div class="card-body">
+                    <div class="kpi-icon bg-gradient-primary text-white">
+                        <i class="bi bi-people"></i>
                     </div>
-                    <div class="col-md-6 text-end">
-                        <small class="text-muted">
-                            Configuração: {{ campanha_selecionada.limite_diario }} pessoas/dia
-                            | {{ campanha_selecionada.hora_inicio }}h às {{ campanha_selecionada.hora_fim }}h
-                        </small>
+                    <div class="kpi-value text-primary">{{ campanha_selecionada.total_contatos }}</div>
+                    <div class="kpi-label">Total de Contatos</div>
+                    <div class="kpi-change text-muted">
+                        <i class="bi bi-telephone"></i> {{ campanha_selecionada.total_numeros }} telefones cadastrados
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Enviados -->
+        <div class="col-xl-3 col-md-6">
+            <div class="card kpi-card h-100">
+                <div class="card-body">
+                    <div class="kpi-icon bg-gradient-info text-white">
+                        <i class="bi bi-send-check"></i>
+                    </div>
+                    <div class="kpi-value text-info">{{ campanha_selecionada.total_enviados }}</div>
+                    <div class="kpi-label">Mensagens Enviadas</div>
+                    <div class="progress progress-xl mt-3">
+                        <div class="progress-bar bg-info" style="width: {{ taxa_envio }}%">{{ taxa_envio }}%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Confirmados -->
+        <div class="col-xl-3 col-md-6">
+            <div class="card kpi-card h-100">
+                <div class="card-body">
+                    <div class="kpi-icon bg-gradient-success text-white">
+                        <i class="bi bi-check-circle"></i>
+                    </div>
+                    <div class="kpi-value text-success">{{ campanha_selecionada.total_confirmados }}</div>
+                    <div class="kpi-label">Identidade Confirmada</div>
+                    <div class="kpi-change text-success">
+                        <i class="bi bi-arrow-up"></i> {{ taxa_confirmacao | round(1) }}% dos que responderam
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rejeitados -->
+        <div class="col-xl-3 col-md-6">
+            <div class="card kpi-card h-100">
+                <div class="card-body">
+                    <div class="kpi-icon bg-gradient-warning text-white">
+                        <i class="bi bi-x-circle"></i>
+                    </div>
+                    <div class="kpi-value text-warning">{{ campanha_selecionada.total_rejeitados }}</div>
+                    <div class="kpi-label">Não Confirmados</div>
+                    <div class="kpi-change text-warning">
+                        <i class="bi bi-arrow-down"></i> {{ (100 - taxa_confirmacao) | round(1) }}% dos que responderam
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Cards de Estatísticas -->
-    <div class="col-12 mb-4">
-        <div class="row g-3">
-            <div class="col-md-3">
-                <div class="card border-primary">
-                    <div class="card-body text-center">
-                        <h2 class="text-primary">{{ campanha_selecionada.total_contatos }}</h2>
-                        <small class="text-muted">Total de Contatos</small>
-                    </div>
+    <!-- KPI Cards - Secundários -->
+    <div class="row g-3 mb-4">
+        <div class="col-xl-2 col-md-4 col-6">
+            <div class="mini-stat">
+                <div class="mini-stat-value text-secondary">{{ campanha_selecionada.pendentes_enviar() }}</div>
+                <div class="mini-stat-label">Pendentes</div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-6">
+            <div class="mini-stat">
+                <div class="mini-stat-value text-info">{{ campanha_selecionada.aguardando_resposta() }}</div>
+                <div class="mini-stat-label">Aguardando</div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-6">
+            <div class="mini-stat">
+                <div class="mini-stat-value text-danger">{{ campanha_selecionada.sem_whatsapp() }}</div>
+                <div class="mini-stat-label">Sem WhatsApp</div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-6">
+            <div class="mini-stat">
+                <div class="mini-stat-value text-danger">{{ campanha_selecionada.total_erros }}</div>
+                <div class="mini-stat-label">Erros</div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-6">
+            <div class="mini-stat">
+                <div class="mini-stat-value text-primary">{{ total_respondidos }}</div>
+                <div class="mini-stat-label">Responderam</div>
+            </div>
+        </div>
+        <div class="col-xl-2 col-md-4 col-6">
+            <div class="mini-stat">
+                <div class="mini-stat-value text-success">{{ campanha_selecionada.enviados_hoje or 0 }}</div>
+                <div class="mini-stat-label">Enviados Hoje</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gráficos Row 1 -->
+    <div class="row g-4 mb-4">
+        <!-- Gráfico de Status -->
+        <div class="col-lg-5">
+            <div class="card chart-card h-100">
+                <div class="card-header">
+                    <i class="bi bi-pie-chart-fill text-primary me-2"></i>
+                    Distribuição de Status
+                </div>
+                <div class="card-body d-flex align-items-center justify-content-center">
+                    <canvas id="chartStatus" style="max-height: 320px;"></canvas>
                 </div>
             </div>
-            <div class="col-md-3">
-                <div class="card border-info">
-                    <div class="card-body text-center">
-                        <h2 class="text-info">{{ campanha_selecionada.total_enviados }}</h2>
-                        <small class="text-muted">Mensagens Enviadas</small>
-                        <div class="progress mt-2" style="height: 5px;">
-                            <div class="progress-bar bg-info" style="width: {{ campanha_selecionada.percentual_conclusao() }}%"></div>
+        </div>
+
+        <!-- Gráfico de Funil -->
+        <div class="col-lg-7">
+            <div class="card chart-card h-100">
+                <div class="card-header">
+                    <i class="bi bi-funnel-fill text-primary me-2"></i>
+                    Funil de Conversão
+                </div>
+                <div class="card-body">
+                    <canvas id="chartFunil" style="max-height: 320px;"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Taxa de Confirmação Detalhada -->
+    <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="card chart-card h-100">
+                <div class="card-header">
+                    <i class="bi bi-speedometer2 text-primary me-2"></i>
+                    Taxa de Confirmação
+                </div>
+                <div class="card-body">
+                    <div class="gauge-container mb-4">
+                        <canvas id="chartGauge" height="200"></canvas>
+                        <div class="gauge-value text-success">{{ taxa_confirmacao | round(1) }}%</div>
+                    </div>
+
+                    <div class="text-center mb-4">
+                        <small class="text-muted">Dos {{ total_respondidos }} que responderam, {{ campanha_selecionada.total_confirmados }} confirmaram a identidade</small>
+                    </div>
+
+                    <div class="progress progress-xl mb-3">
+                        <div class="progress-bar bg-success" style="width: {{ taxa_confirmacao }}%">
+                            Confirmados ({{ campanha_selecionada.total_confirmados }})
                         </div>
-                        <small class="text-muted">{{ campanha_selecionada.percentual_conclusao() }}%</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card border-success">
-                    <div class="card-body text-center">
-                        <h2 class="text-success">{{ campanha_selecionada.total_confirmados }}</h2>
-                        <small class="text-muted">Confirmados</small>
-                        <div class="progress mt-2" style="height: 5px;">
-                            <div class="progress-bar bg-success" style="width: {{ (campanha_selecionada.total_confirmados / campanha_selecionada.total_contatos * 100) if campanha_selecionada.total_contatos else 0 }}%"></div>
-                        </div>
-                        <small class="text-muted">{{ ((campanha_selecionada.total_confirmados / campanha_selecionada.total_contatos * 100) | round(1)) if campanha_selecionada.total_contatos else 0 }}%</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card border-warning">
-                    <div class="card-body text-center">
-                        <h2 class="text-warning">{{ campanha_selecionada.total_rejeitados }}</h2>
-                        <small class="text-muted">Rejeitados</small>
-                        <div class="progress mt-2" style="height: 5px;">
-                            <div class="progress-bar bg-warning" style="width: {{ (campanha_selecionada.total_rejeitados / campanha_selecionada.total_contatos * 100) if campanha_selecionada.total_contatos else 0 }}%"></div>
-                        </div>
-                        <small class="text-muted">{{ ((campanha_selecionada.total_rejeitados / campanha_selecionada.total_contatos * 100) | round(1)) if campanha_selecionada.total_contatos else 0 }}%</small>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Cards Secundários -->
-    <div class="col-12 mb-4">
-        <div class="row g-3">
-            <div class="col-md-2">
-                <div class="card">
-                    <div class="card-body text-center py-2">
-                        <h4 class="mb-0 text-secondary">{{ campanha_selecionada.pendentes_enviar() }}</h4>
-                        <small class="text-muted">Pendentes</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <div class="card">
-                    <div class="card-body text-center py-2">
-                        <h4 class="mb-0 text-info">{{ campanha_selecionada.aguardando_resposta() }}</h4>
-                        <small class="text-muted">Aguardando</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <div class="card">
-                    <div class="card-body text-center py-2">
-                        <h4 class="mb-0 text-danger">{{ campanha_selecionada.sem_whatsapp() }}</h4>
-                        <small class="text-muted">Sem WhatsApp</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <div class="card">
-                    <div class="card-body text-center py-2">
-                        <h4 class="mb-0 text-danger">{{ campanha_selecionada.total_erros }}</h4>
-                        <small class="text-muted">Erros</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <div class="card">
-                    <div class="card-body text-center py-2">
-                        <h4 class="mb-0 text-primary">{{ campanha_selecionada.total_numeros }}</h4>
-                        <small class="text-muted">Telefones</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-2">
-                <div class="card">
-                    <div class="card-body text-center py-2">
-                        <h4 class="mb-0 text-success">{{ campanha_selecionada.enviados_hoje or 0 }}</h4>
-                        <small class="text-muted">Enviados Hoje</small>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Gráficos -->
-    <div class="col-md-6 mb-4">
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-pie-chart"></i> Status dos Contatos
-            </div>
-            <div class="card-body">
-                <canvas id="chartStatus" height="280"></canvas>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-md-6 mb-4">
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-graph-up"></i> Funil de Conversão
-            </div>
-            <div class="card-body">
-                <canvas id="chartFunil" height="280"></canvas>
-            </div>
-        </div>
-    </div>
-
-    <!-- Taxa de Confirmação -->
-    <div class="col-12 mb-4">
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-percent"></i> Taxa de Confirmação (dos que responderam)
-            </div>
-            <div class="card-body">
-                {% set total_respondidos = campanha_selecionada.total_confirmados + campanha_selecionada.total_rejeitados %}
-                {% set taxa_confirmacao = (campanha_selecionada.total_confirmados / total_respondidos * 100) if total_respondidos > 0 else 0 %}
-
-                <div class="row align-items-center">
-                    <div class="col-md-8">
-                        <div class="progress" style="height: 40px;">
-                            <div class="progress-bar bg-success" style="width: {{ taxa_confirmacao }}%">
-                                Confirmados: {{ campanha_selecionada.total_confirmados }}
-                            </div>
-                            <div class="progress-bar bg-warning" style="width: {{ 100 - taxa_confirmacao }}%">
-                                Rejeitados: {{ campanha_selecionada.total_rejeitados }}
-                            </div>
+                        <div class="progress-bar bg-warning" style="width: {{ 100 - taxa_confirmacao }}%">
+                            Rejeitados ({{ campanha_selecionada.total_rejeitados }})
                         </div>
                     </div>
-                    <div class="col-md-4 text-center">
-                        <h3 class="mb-0">{{ taxa_confirmacao | round(1) }}%</h3>
-                        <small class="text-muted">Taxa de Confirmação</small>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6">
+            <div class="card chart-card h-100">
+                <div class="card-header">
+                    <i class="bi bi-bar-chart-fill text-primary me-2"></i>
+                    Taxas de Performance
+                </div>
+                <div class="card-body">
+                    <canvas id="chartTaxas" height="280"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Resumo em Tabela -->
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card chart-card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-table text-primary me-2"></i>Resumo Detalhado</span>
+                </div>
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-report">
+                            <thead>
+                                <tr>
+                                    <th>Métrica</th>
+                                    <th class="text-center">Quantidade</th>
+                                    <th class="text-center">Percentual</th>
+                                    <th>Observação</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><i class="bi bi-people text-primary me-2"></i><strong>Total de Contatos</strong></td>
+                                    <td class="text-center"><span class="badge bg-primary fs-6">{{ campanha_selecionada.total_contatos }}</span></td>
+                                    <td class="text-center">100%</td>
+                                    <td class="text-muted">Base total de pessoas na campanha</td>
+                                </tr>
+                                <tr>
+                                    <td><i class="bi bi-send text-info me-2"></i>Mensagens Enviadas</td>
+                                    <td class="text-center"><span class="badge bg-info fs-6">{{ campanha_selecionada.total_enviados }}</span></td>
+                                    <td class="text-center">{{ taxa_envio }}%</td>
+                                    <td class="text-muted">Pessoas que receberam a mensagem</td>
+                                </tr>
+                                <tr>
+                                    <td><i class="bi bi-chat-dots text-primary me-2"></i>Responderam</td>
+                                    <td class="text-center"><span class="badge bg-secondary fs-6">{{ total_respondidos }}</span></td>
+                                    <td class="text-center">{{ taxa_resposta | round(1) }}%</td>
+                                    <td class="text-muted">Taxa de resposta sobre enviados</td>
+                                </tr>
+                                <tr>
+                                    <td><i class="bi bi-check-circle text-success me-2"></i>Confirmados</td>
+                                    <td class="text-center"><span class="badge bg-success fs-6">{{ campanha_selecionada.total_confirmados }}</span></td>
+                                    <td class="text-center">{{ taxa_confirmacao | round(1) }}%</td>
+                                    <td class="text-muted">Confirmaram data de nascimento correta</td>
+                                </tr>
+                                <tr>
+                                    <td><i class="bi bi-x-circle text-warning me-2"></i>Não Confirmados</td>
+                                    <td class="text-center"><span class="badge bg-warning fs-6">{{ campanha_selecionada.total_rejeitados }}</span></td>
+                                    <td class="text-center">{{ (100 - taxa_confirmacao) | round(1) }}%</td>
+                                    <td class="text-muted">Data de nascimento não corresponde</td>
+                                </tr>
+                                <tr>
+                                    <td><i class="bi bi-hourglass-split text-info me-2"></i>Aguardando Resposta</td>
+                                    <td class="text-center"><span class="badge bg-info fs-6">{{ campanha_selecionada.aguardando_resposta() }}</span></td>
+                                    <td class="text-center">-</td>
+                                    <td class="text-muted">Mensagem enviada, aguardando resposta</td>
+                                </tr>
+                                <tr>
+                                    <td><i class="bi bi-clock text-secondary me-2"></i>Pendentes de Envio</td>
+                                    <td class="text-center"><span class="badge bg-secondary fs-6">{{ campanha_selecionada.pendentes_enviar() }}</span></td>
+                                    <td class="text-center">-</td>
+                                    <td class="text-muted">Ainda não foram contactados</td>
+                                </tr>
+                                <tr>
+                                    <td><i class="bi bi-phone-x text-danger me-2"></i>Sem WhatsApp</td>
+                                    <td class="text-center"><span class="badge bg-danger fs-6">{{ campanha_selecionada.sem_whatsapp() }}</span></td>
+                                    <td class="text-center">-</td>
+                                    <td class="text-muted">Nenhum número válido encontrado</td>
+                                </tr>
+                                <tr>
+                                    <td><i class="bi bi-exclamation-triangle text-danger me-2"></i>Erros</td>
+                                    <td class="text-center"><span class="badge bg-danger fs-6">{{ campanha_selecionada.total_erros }}</span></td>
+                                    <td class="text-center">-</td>
+                                    <td class="text-muted">Falhas no envio ou processamento</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
                 </div>
+            </div>
+        </div>
+    </div>
 
-                <hr>
+    <!-- Configurações da Campanha -->
+    <div class="row g-4 mb-4">
+        <div class="col-md-6">
+            <div class="card chart-card">
+                <div class="card-header">
+                    <i class="bi bi-gear text-primary me-2"></i>Configurações do Agendamento
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span><i class="bi bi-people me-2"></i>Limite Diário</span>
+                            <strong>{{ campanha_selecionada.limite_diario }} pessoas/dia</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span><i class="bi bi-sunrise me-2"></i>Horário de Início</span>
+                            <strong>{{ campanha_selecionada.hora_inicio }}:00</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span><i class="bi bi-sunset me-2"></i>Horário de Fim</span>
+                            <strong>{{ campanha_selecionada.hora_fim }}:00</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span><i class="bi bi-clock-history me-2"></i>Tempo entre Envios</span>
+                            <strong>~{{ (((campanha_selecionada.hora_fim - campanha_selecionada.hora_inicio) * 3600) / campanha_selecionada.limite_diario) | int // 60 }} min</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span><i class="bi bi-calendar-range me-2"></i>Duração</span>
+                            <strong>{{ campanha_selecionada.dias_duracao if campanha_selecionada.dias_duracao else 'Até concluir' }}</strong>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
 
-                <div class="row text-center">
-                    <div class="col-md-4">
-                        <h5>{{ total_respondidos }}</h5>
-                        <small class="text-muted">Total Respondidos</small>
-                    </div>
-                    <div class="col-md-4">
-                        <h5>{{ campanha_selecionada.aguardando_resposta() }}</h5>
-                        <small class="text-muted">Aguardando Resposta</small>
-                    </div>
-                    <div class="col-md-4">
-                        <h5>{{ campanha_selecionada.pendentes_enviar() }}</h5>
-                        <small class="text-muted">Faltam Enviar</small>
-                    </div>
+        <div class="col-md-6">
+            <div class="card chart-card">
+                <div class="card-header">
+                    <i class="bi bi-info-circle text-primary me-2"></i>Informações Adicionais
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span><i class="bi bi-file-earmark me-2"></i>Arquivo</span>
+                            <strong>{{ campanha_selecionada.arquivo or 'N/A' }}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span><i class="bi bi-telephone me-2"></i>Total de Telefones</span>
+                            <strong>{{ campanha_selecionada.total_numeros }}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span><i class="bi bi-check2-all me-2"></i>Telefones Válidos</span>
+                            <strong>{{ campanha_selecionada.total_validos }}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span><i class="bi bi-calendar-check me-2"></i>Enviados Hoje</span>
+                            <strong>{{ campanha_selecionada.enviados_hoje or 0 }}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span><i class="bi bi-person me-2"></i>Criador</span>
+                            <strong>{{ campanha_selecionada.criador.email if campanha_selecionada.criador else 'N/A' }}</strong>
+                        </li>
+                    </ul>
                 </div>
             </div>
         </div>
     </div>
 
     {% else %}
-    <!-- Mensagem quando nenhuma campanha selecionada -->
-    <div class="col-12">
-        <div class="card">
-            <div class="card-body text-center py-5">
-                <i class="bi bi-bar-chart text-muted" style="font-size: 4rem;"></i>
-                <h4 class="mt-3">Selecione uma campanha</h4>
-                <p class="text-muted">Escolha uma campanha acima para visualizar os relatórios detalhados</p>
+
+    <!-- Empty State -->
+    <div class="card chart-card">
+        <div class="empty-state">
+            <div class="empty-state-icon">
+                <i class="bi bi-bar-chart-line"></i>
             </div>
+            <h3 class="mb-3">Selecione uma Campanha</h3>
+            <p class="text-muted mb-4">Escolha uma campanha no seletor acima para visualizar<br>os relatórios detalhados de desempenho</p>
+            {% if campanhas %}
+            <p class="text-muted"><i class="bi bi-info-circle me-1"></i> {{ campanhas | length }} campanha(s) disponível(is)</p>
+            {% else %}
+            <a href="{{ url_for('dashboard') }}" class="btn btn-primary">
+                <i class="bi bi-plus-circle me-1"></i> Criar Nova Campanha
+            </a>
+            {% endif %}
         </div>
     </div>
+
     {% endif %}
 </div>
 {% endblock %}
@@ -272,31 +691,52 @@ const dados = {
     aguardando: {{ campanha_selecionada.aguardando_resposta() }},
     pendentes: {{ campanha_selecionada.pendentes_enviar() }},
     semWhatsapp: {{ campanha_selecionada.sem_whatsapp() }},
+    erros: {{ campanha_selecionada.total_erros }},
     total: {{ campanha_selecionada.total_contatos }},
     enviados: {{ campanha_selecionada.total_enviados }}
 };
+
+// Chart defaults
+Chart.defaults.font.family = "'Segoe UI', system-ui, sans-serif";
 
 // Gráfico de Pizza - Status dos Contatos
 new Chart(document.getElementById('chartStatus'), {
     type: 'doughnut',
     data: {
-        labels: ['Confirmados', 'Rejeitados', 'Aguardando Resposta', 'Pendentes de Envio', 'Sem WhatsApp'],
+        labels: ['Confirmados', 'Rejeitados', 'Aguardando', 'Pendentes', 'Sem WhatsApp', 'Erros'],
         datasets: [{
             data: [
                 dados.confirmados,
                 dados.rejeitados,
                 dados.aguardando,
                 dados.pendentes,
-                dados.semWhatsapp
+                dados.semWhatsapp,
+                dados.erros
             ],
-            backgroundColor: ['#198754', '#ffc107', '#0dcaf0', '#6c757d', '#dc3545']
+            backgroundColor: [
+                '#198754',
+                '#ffc107',
+                '#0dcaf0',
+                '#6c757d',
+                '#dc3545',
+                '#e83e8c'
+            ],
+            borderWidth: 0,
+            hoverOffset: 10
         }]
     },
     options: {
         responsive: true,
+        maintainAspectRatio: true,
+        cutout: '60%',
         plugins: {
             legend: {
-                position: 'bottom'
+                position: 'bottom',
+                labels: {
+                    padding: 20,
+                    usePointStyle: true,
+                    pointStyle: 'circle'
+                }
             }
         }
     }
@@ -306,7 +746,7 @@ new Chart(document.getElementById('chartStatus'), {
 new Chart(document.getElementById('chartFunil'), {
     type: 'bar',
     data: {
-        labels: ['Total', 'Enviados', 'Respondidos', 'Confirmados'],
+        labels: ['Total Contatos', 'Enviados', 'Responderam', 'Confirmados'],
         datasets: [{
             label: 'Quantidade',
             data: [
@@ -315,11 +755,26 @@ new Chart(document.getElementById('chartFunil'), {
                 dados.confirmados + dados.rejeitados,
                 dados.confirmados
             ],
-            backgroundColor: ['#6c757d', '#0dcaf0', '#ffc107', '#198754']
+            backgroundColor: [
+                'rgba(102, 126, 234, 0.8)',
+                'rgba(13, 202, 240, 0.8)',
+                'rgba(255, 193, 7, 0.8)',
+                'rgba(25, 135, 84, 0.8)'
+            ],
+            borderColor: [
+                'rgb(102, 126, 234)',
+                'rgb(13, 202, 240)',
+                'rgb(255, 193, 7)',
+                'rgb(25, 135, 84)'
+            ],
+            borderWidth: 2,
+            borderRadius: 8,
+            barThickness: 40
         }]
     },
     options: {
         responsive: true,
+        maintainAspectRatio: true,
         indexAxis: 'y',
         plugins: {
             legend: {
@@ -328,7 +783,97 @@ new Chart(document.getElementById('chartFunil'), {
         },
         scales: {
             x: {
-                beginAtZero: true
+                beginAtZero: true,
+                grid: {
+                    display: false
+                }
+            },
+            y: {
+                grid: {
+                    display: false
+                }
+            }
+        }
+    }
+});
+
+// Gauge Chart (semi-donut)
+const taxaConfirmacao = {{ taxa_confirmacao | round(1) }};
+new Chart(document.getElementById('chartGauge'), {
+    type: 'doughnut',
+    data: {
+        datasets: [{
+            data: [taxaConfirmacao, 100 - taxaConfirmacao],
+            backgroundColor: ['#198754', '#e9ecef'],
+            borderWidth: 0
+        }]
+    },
+    options: {
+        responsive: true,
+        rotation: -90,
+        circumference: 180,
+        cutout: '75%',
+        plugins: {
+            legend: {
+                display: false
+            },
+            tooltip: {
+                enabled: false
+            }
+        }
+    }
+});
+
+// Gráfico de Taxas
+const taxaEnvio = {{ taxa_envio }};
+const taxaResposta = {{ taxa_resposta | round(1) }};
+new Chart(document.getElementById('chartTaxas'), {
+    type: 'bar',
+    data: {
+        labels: ['Taxa de Envio', 'Taxa de Resposta', 'Taxa de Confirmação'],
+        datasets: [{
+            label: 'Percentual',
+            data: [taxaEnvio, taxaResposta, taxaConfirmacao],
+            backgroundColor: [
+                'rgba(13, 202, 240, 0.8)',
+                'rgba(255, 193, 7, 0.8)',
+                'rgba(25, 135, 84, 0.8)'
+            ],
+            borderColor: [
+                'rgb(13, 202, 240)',
+                'rgb(255, 193, 7)',
+                'rgb(25, 135, 84)'
+            ],
+            borderWidth: 2,
+            borderRadius: 8,
+            barThickness: 50
+        }]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+            legend: {
+                display: false
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                max: 100,
+                ticks: {
+                    callback: function(value) {
+                        return value + '%';
+                    }
+                },
+                grid: {
+                    color: 'rgba(0,0,0,0.05)'
+                }
+            },
+            x: {
+                grid: {
+                    display: false
+                }
             }
         }
     }

@@ -321,6 +321,10 @@ class LogMsg(db.Model):
     erro = db.Column(db.Text)
     data = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Relationships
+    campanha = db.relationship('Campanha', backref='logs')
+    contato = db.relationship('Contato', backref='logs_msg')
+
 
 # =============================================================================
 # SERVICO WHATSAPP
@@ -874,7 +878,7 @@ def enviar_campanha_bg(campanha_id):
                             sucesso_pessoa = True
                             
                             log = LogMsg(campanha_id=camp.id, contato_id=c.id, direcao='enviada',
-                                         telefone=t.numero_fmt, mensagem=msg[:500], status='ok')
+                                         telefone=t.numero_fmt, mensagem=msg[:500], status='enviado')
                             db.session.add(log)
                         else:
                             log = LogMsg(campanha_id=camp.id, contato_id=c.id, direcao='enviada',
@@ -1169,9 +1173,16 @@ def excluir_campanha(id):
         flash('Nao pode excluir em andamento', 'danger')
         return redirect(url_for('campanha_detalhe', id=id))
 
+    # Deletar logs relacionados primeiro (evita erro de Foreign Key)
+    LogMsg.query.filter_by(campanha_id=id).delete()
+
+    # Deletar logs de contatos específicos
+    for contato in camp.contatos.all():
+        LogMsg.query.filter_by(contato_id=contato.id).delete()
+
     db.session.delete(camp)
     db.session.commit()
-    flash('Excluida', 'success')
+    flash('Campanha excluída com sucesso!', 'success')
     return redirect(url_for('dashboard'))
 
 
@@ -1505,7 +1516,7 @@ def webhook():
 
         # Log da mensagem recebida
         log = LogMsg(campanha_id=c.campanha_id, contato_id=c.id, direcao='recebida',
-                     telefone=numero, mensagem=texto[:500], status='ok')
+                     telefone=numero, mensagem=texto[:500], status='recebido')
         db.session.add(log)
         db.session.commit()
         

@@ -107,9 +107,9 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if log.campanha_id %}
+                                    {% if log.campanha %}
                                     <a href="{{ url_for('campanha_detalhe', id=log.campanha_id) }}">
-                                        Campanha #{{ log.campanha_id }}
+                                        {{ log.campanha.nome[:20] }}{% if log.campanha.nome|length > 20 %}...{% endif %}
                                     </a>
                                     {% else %}
                                     <small class="text-muted">-</small>

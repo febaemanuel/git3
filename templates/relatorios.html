@@ -797,8 +797,13 @@ new Chart(document.getElementById('chartFunil'), {
     }
 });
 
+// Calcular taxas em JavaScript
+const totalRespondidos = dados.confirmados + dados.rejeitados;
+const taxaConfirmacao = totalRespondidos > 0 ? Math.round((dados.confirmados / totalRespondidos * 100) * 10) / 10 : 0;
+const taxaEnvio = dados.total > 0 ? Math.round((dados.enviados / dados.total * 100) * 10) / 10 : 0;
+const taxaResposta = dados.enviados > 0 ? Math.round((totalRespondidos / dados.enviados * 100) * 10) / 10 : 0;
+
 // Gauge Chart (semi-donut)
-const taxaConfirmacao = {{ taxa_confirmacao | round(1) }};
 new Chart(document.getElementById('chartGauge'), {
     type: 'doughnut',
     data: {
@@ -825,8 +830,6 @@ new Chart(document.getElementById('chartGauge'), {
 });
 
 // Gráfico de Taxas
-const taxaEnvio = {{ taxa_envio }};
-const taxaResposta = {{ taxa_resposta | round(1) }};
 new Chart(document.getElementById('chartTaxas'), {
     type: 'bar',
     data: {

@@ -196,7 +196,10 @@ class Campanha(db.Model):
         # Melhor: Pessoas que ja foram validadas e nao tem nenhum valido
         # Por enquanto vamos usar a logica simples de status do contato se tiver
         
-        self.total_enviados = self.contatos.filter_by(status='enviado').count() # Ou concluido/aguardando
+        # Contar enviados: todos que ja receberam a mensagem (enviado, aguardando_nascimento, concluido)
+        self.total_enviados = self.contatos.filter(
+            Contato.status.in_(['enviado', 'aguardando_nascimento', 'concluido'])
+        ).count()
         self.total_confirmados = self.contatos.filter_by(confirmado=True).count()
         self.total_rejeitados = self.contatos.filter_by(rejeitado=True).count()
         self.total_erros = self.contatos.filter(Contato.erro.isnot(None)).count()
@@ -883,6 +886,15 @@ def enviar_campanha_bg(campanha_id):
                         else:
                             log = LogMsg(campanha_id=camp.id, contato_id=c.id, direcao='enviada',
                                          telefone=t.numero_fmt, mensagem=msg[:500], status='erro', erro=result)
+                            db.session.add(log)
+
+                    # Atualizar status do contato
+                    if sucesso_pessoa:
+                        c.status = 'enviado'
+                        enviados_pessoas += 1
+                    else:
+                        c.erro = 'Falha ao enviar para todos os números'
+
                     db.session.commit()
                     camp.atualizar_stats()
                     db.session.commit()

@@ -174,6 +174,14 @@ class Campanha(db.Model):
     limite_diario = db.Column(db.Integer, default=50)
     tempo_entre_envios = db.Column(db.Integer, default=15)
 
+    # Configurações de agendamento
+    horas_trabalho_dia = db.Column(db.Integer, default=8)  # Horas por dia para enviar
+    hora_inicio = db.Column(db.Integer, default=8)  # Hora de início (8h)
+    hora_fim = db.Column(db.Integer, default=18)  # Hora de fim (18h)
+    dias_duracao = db.Column(db.Integer, default=0)  # 0 = até acabar
+    enviados_hoje = db.Column(db.Integer, default=0)  # Contador diário
+    data_ultimo_envio = db.Column(db.Date)  # Para resetar contador diário
+
     criador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     data_inicio = db.Column(db.DateTime)
@@ -226,8 +234,47 @@ class Campanha(db.Model):
         return Telefone.query.join(Contato).filter(Contato.campanha_id == self.id, Telefone.whatsapp_valido == None).count()
 
     def pendentes_enviar(self):
-        # Pessoas validas que ainda nao foram enviadas
-        return self.contatos.join(Telefone).filter(Telefone.whatsapp_valido == True, Contato.status == 'pendente').distinct().count()
+        # Pessoas que ainda nao foram enviadas (pendente ou pronto_envio)
+        return self.contatos.filter(Contato.status.in_(['pendente', 'pronto_envio'])).count()
+
+    def calcular_tempo_entre_envios(self):
+        """Calcula o tempo entre envios baseado nas configurações"""
+        if self.limite_diario <= 0:
+            return 15  # padrão
+        horas = self.hora_fim - self.hora_inicio
+        if horas <= 0:
+            horas = 8
+        segundos_disponiveis = horas * 3600
+        return max(5, segundos_disponiveis // self.limite_diario)
+
+    def pode_enviar_agora(self):
+        """Verifica se pode enviar baseado no horário e limite diário"""
+        agora = datetime.now()
+        hora_atual = agora.hour
+
+        # Verificar horário
+        if hora_atual < self.hora_inicio or hora_atual >= self.hora_fim:
+            return False, f"Fora do horário ({self.hora_inicio}h às {self.hora_fim}h)"
+
+        # Resetar contador diário se mudou o dia
+        hoje = agora.date()
+        if self.data_ultimo_envio != hoje:
+            self.enviados_hoje = 0
+            self.data_ultimo_envio = hoje
+
+        # Verificar limite diário
+        if self.enviados_hoje >= self.limite_diario:
+            return False, f"Limite diário atingido ({self.limite_diario})"
+
+        return True, "OK"
+
+    def aguardando_resposta(self):
+        """Contatos que receberam mensagem e estão aguardando resposta"""
+        return self.contatos.filter(Contato.status.in_(['enviado', 'aguardando_nascimento'])).count()
+
+    def sem_whatsapp(self):
+        """Contatos sem WhatsApp válido"""
+        return self.contatos.filter_by(status='sem_whatsapp').count()
 
 
 class Contato(db.Model):
@@ -802,26 +849,32 @@ def enviar_campanha_bg(campanha_id):
                 return
 
             camp.status = 'em_andamento'
-            camp.data_inicio = datetime.utcnow()
+            if not camp.data_inicio:
+                camp.data_inicio = datetime.utcnow()
             db.session.commit()
 
             # Buscar contatos pendentes ou prontos
-            # Prioriza prontos, depois pendentes
-            contatos = camp.contatos.filter(Contato.status.in_(['pendente', 'pronto_envio'])).order_by(Contato.status.desc(), Contato.id).all()
-            
+            contatos = camp.contatos.filter(Contato.status.in_(['pendente', 'pronto_envio'])).order_by(Contato.id).all()
+
             total = len(contatos)
-            enviados_pessoas = 0 # Contador de PESSOAS contactadas com sucesso
-            erros = 0
+            enviados_pessoas = 0  # Contador de PESSOAS contactadas nesta sessão
+
+            # Calcular tempo entre envios baseado nas configurações
+            tempo_entre = camp.calcular_tempo_entre_envios()
+            logger.info(f"Campanha {camp.id}: Tempo entre envios calculado = {tempo_entre}s")
 
             for i, c in enumerate(contatos):
                 db.session.refresh(camp)
                 if camp.status != 'em_andamento':
                     break
 
-                if enviados_pessoas >= camp.limite_diario:
+                # Verificar se pode enviar (horário e limite diário)
+                pode, motivo = camp.pode_enviar_agora()
+                if not pode:
                     camp.status = 'pausada'
-                    camp.status_msg = f'Limite diario atingido ({camp.limite_diario} pessoas)'
+                    camp.status_msg = motivo
                     db.session.commit()
+                    logger.info(f"Campanha {camp.id} pausada: {motivo}")
                     break
 
                 camp.status_msg = f'Processando {i+1}/{total}: {c.nome}'
@@ -892,6 +945,7 @@ def enviar_campanha_bg(campanha_id):
                     if sucesso_pessoa:
                         c.status = 'enviado'
                         enviados_pessoas += 1
+                        camp.enviados_hoje += 1  # Incrementar contador diário
                     else:
                         c.erro = 'Falha ao enviar para todos os números'
 
@@ -899,16 +953,17 @@ def enviar_campanha_bg(campanha_id):
                     camp.atualizar_stats()
                     db.session.commit()
 
+                    # Usar tempo entre envios calculado ou configurado
+                    tempo_espera = max(tempo_entre, camp.tempo_entre_envios)
                     if i < total - 1:
-                        time.sleep(camp.tempo_entre_envios)
+                        time.sleep(tempo_espera)
 
             # Verificar se acabou
-            # Se nao tem mais pendentes ou pronto_envio
             restantes = camp.contatos.filter(Contato.status.in_(['pendente', 'pronto_envio'])).count()
             if restantes == 0 and camp.status == 'em_andamento':
                 camp.status = 'concluida'
                 camp.data_fim = datetime.utcnow()
-                camp.status_msg = f'{enviados_pessoas} pessoas contactadas'
+                camp.status_msg = f'Concluída! {camp.total_enviados} pessoas contactadas'
 
             camp.atualizar_stats()
             db.session.commit()
@@ -1019,6 +1074,9 @@ def criar_campanha():
     msg = request.form.get('mensagem', MENSAGEM_PADRAO).strip()
     limite = int(request.form.get('limite_diario', 50))
     tempo = int(request.form.get('tempo_entre_envios', 15))
+    hora_inicio = int(request.form.get('hora_inicio', 8))
+    hora_fim = int(request.form.get('hora_fim', 18))
+    dias_duracao = int(request.form.get('dias_duracao', 0))
 
     if not nome:
         flash('Nome obrigatorio', 'danger')
@@ -1039,6 +1097,9 @@ def criar_campanha():
         mensagem=msg,
         limite_diario=limite,
         tempo_entre_envios=tempo,
+        hora_inicio=hora_inicio,
+        hora_fim=hora_fim,
+        dias_duracao=dias_duracao,
         criador_id=current_user.id,
         arquivo=arq.filename
     )
@@ -1665,6 +1726,49 @@ def logs():
     camps = Campanha.query.order_by(Campanha.data_criacao.desc()).all()
 
     return render_template('logs.html', logs=logs, campanhas=camps, campanha_id=camp_id, direcao=direcao)
+
+
+# Relatórios
+@app.route('/relatorios')
+@login_required
+def relatorios():
+    campanhas = Campanha.query.order_by(Campanha.data_criacao.desc()).all()
+    for c in campanhas:
+        c.atualizar_stats()
+
+    # Estatísticas globais
+    stats = {
+        'total_campanhas': len(campanhas),
+        'total_contatos': sum(c.total_contatos for c in campanhas),
+        'total_enviados': sum(c.total_enviados for c in campanhas),
+        'total_confirmados': sum(c.total_confirmados for c in campanhas),
+        'total_rejeitados': sum(c.total_rejeitados for c in campanhas),
+        'total_pendentes': sum(c.pendentes_enviar() for c in campanhas),
+        'total_aguardando': sum(c.aguardando_resposta() for c in campanhas),
+        'total_sem_whatsapp': sum(c.sem_whatsapp() for c in campanhas),
+    }
+
+    return render_template('relatorios.html', campanhas=campanhas, stats=stats)
+
+
+@app.route('/api/relatorios/campanha/<int:id>')
+@login_required
+def api_relatorios_campanha(id):
+    camp = Campanha.query.get_or_404(id)
+    camp.atualizar_stats()
+
+    return jsonify({
+        'nome': camp.nome,
+        'total_contatos': camp.total_contatos,
+        'total_enviados': camp.total_enviados,
+        'total_confirmados': camp.total_confirmados,
+        'total_rejeitados': camp.total_rejeitados,
+        'pendentes': camp.pendentes_enviar(),
+        'aguardando': camp.aguardando_resposta(),
+        'sem_whatsapp': camp.sem_whatsapp(),
+        'percentual_conclusao': camp.percentual_conclusao(),
+        'percentual_confirmacao': camp.pct_confirmacao(),
+    })
 
 
 # CLI

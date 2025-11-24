@@ -188,19 +188,51 @@
                         <small class="text-muted">Use {nome} e {procedimento} para personalizar</small>
                     </div>
 
+                    <hr>
+                    <h6 class="text-muted mb-3"><i class="bi bi-clock"></i> Configuracao de Agendamento</h6>
+
                     <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Limite Diario</label>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Pessoas por Dia</label>
                             <input type="number" class="form-control" name="limite_diario"
                                    value="50" min="1" max="500">
-                            <small class="text-muted">Maximo de envios por execucao</small>
+                            <small class="text-muted">Quantas pessoas contactar por dia</small>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Hora Inicio</label>
+                            <input type="number" class="form-control" name="hora_inicio"
+                                   value="8" min="0" max="23">
+                            <small class="text-muted">Comeca as X horas</small>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Hora Fim</label>
+                            <input type="number" class="form-control" name="hora_fim"
+                                   value="18" min="0" max="23">
+                            <small class="text-muted">Para as X horas</small>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Duracao (dias)</label>
+                            <input type="number" class="form-control" name="dias_duracao"
+                                   value="0" min="0">
+                            <small class="text-muted">0 = ate acabar todos os contatos</small>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Tempo entre Envios (segundos)</label>
                             <input type="number" class="form-control" name="tempo_entre_envios"
-                                   value="15" min="5" max="120">
-                            <small class="text-muted">Intervalo entre cada mensagem</small>
+                                   value="15" min="5" max="300">
+                            <small class="text-muted">Intervalo minimo entre mensagens</small>
                         </div>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        <small>
+                            <strong>Como funciona:</strong> O sistema enviara mensagens respeitando os horarios configurados.
+                            Ex: 50 pessoas/dia das 8h as 18h = aproximadamente 1 mensagem a cada 12 minutos.
+                        </small>
                     </div>
                 </div>
                 <div class="modal-footer">

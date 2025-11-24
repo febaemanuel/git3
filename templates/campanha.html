@@ -143,27 +143,27 @@
 
                     <!-- Filtros -->
                     <div class="btn-group btn-group-sm">
-                        <a href="{{ url_for('campanha_detalhes', id=campanha.id, filtro='todos') }}"
+                        <a href="{{ url_for('campanha_detalhe', id=campanha.id, filtro='todos') }}"
                            class="btn btn-outline-secondary {% if filtro == 'todos' %}active{% endif %}">
                             Todos
                         </a>
-                        <a href="{{ url_for('campanha_detalhes', id=campanha.id, filtro='confirmados') }}"
+                        <a href="{{ url_for('campanha_detalhe', id=campanha.id, filtro='confirmados') }}"
                            class="btn btn-outline-success {% if filtro == 'confirmados' %}active{% endif %}">
                             Confirmados
                         </a>
-                        <a href="{{ url_for('campanha_detalhes', id=campanha.id, filtro='rejeitados') }}"
+                        <a href="{{ url_for('campanha_detalhe', id=campanha.id, filtro='rejeitados') }}"
                            class="btn btn-outline-warning {% if filtro == 'rejeitados' %}active{% endif %}">
                             Rejeitados
                         </a>
-                        <a href="{{ url_for('campanha_detalhes', id=campanha.id, filtro='aguardando') }}"
+                        <a href="{{ url_for('campanha_detalhe', id=campanha.id, filtro='aguardando') }}"
                            class="btn btn-outline-info {% if filtro == 'aguardando' %}active{% endif %}">
                             Aguardando
                         </a>
-                        <a href="{{ url_for('campanha_detalhes', id=campanha.id, filtro='pendentes') }}"
+                        <a href="{{ url_for('campanha_detalhe', id=campanha.id, filtro='pendentes') }}"
                            class="btn btn-outline-secondary {% if filtro == 'pendentes' %}active{% endif %}">
                             Pendentes
                         </a>
-                        <a href="{{ url_for('campanha_detalhes', id=campanha.id, filtro='erros') }}"
+                        <a href="{{ url_for('campanha_detalhe', id=campanha.id, filtro='erros') }}"
                            class="btn btn-outline-danger {% if filtro == 'erros' %}active{% endif %}">
                             Erros
                         </a>
@@ -244,7 +244,7 @@
                     <ul class="pagination justify-content-center mb-0">
                         {% if contatos.has_prev %}
                         <li class="page-item">
-                            <a class="page-link" href="{{ url_for('campanha_detalhes', id=campanha.id, page=contatos.prev_num, filtro=filtro) }}">
+                            <a class="page-link" href="{{ url_for('campanha_detalhe', id=campanha.id, page=contatos.prev_num, filtro=filtro) }}">
                                 Anterior
                             </a>
                         </li>
@@ -253,7 +253,7 @@
                         {% for page in contatos.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
                             {% if page %}
                             <li class="page-item {% if page == contatos.page %}active{% endif %}">
-                                <a class="page-link" href="{{ url_for('campanha_detalhes', id=campanha.id, page=page, filtro=filtro) }}">
+                                <a class="page-link" href="{{ url_for('campanha_detalhe', id=campanha.id, page=page, filtro=filtro) }}">
                                     {{ page }}
                                 </a>
                             </li>
@@ -264,7 +264,7 @@
 
                         {% if contatos.has_next %}
                         <li class="page-item">
-                            <a class="page-link" href="{{ url_for('campanha_detalhes', id=campanha.id, page=contatos.next_num, filtro=filtro) }}">
+                            <a class="page-link" href="{{ url_for('campanha_detalhe', id=campanha.id, page=contatos.next_num, filtro=filtro) }}">
                                 Proximo
                             </a>
                         </li>

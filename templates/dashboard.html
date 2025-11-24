@@ -75,7 +75,7 @@
                         </thead>
                         <tbody>
                             {% for campanha in campanhas %}
-                            <tr style="cursor: pointer;" onclick="window.location='{{ url_for('campanha_detalhes', id=campanha.id) }}'">
+                            <tr style="cursor: pointer;" onclick="window.location='{{ url_for('campanha_detalhe', id=campanha.id) }}'">
                                 <td>
                                     <strong>{{ campanha.nome }}</strong>
                                     {% if campanha.descricao %}
@@ -123,7 +123,7 @@
                                 </td>
                                 <td class="text-center" onclick="event.stopPropagation();">
                                     <div class="btn-group btn-group-sm">
-                                        <a href="{{ url_for('campanha_detalhes', id=campanha.id) }}"
+                                        <a href="{{ url_for('campanha_detalhe', id=campanha.id) }}"
                                            class="btn btn-outline-primary" title="Ver detalhes">
                                             <i class="bi bi-eye"></i>
                                         </a>

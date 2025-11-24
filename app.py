@@ -1736,19 +1736,15 @@ def relatorios():
     for c in campanhas:
         c.atualizar_stats()
 
-    # Estatísticas globais
-    stats = {
-        'total_campanhas': len(campanhas),
-        'total_contatos': sum(c.total_contatos for c in campanhas),
-        'total_enviados': sum(c.total_enviados for c in campanhas),
-        'total_confirmados': sum(c.total_confirmados for c in campanhas),
-        'total_rejeitados': sum(c.total_rejeitados for c in campanhas),
-        'total_pendentes': sum(c.pendentes_enviar() for c in campanhas),
-        'total_aguardando': sum(c.aguardando_resposta() for c in campanhas),
-        'total_sem_whatsapp': sum(c.sem_whatsapp() for c in campanhas),
-    }
+    # Verificar se uma campanha foi selecionada
+    campanha_id = request.args.get('campanha_id', type=int)
+    campanha_selecionada = None
+    if campanha_id:
+        campanha_selecionada = Campanha.query.get(campanha_id)
+        if campanha_selecionada:
+            campanha_selecionada.atualizar_stats()
 
-    return render_template('relatorios.html', campanhas=campanhas, stats=stats)
+    return render_template('relatorios.html', campanhas=campanhas, campanha_selecionada=campanha_selecionada)
 
 
 @app.route('/api/relatorios/campanha/<int:id>')

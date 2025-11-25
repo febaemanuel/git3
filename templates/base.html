@@ -191,13 +191,46 @@
                         </a>
                     </li>
                     <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('painel_atendimento') }}">
+                            <i class="bi bi-headset"></i> Atendimento
+                            {% if current_user.is_authenticated %}
+                                {% set tickets_urgentes = namespace(count=0) %}
+                                {% set tickets_urgentes.count = 0 %}
+                                <span class="badge bg-danger" id="badge-tickets-urgentes"></span>
+                            {% endif %}
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('gerenciar_faq') }}">
+                            <i class="bi bi-chat-square-text"></i> FAQ
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('dashboard_sentimentos') }}">
+                            <i class="bi bi-graph-up"></i> Análises
+                        </a>
+                    </li>
+                    <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('logs') }}">
                             <i class="bi bi-chat-dots"></i> Logs
                         </a>
                     </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                            <i class="bi bi-gear"></i> Configurações
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('configuracoes') }}">
+                                <i class="bi bi-whatsapp"></i> WhatsApp
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('configurar_followup') }}">
+                                <i class="bi bi-arrow-repeat"></i> Follow-up
+                            </a></li>
+                        </ul>
+                    </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('configuracoes') }}">
-                            <i class="bi bi-gear"></i> Configuracoes
+                        <a class="nav-link" href="{{ url_for('tutorial') }}">
+                            <i class="bi bi-book"></i> Tutorial
                         </a>
                     </li>
                 </ul>

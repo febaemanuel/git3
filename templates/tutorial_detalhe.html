@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+
+{% block title %}{{ tutorial.titulo }}{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('tutorial') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Voltar aos Tutoriais
+    </a>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <h2>{{ tutorial.titulo }}</h2>
+        <p class="text-muted">{{ tutorial.descricao }}</p>
+        <hr>
+        <div class="tutorial-content">
+            {{ tutorial.conteudo|safe }}
+        </div>
+    </div>
+</div>
+{% endblock %}

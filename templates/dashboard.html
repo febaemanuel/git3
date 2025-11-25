@@ -49,6 +49,73 @@
     </div>
     {% endif %}
 
+    <!-- Estatísticas Rápidas -->
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card total h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-1">Campanhas</h6>
+                        <h3 class="mb-0">{{ stats.campanhas }}</h3>
+                    </div>
+                    <div class="text-primary" style="font-size: 2rem;">
+                        <i class="bi bi-folder"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card confirmados h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-1">Confirmados</h6>
+                        <h3 class="mb-0">{{ stats.confirmados }}</h3>
+                    </div>
+                    <div class="text-success" style="font-size: 2rem;">
+                        <i class="bi bi-check-circle"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card h-100" style="border-left-color: #ff6b6b;">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-1">Tickets Urgentes</h6>
+                        <h3 class="mb-0" id="tickets-urgentes-count">...</h3>
+                    </div>
+                    <div class="text-danger" style="font-size: 2rem;">
+                        <i class="bi bi-exclamation-triangle"></i>
+                    </div>
+                </div>
+                <a href="{{ url_for('painel_atendimento', filtro='urgente') }}" class="stretched-link"></a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card h-100" style="border-left-color: #ffc107;">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted mb-1">Tickets Pendentes</h6>
+                        <h3 class="mb-0" id="tickets-pendentes-count">...</h3>
+                    </div>
+                    <div class="text-warning" style="font-size: 2rem;">
+                        <i class="bi bi-headset"></i>
+                    </div>
+                </div>
+                <a href="{{ url_for('painel_atendimento') }}" class="stretched-link"></a>
+            </div>
+        </div>
+    </div>
+
     <!-- Lista de Campanhas -->
     <div class="col-12">
         <div class="card">
@@ -217,6 +284,26 @@
 
 {% block extra_js %}
 <script>
+// Carregar dados dos tickets
+function carregarTickets() {
+    fetch('/api/dashboard/tickets')
+        .then(r => r.ok ? r.json() : {urgentes: 0, pendentes: 0})
+        .then(data => {
+            document.getElementById('tickets-urgentes-count').textContent = data.urgentes || 0;
+            document.getElementById('tickets-pendentes-count').textContent = data.pendentes || 0;
+        })
+        .catch(() => {
+            document.getElementById('tickets-urgentes-count').textContent = '0';
+            document.getElementById('tickets-pendentes-count').textContent = '0';
+        });
+}
+
+// Carregar ao iniciar
+carregarTickets();
+
+// Atualizar a cada 30 segundos
+setInterval(carregarTickets, 30000);
+
 // Auto-refresh para campanhas em andamento
 {% if campanhas %}
     {% for campanha in campanhas %}

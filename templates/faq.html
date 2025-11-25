@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}FAQ - Respostas Automáticas{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>💬 FAQ - Respostas Automáticas</h2>
+    <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNovoFAQ">
+        <i class="bi bi-plus-circle"></i> Nova Resposta
+    </button>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <p class="text-muted">
+            Configure respostas automáticas para dúvidas frequentes. Quando um paciente enviar mensagem contendo as palavras-chave (gatilhos),
+            o sistema responderá automaticamente.
+        </p>
+
+        {% if faqs %}
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Categoria</th>
+                            <th>Gatilhos</th>
+                            <th>Resposta</th>
+                            <th>Usos</th>
+                            <th>Status</th>
+                            <th>Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for faq in faqs %}
+                        <tr>
+                            <td>
+                                <span class="badge bg-info">{{ faq.categoria }}</span>
+                            </td>
+                            <td>
+                                <small>{{ faq.get_gatilhos()|join(', ') }}</small>
+                            </td>
+                            <td>
+                                <small>{{ faq.resposta[:100] }}{% if faq.resposta|length > 100 %}...{% endif %}</small>
+                            </td>
+                            <td>
+                                <span class="badge bg-secondary">{{ faq.contador_uso }}</span>
+                            </td>
+                            <td>
+                                {% if faq.ativa %}
+                                    <span class="badge bg-success">Ativo</span>
+                                {% else %}
+                                    <span class="badge bg-secondary">Inativo</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEditarFAQ{{ faq.id }}">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                <form method="POST" action="{{ url_for('excluir_faq', id=faq.id) }}" style="display:inline;" onsubmit="return confirm('Tem certeza?')">
+                                    <button type="submit" class="btn btn-sm btn-outline-danger">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+
+                        <!-- Modal Editar -->
+                        <div class="modal fade" id="modalEditarFAQ{{ faq.id }}" tabindex="-1">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <form method="POST" action="{{ url_for('editar_faq', id=faq.id) }}">
+                                        <div class="modal-header">
+                                            <h5 class="modal-title">Editar FAQ</h5>
+                                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                        </div>
+                                        <div class="modal-body">
+                                            <div class="mb-3">
+                                                <label class="form-label">Categoria</label>
+                                                <input type="text" name="categoria" class="form-control" value="{{ faq.categoria }}" required>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Gatilhos (separados por vírgula)</label>
+                                                <input type="text" name="gatilhos" class="form-control" value="{{ faq.get_gatilhos()|join(', ') }}" required>
+                                                <small class="text-muted">Ex: horário, horario, que horas</small>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Resposta</label>
+                                                <textarea name="resposta" class="form-control" rows="5" required>{{ faq.resposta }}</textarea>
+                                            </div>
+                                            <div class="mb-3">
+                                                <label class="form-label">Prioridade</label>
+                                                <input type="number" name="prioridade" class="form-control" value="{{ faq.prioridade }}" min="1" max="10">
+                                                <small class="text-muted">Maior prioridade = verificado primeiro</small>
+                                            </div>
+                                            <div class="form-check">
+                                                <input type="checkbox" name="ativa" class="form-check-input" id="ativa{{ faq.id }}" {% if faq.ativa %}checked{% endif %}>
+                                                <label class="form-check-label" for="ativa{{ faq.id }}">Ativa</label>
+                                            </div>
+                                        </div>
+                                        <div class="modal-footer">
+                                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                                            <button type="submit" class="btn btn-primary">Salvar</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <div class="text-center py-5">
+                <p class="text-muted">Nenhuma resposta automática configurada.</p>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalNovoFAQ">
+                    Criar Primeira FAQ
+                </button>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Modal Novo FAQ -->
+<div class="modal fade" id="modalNovoFAQ" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <form method="POST" action="{{ url_for('criar_faq') }}">
+                <div class="modal-header">
+                    <h5 class="modal-title">Nova Resposta Automática</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label">Categoria</label>
+                        <input type="text" name="categoria" class="form-control" placeholder="Ex: horario" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Gatilhos (palavras-chave separadas por vírgula)</label>
+                        <input type="text" name="gatilhos" class="form-control" placeholder="Ex: horário, horario, que horas" required>
+                        <small class="text-muted">O sistema detectará qualquer uma dessas palavras</small>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Resposta</label>
+                        <textarea name="resposta" class="form-control" rows="5" placeholder="Digite a resposta que será enviada automaticamente" required></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Prioridade</label>
+                        <input type="number" name="prioridade" class="form-control" value="5" min="1" max="10">
+                        <small class="text-muted">1 = baixa, 10 = alta (verificadas primeiro)</small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Criar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

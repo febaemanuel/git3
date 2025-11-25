@@ -319,7 +319,222 @@ class LogMsg(db.Model):
     mensagem = db.Column(db.Text)
     status = db.Column(db.String(20))
     erro = db.Column(db.Text)
+    sentimento = db.Column(db.String(20))
+    sentimento_score = db.Column(db.Float)
     data = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class RespostaAutomatica(db.Model):
+    __tablename__ = 'respostas_automaticas'
+    id = db.Column(db.Integer, primary_key=True)
+    categoria = db.Column(db.String(50), nullable=False)
+    gatilhos = db.Column(db.Text)  # JSON string com lista de palavras
+    resposta = db.Column(db.Text, nullable=False)
+    ativa = db.Column(db.Boolean, default=True)
+    prioridade = db.Column(db.Integer, default=1)
+    contador_uso = db.Column(db.Integer, default=0)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def get_gatilhos(self):
+        try:
+            return json.loads(self.gatilhos) if self.gatilhos else []
+        except:
+            return []
+
+    def set_gatilhos(self, lista):
+        self.gatilhos = json.dumps(lista, ensure_ascii=False)
+
+
+class TicketAtendimento(db.Model):
+    __tablename__ = 'tickets_atendimento'
+    id = db.Column(db.Integer, primary_key=True)
+    contato_id = db.Column(db.Integer, db.ForeignKey('contatos.id'))
+    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas.id'))
+    mensagem_usuario = db.Column(db.Text)
+    status = db.Column(db.String(20), default='pendente')  # pendente, em_atendimento, resolvido, cancelado
+    prioridade = db.Column(db.String(20), default='media')  # baixa, media, alta, urgente
+    atendente_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    notas_atendente = db.Column(db.Text)
+    resposta = db.Column(db.Text)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    data_atendimento = db.Column(db.DateTime)
+    data_resolucao = db.Column(db.DateTime)
+
+    contato = db.relationship('Contato', backref='tickets')
+    atendente = db.relationship('Usuario', backref='tickets_atendidos')
+
+
+class TentativaContato(db.Model):
+    __tablename__ = 'tentativas_contato'
+    id = db.Column(db.Integer, primary_key=True)
+    contato_id = db.Column(db.Integer, db.ForeignKey('contatos.id'))
+    numero_tentativa = db.Column(db.Integer)
+    data_tentativa = db.Column(db.DateTime, default=datetime.utcnow)
+    proxima_tentativa = db.Column(db.DateTime)
+    status = db.Column(db.String(20))  # agendada, enviada, respondida, cancelada
+    mensagem_enviada = db.Column(db.Text)
+
+    contato = db.relationship('Contato', backref='tentativas')
+
+
+class ConfigTentativas(db.Model):
+    __tablename__ = 'config_tentativas'
+    id = db.Column(db.Integer, primary_key=True)
+    max_tentativas = db.Column(db.Integer, default=3)
+    intervalo_dias = db.Column(db.Integer, default=3)
+    ativo = db.Column(db.Boolean, default=False)
+
+    @classmethod
+    def get(cls):
+        c = cls.query.first()
+        if not c:
+            c = cls()
+            db.session.add(c)
+            db.session.commit()
+        return c
+
+
+class Tutorial(db.Model):
+    __tablename__ = 'tutoriais'
+    id = db.Column(db.Integer, primary_key=True)
+    titulo = db.Column(db.String(200), nullable=False)
+    descricao = db.Column(db.Text)
+    conteudo = db.Column(db.Text)  # HTML ou Markdown
+    ordem = db.Column(db.Integer, default=0)
+    categoria = db.Column(db.String(50))  # inicio, campanhas, configuracoes, atendimento
+    ativo = db.Column(db.Boolean, default=True)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+# =============================================================================
+# CLASSES AUXILIARES - FAQ E ANALISE DE SENTIMENTO
+# =============================================================================
+
+class AnaliseSentimento:
+    """Analise de sentimento simples baseada em palavras-chave"""
+
+    POSITIVO = ['obrigado', 'obrigada', 'agradeço', 'agradeco', 'perfeito', 'ótimo',
+                'otimo', 'excelente', 'maravilha', 'sim', 'confirmo', 'quero', 'bom', 'boa']
+
+    NEGATIVO = ['não', 'nao', 'nunca', 'desisto', 'cancelar', 'problema',
+                'ruim', 'horrível', 'horrible', 'demora', 'demorado', 'péssimo', 'pessimo']
+
+    URGENTE = ['urgente', 'emergência', 'emergencia', 'rápido', 'rapido',
+               'agora', 'hoje', 'imediato', 'socorro', 'ajuda', 'dor', 'grave']
+
+    INSATISFACAO = ['reclamar', 'reclamação', 'reclamacao', 'absurdo', 'ridículo', 'ridiculo',
+                    'descaso', 'demora', 'espera', 'meses', 'anos', 'revoltante']
+
+    DUVIDA = ['?', 'como', 'quando', 'onde', 'qual', 'dúvida', 'duvida',
+              'não entendi', 'nao entendi', 'explica', 'explicar']
+
+    @classmethod
+    def analisar(cls, texto):
+        texto_lower = texto.lower()
+        score = 0
+        categorias = []
+
+        # Contar ocorrências
+        positivos = sum(1 for p in cls.POSITIVO if p in texto_lower)
+        negativos = sum(1 for p in cls.NEGATIVO if p in texto_lower)
+        urgentes = sum(1 for p in cls.URGENTE if p in texto_lower)
+        insatisfeitos = sum(1 for p in cls.INSATISFACAO if p in texto_lower)
+        duvidas = sum(1 for p in cls.DUVIDA if p in texto_lower)
+
+        score = positivos - negativos + (urgentes * 2) - (insatisfeitos * 2)
+
+        if urgentes > 0:
+            categorias.append('urgente')
+        if insatisfeitos > 0:
+            categorias.append('insatisfeito')
+        if duvidas > 0:
+            categorias.append('duvida')
+        if positivos > negativos:
+            categorias.append('positivo')
+        elif negativos > positivos:
+            categorias.append('negativo')
+
+        # Mensagem muito longa (provavelmente complexa)
+        if len(texto) > 200:
+            categorias.append('complexo')
+
+        # Classificação final
+        if 'urgente' in categorias:
+            sentimento = 'urgente'
+        elif 'insatisfeito' in categorias:
+            sentimento = 'insatisfeito'
+        elif 'duvida' in categorias:
+            sentimento = 'duvida'
+        elif 'positivo' in categorias:
+            sentimento = 'positivo'
+        elif 'negativo' in categorias:
+            sentimento = 'negativo'
+        else:
+            sentimento = 'neutro'
+
+        return {
+            'sentimento': sentimento,
+            'score': score,
+            'categorias': categorias,
+            'requer_atencao': sentimento in ['urgente', 'insatisfeito', 'complexo']
+        }
+
+
+class SistemaFAQ:
+    """Sistema de respostas automáticas"""
+
+    @staticmethod
+    def buscar_resposta(texto):
+        """Busca resposta automática baseada no texto"""
+        texto_lower = texto.lower()
+
+        # Buscar no banco de dados
+        faqs = RespostaAutomatica.query.filter_by(ativa=True).order_by(RespostaAutomatica.prioridade.desc()).all()
+
+        for faq in faqs:
+            gatilhos = faq.get_gatilhos()
+            for gatilho in gatilhos:
+                if gatilho.lower() in texto_lower:
+                    # Incrementar contador
+                    faq.contador_uso += 1
+                    db.session.commit()
+                    return faq.resposta
+
+        return None
+
+    @staticmethod
+    def requer_atendimento_humano(texto, contato):
+        """Verifica se a mensagem requer atendimento humano"""
+        texto_lower = texto.lower()
+
+        # Análise de sentimento
+        analise = AnaliseSentimento.analisar(texto)
+
+        if analise['requer_atencao']:
+            if analise['sentimento'] == 'urgente':
+                return 'urgente'
+            elif analise['sentimento'] == 'insatisfeito':
+                return 'alta'
+            else:
+                return 'media'
+
+        # Mensagem muito longa
+        if len(texto) > 200:
+            return 'media'
+
+        # Múltiplas mensagens em curto período
+        if contato:
+            msgs_recentes = LogMsg.query.filter_by(
+                contato_id=contato.id,
+                direcao='recebida'
+            ).filter(
+                LogMsg.data > datetime.utcnow() - timedelta(hours=1)
+            ).count()
+
+            if msgs_recentes > 3:
+                return 'alta'
+
+        return None
 
 
 # =============================================================================
@@ -906,6 +1121,354 @@ def enviar_campanha_bg(campanha_id):
                 db.session.commit()
 
 
+def processar_followup_bg():
+    """Processa follow-up para contatos que não responderam"""
+    with app.app_context():
+        try:
+            config = ConfigTentativas.get()
+            if not config.ativo:
+                logger.info("Follow-up desativado")
+                return
+
+            logger.info("=== INICIANDO PROCESSAMENTO DE FOLLOW-UP ===")
+
+            # Mensagens de follow-up personalizadas
+            MENSAGENS_FOLLOWUP = {
+                1: """📋 *Olá novamente, {nome}*!
+
+Não recebemos sua resposta sobre o procedimento: *{procedimento}*.
+
+Você ainda tem interesse em realizar esta cirurgia?
+
+1️⃣ *SIM* - Tenho interesse
+2️⃣ *NÃO* - Não tenho mais interesse
+3️⃣ *DESCONHEÇO* - Não sou essa pessoa""",
+
+                2: """📋 *{nome}*, esta é nossa penúltima tentativa de contato.
+
+Procedimento: *{procedimento}*
+
+⚠️ *IMPORTANTE:* Se não recebermos resposta em {dias} dias, faremos uma última tentativa.
+
+1️⃣ *SIM* - Tenho interesse
+2️⃣ *NÃO* - Não tenho interesse""",
+
+                3: """📋 *{nome}*, este é nosso último contato.
+
+Como não recebemos resposta, vamos considerar que você não tem mais interesse no procedimento: *{procedimento}*.
+
+Se ainda tiver interesse, responda URGENTE nesta mensagem ou ligue para (85) 3366-8000.
+
+Caso contrário, sua vaga será disponibilizada."""
+            }
+
+            ws = WhatsApp()
+            if not ws.ok():
+                logger.error("WhatsApp não configurado")
+                return
+
+            data_limite = datetime.utcnow() - timedelta(days=config.intervalo_dias)
+
+            # Buscar contatos que precisam de follow-up
+            contatos = Contato.query.join(Telefone).filter(
+                Contato.status == 'enviado',
+                Contato.confirmado == False,
+                Contato.rejeitado == False,
+                Contato.data_resposta == None,
+                Telefone.enviado == True,
+                Telefone.whatsapp_valido == True
+            ).distinct().all()
+
+            logger.info(f"Total de contatos para verificar: {len(contatos)}")
+
+            processados = 0
+
+            for c in contatos:
+                # Verificar última tentativa
+                ultima_tentativa = TentativaContato.query.filter_by(
+                    contato_id=c.id
+                ).order_by(TentativaContato.numero_tentativa.desc()).first()
+
+                # Verificar primeira tentativa (envio original)
+                primeiro_envio = c.telefones.filter(Telefone.enviado == True).order_by(Telefone.data_envio).first()
+
+                if not ultima_tentativa:
+                    # Primeira tentativa de follow-up
+                    if primeiro_envio and primeiro_envio.data_envio < data_limite:
+                        num_tentativa = 1
+                    else:
+                        continue
+                else:
+                    # Já tem tentativas
+                    if ultima_tentativa.numero_tentativa >= config.max_tentativas:
+                        # Esgotou tentativas - marcar como "sem resposta"
+                        if c.status != 'sem_resposta':
+                            c.status = 'sem_resposta'
+                            c.erro = f'Sem resposta após {config.max_tentativas} tentativas'
+                            db.session.commit()
+                            logger.info(f"Contato {c.nome} marcado como sem resposta")
+                        continue
+
+                    if ultima_tentativa.data_tentativa < data_limite:
+                        num_tentativa = ultima_tentativa.numero_tentativa + 1
+                    else:
+                        continue
+
+                # Enviar follow-up
+                msg_template = MENSAGENS_FOLLOWUP.get(num_tentativa, MENSAGENS_FOLLOWUP[1])
+                msg = msg_template.replace('{nome}', c.nome).replace(
+                    '{procedimento}', c.procedimento or 'o procedimento'
+                ).replace('{dias}', str(config.intervalo_dias))
+
+                telefones = c.telefones.filter_by(whatsapp_valido=True).all()
+                enviado = False
+
+                for t in telefones:
+                    ok, _ = ws.enviar(t.numero_fmt, msg)
+                    if ok:
+                        enviado = True
+
+                        # Registrar tentativa
+                        tentativa = TentativaContato(
+                            contato_id=c.id,
+                            numero_tentativa=num_tentativa,
+                            data_tentativa=datetime.utcnow(),
+                            proxima_tentativa=datetime.utcnow() + timedelta(days=config.intervalo_dias),
+                            status='enviada',
+                            mensagem_enviada=msg
+                        )
+                        db.session.add(tentativa)
+
+                        # Log
+                        log = LogMsg(
+                            campanha_id=c.campanha_id,
+                            contato_id=c.id,
+                            direcao='enviada',
+                            telefone=t.numero_fmt,
+                            mensagem=f'[Follow-up {num_tentativa}] {msg[:500]}',
+                            status='ok'
+                        )
+                        db.session.add(log)
+
+                        logger.info(f"Follow-up {num_tentativa} enviado para {c.nome}")
+                        break
+
+                if enviado:
+                    db.session.commit()
+                    processados += 1
+                    time.sleep(15)  # Intervalo entre envios
+
+            logger.info(f"=== FOLLOW-UP CONCLUÍDO: {processados} mensagens enviadas ===")
+
+        except Exception as e:
+            logger.error(f"Erro no processamento de follow-up: {e}", exc_info=True)
+
+
+def criar_faqs_padrao():
+    """Cria FAQs padrão se não existirem"""
+    try:
+        if RespostaAutomatica.query.count() > 0:
+            return
+
+        faqs_padrao = [
+            {
+                'categoria': 'horario',
+                'gatilhos': ['horário', 'horario', 'que horas', 'hora', 'quando'],
+                'resposta': '📋 O agendamento será feito após sua confirmação. A equipe entrará em contato para definir data e horário.',
+                'prioridade': 5
+            },
+            {
+                'categoria': 'endereco',
+                'gatilhos': ['endereço', 'endereco', 'onde fica', 'localização', 'local', 'chegar'],
+                'resposta': '📍 *Hospital Universitário Walter Cantídio*\nRua Capitão Francisco Pedro, 1290 - Rodolfo Teófilo\nFortaleza - CE\nCEP: 60430-370',
+                'prioridade': 5
+            },
+            {
+                'categoria': 'documento',
+                'gatilhos': ['documento', 'levar', 'precisar', 'necessário', 'necessario', 'precisa levar'],
+                'resposta': '📄 *Documentos necessários:*\n• RG e CPF\n• Cartão do SUS\n• Encaminhamento médico\n• Exames anteriores (se houver)',
+                'prioridade': 4
+            },
+            {
+                'categoria': 'preparo',
+                'gatilhos': ['jejum', 'preparo', 'preparar', 'antes da cirurgia', 'cuidados'],
+                'resposta': '🏥 As orientações de preparo serão fornecidas pela equipe médica no momento do agendamento. Cada procedimento tem suas especificidades.',
+                'prioridade': 3
+            },
+            {
+                'categoria': 'acompanhante',
+                'gatilhos': ['acompanhante', 'acompanhar', 'pode ir com', 'levar alguém', 'levar alguem'],
+                'resposta': '👥 Sim, você pode e deve trazer um acompanhante maior de 18 anos. O acompanhante é essencial para o pós-operatório.',
+                'prioridade': 3
+            }
+        ]
+
+        for faq_data in faqs_padrao:
+            faq = RespostaAutomatica(
+                categoria=faq_data['categoria'],
+                resposta=faq_data['resposta'],
+                prioridade=faq_data['prioridade']
+            )
+            faq.set_gatilhos(faq_data['gatilhos'])
+            db.session.add(faq)
+
+        db.session.commit()
+        logger.info("FAQs padrão criadas")
+
+    except Exception as e:
+        logger.error(f"Erro ao criar FAQs padrão: {e}")
+
+
+def criar_tutoriais_padrao():
+    """Cria tutoriais padrão se não existirem"""
+    try:
+        if Tutorial.query.count() > 0:
+            return
+
+        tutoriais = [
+            {
+                'titulo': 'Bem-vindo ao Sistema de Busca Ativa',
+                'categoria': 'inicio',
+                'ordem': 1,
+                'descricao': 'Introdução ao sistema',
+                'conteudo': '''
+<h4>Bem-vindo!</h4>
+<p>Este sistema foi desenvolvido para gerenciar campanhas de busca ativa de pacientes em lista de espera cirúrgica.</p>
+
+<h5>Principais funcionalidades:</h5>
+<ul>
+    <li>📊 <strong>Dashboard:</strong> Visão geral de todas as campanhas</li>
+    <li>📋 <strong>Campanhas:</strong> Criar e gerenciar campanhas de contato</li>
+    <li>⚙️ <strong>Configurações:</strong> Conectar WhatsApp via Evolution API</li>
+    <li>👤 <strong>Atendimento:</strong> Responder dúvidas complexas</li>
+    <li>💬 <strong>FAQ:</strong> Respostas automáticas para dúvidas frequentes</li>
+</ul>
+
+<div class="alert alert-info">
+    <strong>Dica:</strong> Comece configurando o WhatsApp nas Configurações antes de criar sua primeira campanha.
+</div>
+                '''
+            },
+            {
+                'titulo': 'Como Criar uma Campanha',
+                'categoria': 'campanhas',
+                'ordem': 2,
+                'descricao': 'Passo a passo para criar campanhas',
+                'conteudo': '''
+<h4>Criando sua primeira campanha</h4>
+
+<h5>Passo 1: Preparar a planilha</h5>
+<p>A planilha Excel deve conter as seguintes colunas:</p>
+<ul>
+    <li><strong>Nome</strong> (obrigatório): Nome do paciente</li>
+    <li><strong>Telefone</strong> (obrigatório): Número com DDD</li>
+    <li><strong>Nascimento</strong> (opcional): Data de nascimento (DD/MM/AAAA)</li>
+    <li><strong>Procedimento</strong> (opcional): Nome do procedimento</li>
+</ul>
+
+<h5>Passo 2: Upload e configuração</h5>
+<ol>
+    <li>Clique em "Nova Campanha" no Dashboard</li>
+    <li>Preencha o nome e descrição</li>
+    <li>Personalize a mensagem (use {nome} e {procedimento})</li>
+    <li>Faça upload da planilha</li>
+    <li>Configure limite diário e tempo entre envios</li>
+</ol>
+
+<h5>Passo 3: Iniciar envios</h5>
+<p>Após criar a campanha, você pode:</p>
+<ul>
+    <li><strong>Validar números:</strong> Verifica quais têm WhatsApp (opcional)</li>
+    <li><strong>Iniciar envios:</strong> Começa a enviar as mensagens</li>
+</ul>
+
+<div class="alert alert-warning">
+    <strong>Atenção:</strong> O WhatsApp deve estar conectado antes de iniciar os envios!
+</div>
+                '''
+            },
+            {
+                'titulo': 'Configurando o WhatsApp',
+                'categoria': 'configuracoes',
+                'ordem': 3,
+                'descricao': 'Como conectar o WhatsApp',
+                'conteudo': '''
+<h4>Conectando o WhatsApp</h4>
+
+<h5>Requisitos:</h5>
+<ul>
+    <li>Evolution API instalada e rodando</li>
+    <li>URL da API</li>
+    <li>Nome da instância</li>
+    <li>API Key</li>
+</ul>
+
+<h5>Passo a passo:</h5>
+<ol>
+    <li>Vá em <strong>Configurações</strong> no menu</li>
+    <li>Preencha os dados da Evolution API</li>
+    <li>Ative o checkbox "WhatsApp Ativo"</li>
+    <li>Clique em "Salvar"</li>
+    <li>Clique em "Gerar QR Code"</li>
+    <li>Escaneie o QR Code com o WhatsApp do celular</li>
+</ol>
+
+<div class="alert alert-success">
+    <strong>Pronto!</strong> Quando conectado, você verá um indicador verde no topo da página.
+</div>
+                '''
+            },
+            {
+                'titulo': 'Sistema de Atendimento',
+                'categoria': 'atendimento',
+                'ordem': 4,
+                'descricao': 'Como usar o painel de atendimento',
+                'conteudo': '''
+<h4>Atendimento de Tickets</h4>
+
+<p>O sistema cria tickets automaticamente quando detecta:</p>
+<ul>
+    <li>🚨 Mensagens urgentes (palavras como "emergência", "urgente", "dor")</li>
+    <li>😠 Mensagens de insatisfação</li>
+    <li>❓ Dúvidas complexas</li>
+    <li>📝 Mensagens muito longas</li>
+</ul>
+
+<h5>Como atender um ticket:</h5>
+<ol>
+    <li>Vá em <strong>Atendimento</strong> no menu</li>
+    <li>Veja a lista de tickets pendentes</li>
+    <li>Clique em um ticket para ver detalhes</li>
+    <li>Clique em "Assumir Ticket"</li>
+    <li>Digite sua resposta e clique em "Enviar"</li>
+</ol>
+
+<p>A resposta será enviada automaticamente via WhatsApp para o paciente!</p>
+
+<div class="alert alert-info">
+    <strong>Dica:</strong> Tickets urgentes aparecem em vermelho e devem ser atendidos primeiro.
+</div>
+                '''
+            }
+        ]
+
+        for tut_data in tutoriais:
+            tut = Tutorial(
+                titulo=tut_data['titulo'],
+                categoria=tut_data['categoria'],
+                ordem=tut_data['ordem'],
+                descricao=tut_data['descricao'],
+                conteudo=tut_data['conteudo']
+            )
+            db.session.add(tut)
+
+        db.session.commit()
+        logger.info("Tutoriais padrão criados")
+
+    except Exception as e:
+        logger.error(f"Erro ao criar tutoriais: {e}")
+
+
 def criar_admin():
     try:
         if not Usuario.query.filter_by(email=ADMIN_EMAIL).first():
@@ -1208,6 +1771,15 @@ def exportar_campanha(id):
 
 
 # API
+@app.route('/api/dashboard/tickets')
+@login_required
+def api_dashboard_tickets():
+    """Retorna estatísticas de tickets para o dashboard"""
+    urgentes = TicketAtendimento.query.filter_by(status='pendente', prioridade='urgente').count()
+    pendentes = TicketAtendimento.query.filter_by(status='pendente').count()
+    return jsonify({'urgentes': urgentes, 'pendentes': pendentes})
+
+
 @app.route('/api/campanha/<int:id>/status')
 @login_required
 def api_status(id):
@@ -1501,13 +2073,48 @@ def webhook():
 
         logger.info(f"Webhook: Mensagem de {c.nome} ({numero}). Campanha: {c.campanha_id}. Status atual: {c.status}. Texto: {texto}")
 
-        # Log da mensagem recebida
-        log = LogMsg(campanha_id=c.campanha_id, contato_id=c.id, direcao='recebida',
-                     telefone=numero, mensagem=texto[:500], status='ok')
+        # Análise de sentimento
+        analise = AnaliseSentimento.analisar(texto)
+
+        # Log da mensagem recebida com sentimento
+        log = LogMsg(
+            campanha_id=c.campanha_id,
+            contato_id=c.id,
+            direcao='recebida',
+            telefone=numero,
+            mensagem=texto[:500],
+            status='ok',
+            sentimento=analise['sentimento'],
+            sentimento_score=analise['score']
+        )
         db.session.add(log)
         db.session.commit()
-        
+
         ws = WhatsApp()
+
+        # Verificar se precisa criar ticket para atendimento humano
+        prioridade_ticket = SistemaFAQ.requer_atendimento_humano(texto, c)
+        if prioridade_ticket and c.status not in ['aguardando_nascimento']:
+            ticket = TicketAtendimento(
+                contato_id=c.id,
+                campanha_id=c.campanha_id,
+                mensagem_usuario=texto,
+                status='pendente',
+                prioridade=prioridade_ticket
+            )
+            db.session.add(ticket)
+            db.session.commit()
+
+            # Notificar usuário
+            if prioridade_ticket == 'urgente':
+                ws.enviar(numero, "🚨 Sua mensagem foi encaminhada com URGÊNCIA para nossa equipe. "
+                                 "Um atendente entrará em contato em breve.")
+            else:
+                ws.enviar(numero, "👤 Sua mensagem foi encaminhada para um atendente. "
+                                 "Aguarde o retorno em até 24h úteis.")
+
+            logger.info(f"Ticket criado para {c.nome} - Prioridade: {prioridade_ticket}")
+            return jsonify({'status': 'ok'}), 200
 
         # Maquina de Estados
         # Aceita 'pronto_envio' tambem pois pode haver race condition (usuario responde antes do loop de envio terminar)
@@ -1577,13 +2184,18 @@ def webhook():
                 ws.enviar(numero, "⚠️ Formato inválido. Por favor, digite a data no formato DD/MM/AAAA (ex: 03/09/1954).")
 
         elif c.status == 'concluido':
-            # Se o usuario mandar mensagem depois de concluido, reforcar o status
-            if c.confirmado:
-                ws.enviar(numero, "✅ Você já confirmou seu interesse. Obrigado!")
-            elif c.rejeitado:
-                ws.enviar(numero, "✅ Você já informou que não tem interesse. Obrigado!")
+            # Tentar resposta automática (FAQ) primeiro
+            resposta_faq = SistemaFAQ.buscar_resposta(texto)
+            if resposta_faq:
+                ws.enviar(numero, resposta_faq)
             else:
-                ws.enviar(numero, "✅ Seu atendimento já foi concluído. Obrigado!")
+                # Se o usuario mandar mensagem depois de concluido, reforcar o status
+                if c.confirmado:
+                    ws.enviar(numero, "✅ Você já confirmou seu interesse. Obrigado!")
+                elif c.rejeitado:
+                    ws.enviar(numero, "✅ Você já informou que não tem interesse. Obrigado!")
+                else:
+                    ws.enviar(numero, "✅ Seu atendimento já foi concluído. Obrigado!")
 
         return jsonify({'status': 'ok'}), 200
 
@@ -1595,6 +2207,334 @@ def webhook():
 @app.route('/webhook/whatsapp', methods=['GET'])
 def webhook_check():
     return jsonify({'status': 'ok', 'app': 'Busca Ativa HUWC'}), 200
+
+
+# =============================================================================
+# ROTAS - FAQ (RESPOSTAS AUTOMATICAS)
+# =============================================================================
+
+@app.route('/faq')
+@login_required
+def gerenciar_faq():
+    faqs = RespostaAutomatica.query.order_by(RespostaAutomatica.prioridade.desc()).all()
+    return render_template('faq.html', faqs=faqs)
+
+
+@app.route('/faq/criar', methods=['POST'])
+@login_required
+def criar_faq():
+    categoria = request.form.get('categoria', '').strip()
+    resposta = request.form.get('resposta', '').strip()
+    gatilhos_str = request.form.get('gatilhos', '').strip()
+    prioridade = int(request.form.get('prioridade', 1))
+
+    if not categoria or not resposta or not gatilhos_str:
+        flash('Preencha todos os campos', 'danger')
+        return redirect(url_for('gerenciar_faq'))
+
+    # Converter gatilhos de string para lista
+    gatilhos = [g.strip() for g in gatilhos_str.split(',') if g.strip()]
+
+    faq = RespostaAutomatica(
+        categoria=categoria,
+        resposta=resposta,
+        prioridade=prioridade
+    )
+    faq.set_gatilhos(gatilhos)
+    db.session.add(faq)
+    db.session.commit()
+
+    flash('FAQ criado com sucesso!', 'success')
+    return redirect(url_for('gerenciar_faq'))
+
+
+@app.route('/faq/<int:id>/editar', methods=['POST'])
+@login_required
+def editar_faq(id):
+    faq = RespostaAutomatica.query.get_or_404(id)
+
+    faq.categoria = request.form.get('categoria', '').strip()
+    faq.resposta = request.form.get('resposta', '').strip()
+    gatilhos_str = request.form.get('gatilhos', '').strip()
+    faq.prioridade = int(request.form.get('prioridade', 1))
+    faq.ativa = request.form.get('ativa') == 'on'
+
+    gatilhos = [g.strip() for g in gatilhos_str.split(',') if g.strip()]
+    faq.set_gatilhos(gatilhos)
+
+    db.session.commit()
+    flash('FAQ atualizado!', 'success')
+    return redirect(url_for('gerenciar_faq'))
+
+
+@app.route('/faq/<int:id>/excluir', methods=['POST'])
+@login_required
+def excluir_faq(id):
+    faq = RespostaAutomatica.query.get_or_404(id)
+    db.session.delete(faq)
+    db.session.commit()
+    flash('FAQ excluído!', 'success')
+    return redirect(url_for('gerenciar_faq'))
+
+
+# =============================================================================
+# ROTAS - ATENDIMENTO (TICKETS)
+# =============================================================================
+
+@app.route('/atendimento')
+@login_required
+def painel_atendimento():
+    filtro = request.args.get('filtro', 'pendente')
+    page = request.args.get('page', 1, type=int)
+
+    q = TicketAtendimento.query
+
+    if filtro == 'pendente':
+        q = q.filter_by(status='pendente')
+    elif filtro == 'em_atendimento':
+        q = q.filter_by(status='em_atendimento')
+    elif filtro == 'resolvido':
+        q = q.filter_by(status='resolvido')
+    elif filtro == 'meus':
+        q = q.filter_by(atendente_id=current_user.id, status='em_atendimento')
+    elif filtro == 'urgente':
+        q = q.filter_by(prioridade='urgente', status='pendente')
+
+    tickets = q.order_by(
+        TicketAtendimento.prioridade.desc(),
+        TicketAtendimento.data_criacao.asc()
+    ).paginate(page=page, per_page=20)
+
+    # Estatísticas
+    stats = {
+        'pendente': TicketAtendimento.query.filter_by(status='pendente').count(),
+        'em_atendimento': TicketAtendimento.query.filter_by(status='em_atendimento').count(),
+        'urgente': TicketAtendimento.query.filter_by(prioridade='urgente', status='pendente').count(),
+        'resolvido_hoje': TicketAtendimento.query.filter(
+            TicketAtendimento.status == 'resolvido',
+            TicketAtendimento.data_resolucao >= datetime.utcnow().replace(hour=0, minute=0, second=0)
+        ).count()
+    }
+
+    return render_template('atendimento.html', tickets=tickets, filtro=filtro, stats=stats)
+
+
+@app.route('/atendimento/<int:id>')
+@login_required
+def detalhe_ticket(id):
+    ticket = TicketAtendimento.query.get_or_404(id)
+    # Buscar histórico de mensagens do contato
+    logs = LogMsg.query.filter_by(contato_id=ticket.contato_id).order_by(LogMsg.data.desc()).limit(20).all()
+    return render_template('ticket_detalhe.html', ticket=ticket, logs=logs)
+
+
+@app.route('/atendimento/<int:id>/assumir', methods=['POST'])
+@login_required
+def assumir_ticket(id):
+    ticket = TicketAtendimento.query.get_or_404(id)
+
+    if ticket.status != 'pendente':
+        flash('Ticket já está em atendimento', 'warning')
+        return redirect(url_for('detalhe_ticket', id=id))
+
+    ticket.status = 'em_atendimento'
+    ticket.atendente_id = current_user.id
+    ticket.data_atendimento = datetime.utcnow()
+    db.session.commit()
+
+    flash('Ticket assumido!', 'success')
+    return redirect(url_for('detalhe_ticket', id=id))
+
+
+@app.route('/atendimento/<int:id>/responder', methods=['POST'])
+@login_required
+def responder_ticket(id):
+    ticket = TicketAtendimento.query.get_or_404(id)
+    resposta = request.form.get('resposta', '').strip()
+
+    if not resposta:
+        flash('Digite uma resposta', 'danger')
+        return redirect(url_for('detalhe_ticket', id=id))
+
+    # Enviar via WhatsApp
+    ws = WhatsApp()
+    telefones = ticket.contato.telefones.filter_by(whatsapp_valido=True).all()
+
+    if not telefones:
+        flash('Nenhum telefone válido para enviar resposta', 'danger')
+        return redirect(url_for('detalhe_ticket', id=id))
+
+    enviado = False
+    for tel in telefones:
+        ok, _ = ws.enviar(tel.numero_fmt, f"👤 *Resposta do atendente {current_user.nome}:*\n\n{resposta}")
+        if ok:
+            enviado = True
+
+            # Registrar log
+            log = LogMsg(
+                campanha_id=ticket.campanha_id,
+                contato_id=ticket.contato_id,
+                direcao='enviada',
+                telefone=tel.numero_fmt,
+                mensagem=f'[Atendimento] {resposta}',
+                status='ok'
+            )
+            db.session.add(log)
+            break
+
+    if enviado:
+        # Resolver ticket
+        ticket.status = 'resolvido'
+        ticket.data_resolucao = datetime.utcnow()
+        ticket.resposta = resposta
+        db.session.commit()
+
+        flash('Resposta enviada e ticket resolvido!', 'success')
+    else:
+        flash('Erro ao enviar resposta', 'danger')
+
+    return redirect(url_for('painel_atendimento'))
+
+
+@app.route('/atendimento/<int:id>/cancelar', methods=['POST'])
+@login_required
+def cancelar_ticket(id):
+    ticket = TicketAtendimento.query.get_or_404(id)
+    ticket.status = 'cancelado'
+    db.session.commit()
+    flash('Ticket cancelado', 'info')
+    return redirect(url_for('painel_atendimento'))
+
+
+# =============================================================================
+# ROTAS - CADASTRO PUBLICO
+# =============================================================================
+
+@app.route('/cadastro', methods=['GET', 'POST'])
+def cadastro_publico():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        nome = request.form.get('nome', '').strip()
+        email = request.form.get('email', '').strip().lower()
+        senha = request.form.get('senha', '')
+        senha_confirm = request.form.get('senha_confirm', '')
+
+        # Validações
+        if not nome or not email or not senha:
+            flash('Preencha todos os campos', 'danger')
+            return render_template('cadastro.html')
+
+        if len(senha) < 6:
+            flash('Senha deve ter no mínimo 6 caracteres', 'danger')
+            return render_template('cadastro.html')
+
+        if senha != senha_confirm:
+            flash('As senhas não coincidem', 'danger')
+            return render_template('cadastro.html')
+
+        # Verificar se email já existe
+        if Usuario.query.filter_by(email=email).first():
+            flash('Email já cadastrado', 'danger')
+            return render_template('cadastro.html')
+
+        # Criar usuário
+        usuario = Usuario(nome=nome, email=email, ativo=True)
+        usuario.set_password(senha)
+        db.session.add(usuario)
+        db.session.commit()
+
+        flash('Cadastro realizado com sucesso! Faça login.', 'success')
+        return redirect(url_for('login'))
+
+    return render_template('cadastro.html')
+
+
+# =============================================================================
+# ROTAS - TUTORIAL
+# =============================================================================
+
+@app.route('/tutorial')
+@login_required
+def tutorial():
+    categoria = request.args.get('categoria', 'inicio')
+    tutoriais = Tutorial.query.filter_by(ativo=True, categoria=categoria).order_by(Tutorial.ordem).all()
+
+    # Se não encontrou, pegar todos
+    if not tutoriais:
+        tutoriais = Tutorial.query.filter_by(ativo=True).order_by(Tutorial.categoria, Tutorial.ordem).all()
+
+    return render_template('tutorial.html', tutoriais=tutoriais, categoria=categoria)
+
+
+@app.route('/tutorial/<int:id>')
+@login_required
+def tutorial_detalhe(id):
+    tutorial = Tutorial.query.get_or_404(id)
+    return render_template('tutorial_detalhe.html', tutorial=tutorial)
+
+
+# =============================================================================
+# ROTAS - FOLLOW-UP (JOB)
+# =============================================================================
+
+@app.route('/followup/configurar', methods=['GET', 'POST'])
+@login_required
+def configurar_followup():
+    config = ConfigTentativas.get()
+
+    if request.method == 'POST':
+        config.max_tentativas = int(request.form.get('max_tentativas', 3))
+        config.intervalo_dias = int(request.form.get('intervalo_dias', 3))
+        config.ativo = request.form.get('ativo') == 'on'
+        db.session.commit()
+        flash('Configuração salva!', 'success')
+        return redirect(url_for('configurar_followup'))
+
+    return render_template('followup_config.html', config=config)
+
+
+@app.route('/followup/processar', methods=['POST'])
+@login_required
+def processar_followup_manual():
+    """Executar follow-up manualmente (para testes)"""
+    threading.Thread(target=processar_followup_bg).start()
+    flash('Follow-up iniciado em background', 'info')
+    return redirect(url_for('dashboard'))
+
+
+# =============================================================================
+# ROTAS - DASHBOARD DE SENTIMENTOS
+# =============================================================================
+
+@app.route('/sentimentos')
+@login_required
+def dashboard_sentimentos():
+    # Estatísticas gerais
+    stats_sentimento = db.session.query(
+        LogMsg.sentimento,
+        db.func.count(LogMsg.id)
+    ).filter(
+        LogMsg.direcao == 'recebida',
+        LogMsg.sentimento.isnot(None)
+    ).group_by(LogMsg.sentimento).all()
+
+    # Tickets por prioridade
+    stats_tickets = db.session.query(
+        TicketAtendimento.prioridade,
+        db.func.count(TicketAtendimento.id)
+    ).filter_by(status='pendente').group_by(TicketAtendimento.prioridade).all()
+
+    # FAQs mais usadas
+    faqs_top = RespostaAutomatica.query.filter(
+        RespostaAutomatica.contador_uso > 0
+    ).order_by(RespostaAutomatica.contador_uso.desc()).limit(10).all()
+
+    return render_template('sentimentos.html',
+                         stats_sentimento=dict(stats_sentimento),
+                         stats_tickets=dict(stats_tickets),
+                         faqs_top=faqs_top)
 
 
 # Logs
@@ -1629,6 +2569,8 @@ def init_db():
 with app.app_context():
     db.create_all()
     criar_admin()
+    criar_faqs_padrao()
+    criar_tutoriais_padrao()
 
 
 if __name__ == '__main__':

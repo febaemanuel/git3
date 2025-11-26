@@ -2866,18 +2866,27 @@ def webhook():
         if key.get('fromMe'):
             return jsonify({'status': 'ok'}), 200
 
-        # DEBUG: Log dos campos do key para diagnosticar extração incorreta
-        logger.info(f"DEBUG Webhook - remoteJid: {key.get('remoteJid')}")
-        logger.info(f"DEBUG Webhook - remoteJidAlt: {key.get('remoteJidAlt')}")
-        logger.info(f"DEBUG Webhook - participant: {key.get('participant')}")
-        logger.info(f"DEBUG Webhook - key completo: {key}")
+        # Extrair o número real do WhatsApp
+        # O número correto sempre termina com @s.whatsapp.net
+        # O LID (Local ID) termina com @lid e deve ser ignorado
+        remote_jid = key.get('remoteJid', '')
+        remote_jid_alt = key.get('remoteJidAlt', '')
 
-        # Priorizar remoteJidAlt (numero real) sobre remoteJid (pode ser LID format)
-        jid = key.get('remoteJidAlt') or key.get('remoteJid', '')
+        # Priorizar o JID que termina com @s.whatsapp.net (número real)
+        if remote_jid.endswith('@s.whatsapp.net'):
+            jid = remote_jid
+        elif remote_jid_alt.endswith('@s.whatsapp.net'):
+            jid = remote_jid_alt
+        else:
+            # Fallback: se nenhum termina com @s.whatsapp.net, usa o que não é LID
+            if not remote_jid.endswith('@lid'):
+                jid = remote_jid
+            elif not remote_jid_alt.endswith('@lid'):
+                jid = remote_jid_alt
+            else:
+                jid = remote_jid  # Último recurso
+
         numero = ''.join(filter(str.isdigit, jid.replace('@s.whatsapp.net', '').replace('@lid', '')))
-
-        logger.info(f"DEBUG Webhook - JID escolhido: {jid}")
-        logger.info(f"DEBUG Webhook - Numero extraido: {numero}")
 
         # Validar se conseguiu extrair um numero valido
         if not numero:

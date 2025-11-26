@@ -255,20 +255,38 @@
                         <small class="text-muted">Use {nome} e {procedimento} para personalizar</small>
                     </div>
 
+                    <div class="alert alert-info">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>Agendamento Automático</strong>: O sistema calculará automaticamente o intervalo ideal entre envios baseado na sua meta diária e horário de funcionamento.
+                    </div>
+
                     <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Limite Diario</label>
-                            <input type="number" class="form-control" name="limite_diario"
-                                   value="50" min="1" max="500">
-                            <small class="text-muted">Maximo de envios por execucao</small>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Meta Diária *</label>
+                            <input type="number" class="form-control" name="meta_diaria" id="meta_diaria"
+                                   value="50" min="1" max="500" required onchange="calcularIntervalo()">
+                            <small class="text-muted">Quantas pessoas por dia</small>
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Tempo entre Envios (segundos)</label>
-                            <input type="number" class="form-control" name="tempo_entre_envios"
-                                   value="15" min="5" max="120">
-                            <small class="text-muted">Intervalo entre cada mensagem</small>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Horário Início</label>
+                            <input type="time" class="form-control" name="horario_inicio" id="horario_inicio"
+                                   value="08:00" onchange="calcularIntervalo()">
+                            <small class="text-muted">Início do envio</small>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Horário Fim</label>
+                            <input type="time" class="form-control" name="horario_fim" id="horario_fim"
+                                   value="18:00" onchange="calcularIntervalo()">
+                            <small class="text-muted">Fim do envio</small>
                         </div>
                     </div>
+
+                    <div class="alert alert-success" id="intervalo-calculado" style="display: none;">
+                        <i class="bi bi-check-circle"></i>
+                        <strong>Intervalo Calculado:</strong> <span id="intervalo-texto"></span>
+                    </div>
+
+                    <input type="hidden" name="tempo_entre_envios" id="tempo_entre_envios" value="15">
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -298,8 +316,54 @@ function carregarTickets() {
         });
 }
 
+// Calcular intervalo automático
+function calcularIntervalo() {
+    const metaDiaria = parseInt(document.getElementById('meta_diaria').value) || 50;
+    const horarioInicio = document.getElementById('horario_inicio').value || '08:00';
+    const horarioFim = document.getElementById('horario_fim').value || '18:00';
+
+    // Converter horários para minutos
+    const [horaIni, minIni] = horarioInicio.split(':').map(Number);
+    const [horaFim, minFim] = horarioFim.split(':').map(Number);
+
+    const minutosInicio = horaIni * 60 + minIni;
+    const minutosFim = horaFim * 60 + minFim;
+
+    // Calcular total de minutos disponíveis
+    let totalMinutos = minutosFim - minutosInicio;
+
+    if (totalMinutos <= 0) {
+        totalMinutos = (24 * 60 - minutosInicio) + minutosFim; // Caso passe da meia-noite
+    }
+
+    // Calcular intervalo em segundos
+    const intervaloSegundos = Math.floor((totalMinutos * 60) / metaDiaria);
+
+    // Atualizar campo oculto
+    document.getElementById('tempo_entre_envios').value = intervaloSegundos;
+
+    // Formatar mensagem
+    let mensagem;
+    if (intervaloSegundos >= 60) {
+        const minutos = Math.floor(intervaloSegundos / 60);
+        const segundos = intervaloSegundos % 60;
+        if (segundos > 0) {
+            mensagem = `1 envio a cada ${minutos} minuto(s) e ${segundos} segundo(s)`;
+        } else {
+            mensagem = `1 envio a cada ${minutos} minuto(s)`;
+        }
+    } else {
+        mensagem = `1 envio a cada ${intervaloSegundos} segundo(s)`;
+    }
+
+    // Exibir resultado
+    document.getElementById('intervalo-texto').textContent = mensagem;
+    document.getElementById('intervalo-calculado').style.display = 'block';
+}
+
 // Carregar ao iniciar
 carregarTickets();
+calcularIntervalo(); // Calcular intervalo padrão
 
 // Atualizar a cada 30 segundos
 setInterval(carregarTickets, 30000);

@@ -2557,6 +2557,68 @@ def logs():
     return render_template('logs.html', logs=logs, campanhas=camps, campanha_id=camp_id, direcao=direcao)
 
 
+@app.route('/relatorios')
+@login_required
+def relatorios():
+    """Página de relatórios com dashboard executivo"""
+    campanhas = Campanha.query.order_by(Campanha.data_criacao.desc()).all()
+
+    # Se houver uma campanha selecionada via query param
+    campanha_id = request.args.get('campanha_id', type=int)
+    campanha_selecionada = None
+    if campanha_id:
+        campanha_selecionada = Campanha.query.get(campanha_id)
+
+    return render_template('relatorios.html',
+                          campanhas=campanhas,
+                          campanha_selecionada=campanha_selecionada)
+
+
+@app.route('/api/relatorios/<int:campanha_id>')
+@login_required
+def api_relatorios(campanha_id):
+    """API para retornar dados de relatórios de uma campanha específica"""
+    campanha = Campanha.query.get_or_404(campanha_id)
+
+    # Atualizar estatísticas
+    campanha.atualizar_stats()
+    db.session.commit()
+
+    # Buscar contatos da campanha
+    contatos = Contato.query.filter_by(campanha_id=campanha_id).all()
+
+    # Preparar dados dos contatos para a tabela
+    contatos_data = []
+    for contato in contatos:
+        # Buscar o primeiro telefone do contato
+        telefone_obj = Telefone.query.filter_by(contato_id=contato.id).first()
+        telefone_str = telefone_obj.numero if telefone_obj else None
+
+        contatos_data.append({
+            'id': contato.id,
+            'nome': contato.nome,
+            'telefone': telefone_str,
+            'procedimento': contato.procedimento,
+            'status': contato.status,
+            'confirmado': contato.confirmado,
+            'rejeitado': contato.rejeitado,
+            'erro': contato.erro,
+            'data_envio': contato.data_envio.isoformat() if contato.data_envio else None,
+            'resposta': contato.resposta
+        })
+
+    return jsonify({
+        'campanha_id': campanha.id,
+        'campanha_nome': campanha.nome,
+        'total_contatos': campanha.total_contatos,
+        'total_enviados': campanha.total_enviados,
+        'total_confirmados': campanha.total_confirmados,
+        'total_rejeitados': campanha.total_rejeitados,
+        'total_erros': campanha.total_erros,
+        'contatos': contatos_data
+    })
+
+
 # CLI
 @app.cli.command('init-db')
 def init_db():

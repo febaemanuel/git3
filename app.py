@@ -2908,7 +2908,9 @@ def webhook():
             return jsonify({'status': 'ok'}), 200
 
         # Se é urgente/importante mas tem FAQ, ainda assim cria ticket mas envia FAQ primeiro
-        if prioridade_ticket and c.status not in ['aguardando_nascimento']:
+        # IMPORTANTE: Não cria ticket se contato está em fluxo ativo da campanha
+        # (status enviado/pronto_envio/aguardando_nascimento devem ser processados pela máquina de estados)
+        if prioridade_ticket and c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio']:
             # Se tem FAQ, envia como resposta imediata antes de criar o ticket
             if resposta_faq:
                 ws.enviar(numero, resposta_faq)

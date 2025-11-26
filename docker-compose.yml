@@ -15,7 +15,7 @@ services:
     networks:
       - busca-ativa-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U buscaativa"]
+      test: ["CMD-SHELL", "pg_isready -U buscaativa -d buscaativa_db"]
       interval: 10s
       timeout: 5s
       retries: 5

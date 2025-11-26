@@ -131,6 +131,7 @@ class Usuario(UserMixin, db.Model):
 class ConfigWhatsApp(db.Model):
     __tablename__ = 'config_whatsapp'
     id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, unique=True)  # NOVO - Config por usuário
     api_url = db.Column(db.String(200))
     instance_name = db.Column(db.String(100))
     api_key = db.Column(db.String(200))
@@ -139,11 +140,14 @@ class ConfigWhatsApp(db.Model):
     limite_diario = db.Column(db.Integer, default=100)
     atualizado_em = db.Column(db.DateTime, default=datetime.utcnow)
 
+    usuario = db.relationship('Usuario', backref='config_whatsapp_obj')
+
     @classmethod
-    def get(cls):
-        c = cls.query.first()
+    def get(cls, usuario_id):
+        """Obtém ou cria config para um usuário específico"""
+        c = cls.query.filter_by(usuario_id=usuario_id).first()
         if not c:
-            c = cls()
+            c = cls(usuario_id=usuario_id)
             db.session.add(c)
             db.session.commit()
         return c
@@ -867,12 +871,27 @@ Responda APENAS com o JSON, sem texto adicional."""
 # =============================================================================
 
 class WhatsApp:
-    def __init__(self):
-        c = ConfigWhatsApp.get()
+    def __init__(self, usuario_id=None):
+        """
+        Inicializa conexão WhatsApp para um usuário específico
+
+        Args:
+            usuario_id: ID do usuário (obrigatório)
+        """
+        if not usuario_id:
+            # Fallback: pegar do current_user se disponível
+            from flask_login import current_user
+            if current_user and current_user.is_authenticated:
+                usuario_id = current_user.id
+            else:
+                raise ValueError("usuario_id é obrigatório para WhatsApp")
+
+        c = ConfigWhatsApp.get(usuario_id)
         self.url = (c.api_url or '').rstrip('/')
         self.instance = c.instance_name or ''
         self.key = c.api_key or ''
         self.ativo = c.ativo
+        self.usuario_id = usuario_id
 
     def ok(self):
         return bool(self.ativo and self.url and self.instance and self.key)
@@ -1300,7 +1319,8 @@ def validar_campanha_bg(campanha_id):
             camp.status_msg = 'Verificando numeros...'
             db.session.commit()
 
-            ws = WhatsApp()
+            # Usar WhatsApp do criador da campanha
+            ws = WhatsApp(camp.criador_id)
             if not ws.ok():
                 camp.status = 'erro'
                 camp.status_msg = 'WhatsApp nao configurado'
@@ -1379,7 +1399,7 @@ def enviar_campanha_bg(campanha_id):
             if not camp:
                 return
 
-            ws = WhatsApp()
+            ws = WhatsApp(camp.criador_id)
             if not ws.ok():
                 camp.status = 'erro'
                 camp.status_msg = 'WhatsApp nao configurado'
@@ -1570,11 +1590,6 @@ Se ainda tiver interesse, responda URGENTE nesta mensagem ou ligue para (85) 336
 Caso contrário, sua vaga será disponibilizada."""
             }
 
-            ws = WhatsApp()
-            if not ws.ok():
-                logger.error("WhatsApp não configurado")
-                return
-
             data_limite = datetime.utcnow() - timedelta(days=config.intervalo_dias)
 
             # Buscar contatos que precisam de follow-up
@@ -1627,6 +1642,16 @@ Caso contrário, sua vaga será disponibilizada."""
                 msg = msg_template.replace('{nome}', c.nome).replace(
                     '{procedimento}', c.procedimento or 'o procedimento'
                 ).replace('{dias}', str(config.intervalo_dias))
+
+                # Criar WhatsApp instance para o criador da campanha
+                if not c.campanha or not c.campanha.criador_id:
+                    logger.warning(f"Contato {c.id} sem campanha ou criador válido")
+                    continue
+
+                ws = WhatsApp(c.campanha.criador_id)
+                if not ws.ok():
+                    logger.error(f"WhatsApp não configurado para usuário {c.campanha.criador_id}")
+                    continue
 
                 telefones = c.telefones.filter_by(whatsapp_valido=True).all()
                 enviado = False
@@ -2744,7 +2769,7 @@ def dashboard():
     for c in camps:
         c.atualizar_stats()
 
-    ws = WhatsApp()
+    ws = WhatsApp(current_user.id)
     ws_ativo = ws.ok()
     ws_conn = False
     if ws_ativo:
@@ -2870,7 +2895,7 @@ def validar_campanha(id):
     if camp.status in ['validando', 'em_andamento']:
         return jsonify({'erro': 'Ja em processamento'}), 400
 
-    ws = WhatsApp()
+    ws = WhatsApp(camp.criador_id)
     if not ws.ok():
         return jsonify({'erro': 'WhatsApp nao configurado'}), 400
 
@@ -2887,13 +2912,13 @@ def iniciar_campanha(id):
     camp = verificar_acesso_campanha(id)
     if camp.status == 'em_andamento':
         return jsonify({'erro': 'Ja em andamento'}), 400
-    
+
     # Verifica se tem pendentes ou prontos
     pendentes = camp.contatos.filter(Contato.status.in_(['pendente', 'pronto_envio'])).count()
     if pendentes == 0:
         return jsonify({'erro': 'Nenhum contato para enviar'}), 400
 
-    ws = WhatsApp()
+    ws = WhatsApp(camp.criador_id)
     conn, _ = ws.conectado()
     if not conn:
         return jsonify({'erro': 'WhatsApp desconectado'}), 400
@@ -3064,7 +3089,7 @@ def api_rejeitar(id):
 @login_required
 def api_reenviar(id):
     c = verificar_acesso_contato(id)
-    ws = WhatsApp()
+    ws = WhatsApp(c.campanha.criador_id)
     if not ws.ok():
         return jsonify({'erro': 'WhatsApp nao configurado'}), 400
 
@@ -3104,7 +3129,7 @@ def api_reenviar(id):
 @login_required
 def api_revalidar(id):
     c = verificar_acesso_contato(id)
-    ws = WhatsApp()
+    ws = WhatsApp(c.campanha.criador_id)
     if not ws.ok():
         return jsonify({'erro': 'WhatsApp nao configurado'}), 400
 
@@ -3188,9 +3213,9 @@ def editar_contato(id):
 # Configuracoes
 @app.route('/configuracoes', methods=['GET', 'POST'])
 @login_required
-@admin_required
 def configuracoes():
-    cfg = ConfigWhatsApp.get()
+    """Configurações do WhatsApp Evolution API - INDIVIDUAL POR USUÁRIO"""
+    cfg = ConfigWhatsApp.get(current_user.id)
 
     if request.method == 'POST':
         cfg.api_url = request.form.get('api_url', '').strip().rstrip('/')
@@ -3201,10 +3226,10 @@ def configuracoes():
         cfg.limite_diario = int(request.form.get('limite_diario', 100))
         cfg.atualizado_em = datetime.utcnow()
         db.session.commit()
-        flash('Salvo!', 'success')
+        flash('✅ Configurações salvas com sucesso!', 'success')
         return redirect(url_for('configuracoes'))
 
-    ws = WhatsApp()
+    ws = WhatsApp(current_user.id)
     conn, msg = ws.conectado() if ws.ok() else (False, 'Nao configurado')
 
     return render_template('configuracoes.html', config=cfg, conectado=conn, status_msg=msg)
@@ -3213,7 +3238,7 @@ def configuracoes():
 @app.route('/api/whatsapp/qrcode')
 @login_required
 def api_qrcode():
-    ws = WhatsApp()
+    ws = WhatsApp(current_user.id)
     if not ws.ok():
         return jsonify({'erro': 'Nao configurado'}), 400
 
@@ -3229,7 +3254,7 @@ def api_qrcode():
 @app.route('/api/whatsapp/status')
 @login_required
 def api_ws_status():
-    ws = WhatsApp()
+    ws = WhatsApp(current_user.id)
     if not ws.ok():
         return jsonify({'conectado': False, 'mensagem': 'Nao configurado'})
     conn, msg = ws.conectado()
@@ -3344,7 +3369,7 @@ def webhook():
         db.session.add(log)
         db.session.commit()
 
-        ws = WhatsApp()
+        ws = WhatsApp(c.campanha.criador_id)
 
         # Verificar primeiro se é uma resposta válida da campanha (1, 2, 3)
         # Isso impede que respostas válidas sejam tratadas como FAQ ou tickets
@@ -3766,8 +3791,8 @@ def responder_ticket(id):
         flash('Digite uma resposta', 'danger')
         return redirect(url_for('detalhe_ticket', id=id))
 
-    # Enviar via WhatsApp
-    ws = WhatsApp()
+    # Enviar via WhatsApp usando a instância do criador da campanha
+    ws = WhatsApp(ticket.campanha.criador_id)
 
     # Priorizar telefones validados, mas aceitar todos se não houver validados
     telefones_validados = ticket.contato.telefones.filter_by(whatsapp_valido=True).all()

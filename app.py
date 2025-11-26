@@ -2893,9 +2893,27 @@ def webhook():
 
         ws = WhatsApp()
 
+        # Primeiro, tentar responder com FAQ automático (exceto se está aguardando data de nascimento)
+        resposta_faq = None
+        if c.status != 'aguardando_nascimento':
+            resposta_faq = SistemaFAQ.buscar_resposta(texto)
+
         # Verificar se precisa criar ticket para atendimento humano
         prioridade_ticket = SistemaFAQ.requer_atendimento_humano(texto, c)
+
+        # Se tem FAQ e NÃO é urgente, responde com FAQ (FAQ não responde mensagens urgentes)
+        if resposta_faq and not prioridade_ticket:
+            ws.enviar(numero, resposta_faq)
+            logger.info(f"FAQ automático enviado para {c.nome}")
+            return jsonify({'status': 'ok'}), 200
+
+        # Se é urgente/importante mas tem FAQ, ainda assim cria ticket mas envia FAQ primeiro
         if prioridade_ticket and c.status not in ['aguardando_nascimento']:
+            # Se tem FAQ, envia como resposta imediata antes de criar o ticket
+            if resposta_faq:
+                ws.enviar(numero, resposta_faq)
+                logger.info(f"FAQ automático enviado antes de criar ticket para {c.nome}")
+
             ticket = TicketAtendimento(
                 contato_id=c.id,
                 campanha_id=c.campanha_id,
@@ -2906,13 +2924,14 @@ def webhook():
             db.session.add(ticket)
             db.session.commit()
 
-            # Notificar usuário
-            if prioridade_ticket == 'urgente':
-                ws.enviar(numero, "🚨 Sua mensagem foi encaminhada com URGÊNCIA para nossa equipe. "
-                                 "Um atendente entrará em contato em breve.")
-            else:
-                ws.enviar(numero, "👤 Sua mensagem foi encaminhada para um atendente. "
-                                 "Aguarde o retorno em até 24h úteis.")
+            # Notificar usuário (apenas se não tinha FAQ, senão fica redundante)
+            if not resposta_faq:
+                if prioridade_ticket == 'urgente':
+                    ws.enviar(numero, "🚨 Sua mensagem foi encaminhada com URGÊNCIA para nossa equipe. "
+                                     "Um atendente entrará em contato em breve.")
+                else:
+                    ws.enviar(numero, "👤 Sua mensagem foi encaminhada para um atendente. "
+                                     "Aguarde o retorno em até 24h úteis.")
 
             logger.info(f"Ticket criado para {c.nome} - Prioridade: {prioridade_ticket}")
             return jsonify({'status': 'ok'}), 200
@@ -2985,18 +3004,14 @@ def webhook():
                 ws.enviar(numero, "⚠️ Formato inválido. Por favor, digite a data no formato DD/MM/AAAA (ex: 03/09/1954).")
 
         elif c.status == 'concluido':
-            # Tentar resposta automática (FAQ) primeiro
-            resposta_faq = SistemaFAQ.buscar_resposta(texto)
-            if resposta_faq:
-                ws.enviar(numero, resposta_faq)
+            # Se o usuario mandar mensagem depois de concluido, reforcar o status
+            # (FAQ já foi verificado no início do webhook)
+            if c.confirmado:
+                ws.enviar(numero, "✅ Você já confirmou seu interesse. Obrigado!")
+            elif c.rejeitado:
+                ws.enviar(numero, "✅ Você já informou que não tem interesse. Obrigado!")
             else:
-                # Se o usuario mandar mensagem depois de concluido, reforcar o status
-                if c.confirmado:
-                    ws.enviar(numero, "✅ Você já confirmou seu interesse. Obrigado!")
-                elif c.rejeitado:
-                    ws.enviar(numero, "✅ Você já informou que não tem interesse. Obrigado!")
-                else:
-                    ws.enviar(numero, "✅ Seu atendimento já foi concluído. Obrigado!")
+                ws.enviar(numero, "✅ Seu atendimento já foi concluído. Obrigado!")
 
         return jsonify({'status': 'ok'}), 200
 

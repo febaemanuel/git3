@@ -31,7 +31,6 @@ services:
       - .env
     volumes:
       - ./uploads:/app/uploads
-      - ./busca_ativa.log:/app/busca_ativa.log
     depends_on:
       db:
         condition: service_healthy

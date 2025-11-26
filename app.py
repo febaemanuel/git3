@@ -423,6 +423,7 @@ class TicketAtendimento(db.Model):
     data_resolucao = db.Column(db.DateTime)
 
     contato = db.relationship('Contato', backref='tickets')
+    campanha = db.relationship('Campanha', backref='tickets')
     atendente = db.relationship('Usuario', backref='tickets_atendidos')
 
 
@@ -857,6 +858,15 @@ def verificar_acesso_ticket(ticket_id):
     if ticket.campanha and ticket.campanha.criador_id != current_user.id:
         abort(403)  # Forbidden
     return ticket
+
+def verificar_acesso_contato(contato_id):
+    """Verifica se o usuario atual tem acesso ao contato.
+    Retorna o contato se tiver acesso, senao retorna None."""
+    from flask import abort
+    contato = Contato.query.get_or_404(contato_id)
+    if contato.campanha.criador_id != current_user.id:
+        abort(403)  # Forbidden
+    return contato
 
 def formatar_numero(num):
     if not num:
@@ -2638,7 +2648,7 @@ def api_status(id):
 @app.route('/api/contato/<int:id>/confirmar', methods=['POST'])
 @login_required
 def api_confirmar(id):
-    c = Contato.query.get_or_404(id)
+    c = verificar_acesso_contato(id)
     c.confirmado = True
     c.rejeitado = False
     c.data_resposta = datetime.utcnow()
@@ -2653,7 +2663,7 @@ def api_confirmar(id):
 @app.route('/api/contato/<int:id>/rejeitar', methods=['POST'])
 @login_required
 def api_rejeitar(id):
-    c = Contato.query.get_or_404(id)
+    c = verificar_acesso_contato(id)
     c.rejeitado = True
     c.confirmado = False
     c.data_resposta = datetime.utcnow()
@@ -2668,7 +2678,7 @@ def api_rejeitar(id):
 @app.route('/api/contato/<int:id>/reenviar', methods=['POST'])
 @login_required
 def api_reenviar(id):
-    c = Contato.query.get_or_404(id)
+    c = verificar_acesso_contato(id)
     ws = WhatsApp()
     if not ws.ok():
         return jsonify({'erro': 'WhatsApp nao configurado'}), 400
@@ -2708,7 +2718,7 @@ def api_reenviar(id):
 @app.route('/api/contato/<int:id>/revalidar', methods=['POST'])
 @login_required
 def api_revalidar(id):
-    c = Contato.query.get_or_404(id)
+    c = verificar_acesso_contato(id)
     ws = WhatsApp()
     if not ws.ok():
         return jsonify({'erro': 'WhatsApp nao configurado'}), 400
@@ -2746,7 +2756,7 @@ def api_revalidar(id):
 @app.route('/contato/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
 def editar_contato(id):
-    c = Contato.query.get_or_404(id)
+    c = verificar_acesso_contato(id)
     
     if request.method == 'POST':
         c.nome = request.form.get('nome', '').strip()[:200]
@@ -2859,6 +2869,12 @@ def webhook():
         # Priorizar remoteJidAlt (numero real) sobre remoteJid (pode ser LID format)
         jid = key.get('remoteJidAlt') or key.get('remoteJid', '')
         numero = ''.join(filter(str.isdigit, jid.replace('@s.whatsapp.net', '').replace('@lid', '')))
+
+        # Validar se conseguiu extrair um numero valido
+        if not numero:
+            logger.warning(f"Webhook: Numero de telefone invalido ou vazio. JID: {jid}")
+            return jsonify({'status': 'ok'}), 200
+
         message = msg_data.get('message', {})
         texto = (message.get('conversation') or message.get('extendedTextMessage', {}).get('text') or '').strip()
 

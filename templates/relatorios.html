@@ -384,11 +384,12 @@
                     <th class="text-center">Status</th>
                     <th>Data Envio</th>
                     <th>Resposta</th>
+                    <th class="text-center no-print">Ações</th>
                 </tr>
             </thead>
             <tbody id="tabelaBody">
                 <tr>
-                    <td colspan="6" class="text-center text-muted py-4">
+                    <td colspan="7" class="text-center text-muted py-4">
                         <i class="bi bi-inbox" style="font-size: 2rem;"></i>
                         <p class="mt-2">Selecione uma campanha para visualizar os dados</p>
                     </td>
@@ -678,7 +679,7 @@ function atualizarTabela(contatos) {
     if (!contatos || contatos.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="6" class="text-center text-muted py-4">
+                <td colspan="7" class="text-center text-muted py-4">
                     <i class="bi bi-inbox" style="font-size: 2rem;"></i>
                     <p class="mt-2">Nenhum contato encontrado</p>
                 </td>
@@ -715,6 +716,11 @@ function atualizarTabela(contatos) {
                 </td>
                 <td>${contato.data_envio ? new Date(contato.data_envio).toLocaleString('pt-BR') : '-'}</td>
                 <td>${contato.resposta || '-'}</td>
+                <td class="text-center no-print">
+                    <a href="/contato/${contato.id}/editar" class="btn btn-sm btn-outline-primary" title="Editar contato">
+                        <i class="bi bi-pencil"></i>
+                    </a>
+                </td>
             </tr>
         `;
     }).join('');

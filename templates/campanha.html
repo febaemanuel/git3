@@ -254,8 +254,9 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    {% if contato.data_envio %}
-                                    <small>{{ contato.data_envio.strftime('%d/%m %H:%M') }}</small>
+                                    {% set tel_enviado = contato.telefones.filter_by(enviado=True).first() %}
+                                    {% if tel_enviado and tel_enviado.data_envio %}
+                                    <small>{{ tel_enviado.data_envio.strftime('%d/%m %H:%M') }}</small>
                                     {% else %}
                                     <small class="text-muted">-</small>
                                     {% endif %}
@@ -272,7 +273,7 @@
                                             <i class="bi bi-x-lg"></i>
                                         </button>
                                         {% endif %}
-                                        {% if contato.enviado or contato.erro %}
+                                        {% if contato.status in ['enviado', 'aguardando_nascimento', 'concluido'] or contato.erro %}
                                         <button class="btn btn-outline-primary" title="Reenviar mensagem"
                                                 onclick="reenviarContato({{ contato.id }})">
                                             <i class="bi bi-arrow-clockwise"></i>

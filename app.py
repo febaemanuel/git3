@@ -2919,17 +2919,21 @@ def webhook():
             logger.warning(f"Webhook: Telefone nao encontrado para {numero}")
             return jsonify({'status': 'ok'}), 200
         
-        # Priorizar contatos nao concluidos
+        # Priorizar o contato com interação mais recente
+        # Isso evita loops infinitos quando há múltiplos contatos para o mesmo telefone
         c = None
-        for t in telefones:
-            if t.contato and t.contato.status != 'concluido':
-                c = t.contato
-                break
-        
-        # Se todos concluidos, pega o mais recente
-        if not c and telefones:
-            t = telefones[-1]  # Ultimo (mais recente)
-            c = t.contato
+        contatos_validos = [t.contato for t in telefones if t.contato]
+
+        if contatos_validos:
+            # Priorizar contatos não concluídos, mas pegar o MAIS RECENTE entre eles
+            contatos_nao_concluidos = [ct for ct in contatos_validos if ct.status != 'concluido']
+
+            if contatos_nao_concluidos:
+                # Ordenar por data_resposta (mais recente primeiro), depois por id (mais novo primeiro)
+                c = max(contatos_nao_concluidos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
+            else:
+                # Se todos concluídos, pegar o mais recente
+                c = max(contatos_validos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
             
         if not c:
             logger.warning(f"Webhook: Contato nao encontrado")
@@ -2965,16 +2969,16 @@ def webhook():
         # Primeiro, tentar responder com FAQ automático
         # IMPORTANTE: NÃO processar FAQ se contato está em fluxo ativo da campanha
         # (status enviado/pronto_envio/aguardando_nascimento devem ir direto para a máquina de estados)
-        # E também NÃO processar FAQ se é uma resposta válida da campanha
+        # EXCEÇÃO: Se status é 'concluido', SEMPRE permitir FAQ (mesmo para respostas válidas como 1, 2, 3)
         resposta_faq = None
-        if c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio'] and not respostas_validas:
+        if c.status == 'concluido' or (c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio'] and not respostas_validas):
             resposta_faq = SistemaFAQ.buscar_resposta(texto)
 
         # Verificar se precisa criar ticket para atendimento humano
         # IMPORTANTE: NÃO criar ticket se está em fluxo ativo da campanha
-        # E também NÃO criar ticket se é uma resposta válida da campanha
+        # EXCEÇÃO: Se status é 'concluido', permitir tickets (usuário pode ter dúvidas após confirmação)
         prioridade_ticket = None
-        if c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio'] and not respostas_validas:
+        if c.status == 'concluido' or (c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio'] and not respostas_validas):
             prioridade_ticket = SistemaFAQ.requer_atendimento_humano(texto, c)
 
         # Se tem FAQ e NÃO é urgente, responde com FAQ (FAQ não responde mensagens urgentes)

@@ -2893,13 +2893,18 @@ def webhook():
 
         ws = WhatsApp()
 
-        # Primeiro, tentar responder com FAQ automático (exceto se está aguardando data de nascimento)
+        # Primeiro, tentar responder com FAQ automático
+        # IMPORTANTE: NÃO processar FAQ se contato está em fluxo ativo da campanha
+        # (status enviado/pronto_envio/aguardando_nascimento devem ir direto para a máquina de estados)
         resposta_faq = None
-        if c.status != 'aguardando_nascimento':
+        if c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio']:
             resposta_faq = SistemaFAQ.buscar_resposta(texto)
 
         # Verificar se precisa criar ticket para atendimento humano
-        prioridade_ticket = SistemaFAQ.requer_atendimento_humano(texto, c)
+        # IMPORTANTE: NÃO criar ticket se está em fluxo ativo da campanha
+        prioridade_ticket = None
+        if c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio']:
+            prioridade_ticket = SistemaFAQ.requer_atendimento_humano(texto, c)
 
         # Se tem FAQ e NÃO é urgente, responde com FAQ (FAQ não responde mensagens urgentes)
         if resposta_faq and not prioridade_ticket:
@@ -2908,7 +2913,9 @@ def webhook():
             return jsonify({'status': 'ok'}), 200
 
         # Se é urgente/importante mas tem FAQ, ainda assim cria ticket mas envia FAQ primeiro
-        if prioridade_ticket and c.status not in ['aguardando_nascimento']:
+        # IMPORTANTE: Não cria ticket se contato está em fluxo ativo da campanha
+        # (status enviado/pronto_envio/aguardando_nascimento devem ser processados pela máquina de estados)
+        if prioridade_ticket and c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio']:
             # Se tem FAQ, envia como resposta imediata antes de criar o ticket
             if resposta_faq:
                 ws.enviar(numero, resposta_faq)

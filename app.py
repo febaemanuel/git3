@@ -117,6 +117,7 @@ class Usuario(UserMixin, db.Model):
     email = db.Column(db.String(120), unique=True, nullable=False)
     senha_hash = db.Column(db.String(255), nullable=False)
     ativo = db.Column(db.Boolean, default=True)
+    is_admin = db.Column(db.Boolean, default=False)  # Flag de administrador
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     ultimo_acesso = db.Column(db.DateTime)
 
@@ -296,8 +297,9 @@ class Contato(db.Model):
 
     nome = db.Column(db.String(200), nullable=False)
     data_nascimento = db.Column(db.Date) # NOVO
-    procedimento = db.Column(db.String(500))
-    
+    procedimento = db.Column(db.String(500))  # Termo original da planilha
+    procedimento_normalizado = db.Column(db.String(300))  # Termo normalizado pela IA
+
     # Status do contato/pessoa
     status = db.Column(db.String(50), default='pendente') # pendente, validando, pronto_envio, enviado, respondido, concluido, erro
     
@@ -469,6 +471,45 @@ class Tutorial(db.Model):
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class ProcedimentoNormalizado(db.Model):
+    """Cache de procedimentos médicos normalizados pela IA"""
+    __tablename__ = 'procedimentos_normalizados'
+    id = db.Column(db.Integer, primary_key=True)
+    termo_original = db.Column(db.String(300), unique=True, index=True, nullable=False)  # Ex: "COLPOPERINEOPLASTIA ANTERIOR E POSTERIOR"
+    termo_normalizado = db.Column(db.String(300))  # Ex: "Cirurgia de correção íntima"
+    termo_simples = db.Column(db.String(200))  # Ex: "Cirurgia ginecológica"
+    explicacao = db.Column(db.Text)  # Explicação breve do procedimento
+    criado_em = db.Column(db.DateTime, default=datetime.utcnow)
+    atualizado_em = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    usado_count = db.Column(db.Integer, default=0)  # Contador de uso
+    aprovado = db.Column(db.Boolean, default=True)  # Admin pode reprovar
+    fonte = db.Column(db.String(50), default='deepseek')  # deepseek, manual, etc
+
+    def incrementar_uso(self):
+        """Incrementa contador de uso"""
+        self.usado_count += 1
+        db.session.commit()
+
+    @classmethod
+    def obter_ou_criar(cls, termo_original):
+        """Busca no cache ou retorna None se não existir"""
+        return cls.query.filter_by(termo_original=termo_original.upper().strip()).first()
+
+    @classmethod
+    def salvar_normalizacao(cls, termo_original, termo_normalizado, termo_simples, explicacao, fonte='deepseek'):
+        """Salva uma normalização no cache"""
+        proc = cls(
+            termo_original=termo_original.upper().strip(),
+            termo_normalizado=termo_normalizado,
+            termo_simples=termo_simples,
+            explicacao=explicacao,
+            fonte=fonte
+        )
+        db.session.add(proc)
+        db.session.commit()
+        return proc
+
+
 # =============================================================================
 # CLASSES AUXILIARES - FAQ E ANALISE DE SENTIMENTO
 # =============================================================================
@@ -598,6 +639,204 @@ class SistemaFAQ:
                 return 'alta'
 
         return None
+
+
+# =============================================================================
+# SERVICO DEEPSEEK AI - NORMALIZAÇÃO DE PROCEDIMENTOS
+# =============================================================================
+
+class DeepSeekAI:
+    """Cliente para normalização de procedimentos médicos usando DeepSeek API"""
+
+    def __init__(self):
+        self.base_url = os.getenv('AI_API_BASE_URL', 'https://api.deepseek.com').rstrip('/')
+        self.api_key = os.getenv('AI_API_KEY', '')
+        self.timeout = int(os.getenv('AI_API_TIMEOUT', '30'))
+        self.model = os.getenv('AI_API_MODEL', 'deepseek-chat')
+
+    def _esta_configurado(self):
+        """Verifica se a API está configurada"""
+        return bool(self.api_key and self.base_url)
+
+    def _eh_termo_complexo(self, procedimento):
+        """Determina se um termo médico é complexo e precisa normalização"""
+        if not procedimento or len(procedimento) < 10:
+            return False
+
+        # Termos médicos complexos geralmente:
+        # - São longos (>20 caracteres)
+        # - Contêm termos técnicos médicos
+        # - Estão em MAIÚSCULAS
+        # - Contêm palavras gregas/latinas
+
+        termos_tecnicos = [
+            'ECTOMIA', 'PLASTIA', 'TOMIA', 'SCOPIA', 'GRAFIA',
+            'EMULSIFICA', 'ADENOMECTOMIA', 'COLPOPERINE', 'FACOEMULSIFICA',
+            'HERNIOPLASTIA', 'COLECIST', 'APENDICECTOMIA', 'HISTERECTOMIA',
+            'MASTECTOMIA', 'PROSTATECTOMIA', 'ARTROSCOPIA', 'ENDOSCOPIA',
+            'COLONOSCOPIA', 'LAPAROSCOPIA', 'IMPLANTE', 'PRÓTESE', 'PROTESE'
+        ]
+
+        procedimento_up = procedimento.upper()
+
+        # Se tem mais de 25 caracteres, provavelmente é complexo
+        if len(procedimento) > 25:
+            return True
+
+        # Se contém termos técnicos
+        for termo in termos_tecnicos:
+            if termo in procedimento_up:
+                return True
+
+        return False
+
+    def normalizar_procedimento(self, procedimento_original):
+        """
+        Normaliza um procedimento médico usando cache e IA
+
+        Returns:
+            dict: {
+                'original': str,
+                'normalizado': str,
+                'simples': str,
+                'explicacao': str,
+                'fonte': 'cache'|'deepseek'|'original'
+            }
+        """
+        if not procedimento_original or not procedimento_original.strip():
+            return None
+
+        procedimento_original = procedimento_original.strip()
+
+        # 1. Verificar se já está normalizado no cache
+        cached = ProcedimentoNormalizado.obter_ou_criar(procedimento_original)
+        if cached and cached.aprovado:
+            cached.incrementar_uso()
+            return {
+                'original': procedimento_original,
+                'normalizado': cached.termo_normalizado,
+                'simples': cached.termo_simples,
+                'explicacao': cached.explicacao,
+                'fonte': 'cache'
+            }
+
+        # 2. Verificar se o termo é complexo o suficiente para normalizar
+        if not self._eh_termo_complexo(procedimento_original):
+            # Termo simples, usar o próprio termo
+            return {
+                'original': procedimento_original,
+                'normalizado': procedimento_original.title(),
+                'simples': procedimento_original.title(),
+                'explicacao': '',
+                'fonte': 'original'
+            }
+
+        # 3. Se API não está configurada, usar o original
+        if not self._esta_configurado():
+            logger.warning("DeepSeek AI não configurada. Usando termo original.")
+            return {
+                'original': procedimento_original,
+                'normalizado': procedimento_original.title(),
+                'simples': procedimento_original.title(),
+                'explicacao': '',
+                'fonte': 'original'
+            }
+
+        # 4. Chamar a API DeepSeek para normalizar
+        try:
+            resultado = self._chamar_api(procedimento_original)
+            if resultado:
+                # Salvar no cache
+                ProcedimentoNormalizado.salvar_normalizacao(
+                    termo_original=procedimento_original,
+                    termo_normalizado=resultado['termo_normalizado'],
+                    termo_simples=resultado['termo_simples'],
+                    explicacao=resultado.get('explicacao', ''),
+                    fonte='deepseek'
+                )
+                return {
+                    'original': procedimento_original,
+                    'normalizado': resultado['termo_normalizado'],
+                    'simples': resultado['termo_simples'],
+                    'explicacao': resultado.get('explicacao', ''),
+                    'fonte': 'deepseek'
+                }
+        except Exception as e:
+            logger.error(f"Erro ao normalizar procedimento '{procedimento_original}': {e}")
+
+        # Fallback: usar o original
+        return {
+            'original': procedimento_original,
+            'normalizado': procedimento_original.title(),
+            'simples': procedimento_original.title(),
+            'explicacao': '',
+            'fonte': 'original'
+        }
+
+    def _chamar_api(self, procedimento):
+        """Chama a API DeepSeek para normalizar o procedimento"""
+        prompt = f"""Você é um assistente médico especializado em comunicação com pacientes.
+
+TAREFA: Simplifique o seguinte termo médico para que pacientes leigos possam entender facilmente.
+
+TERMO MÉDICO: {procedimento}
+
+RETORNE UM JSON com:
+1. "termo_normalizado": Nome mais amigável do procedimento (máximo 60 caracteres)
+2. "termo_simples": Versão ultra-simplificada (máximo 40 caracteres)
+3. "explicacao": Breve explicação em 1 linha do que é o procedimento
+
+EXEMPLO:
+{{
+  "termo_normalizado": "Cirurgia de correção da bexiga e região íntima",
+  "termo_simples": "Cirurgia ginecológica",
+  "explicacao": "Procedimento para corrigir problemas na região íntima feminina"
+}}
+
+Responda APENAS com o JSON, sem texto adicional."""
+
+        headers = {
+            'Authorization': f'Bearer {self.api_key}',
+            'Content-Type': 'application/json'
+        }
+
+        payload = {
+            'model': self.model,
+            'messages': [
+                {'role': 'user', 'content': prompt}
+            ],
+            'temperature': 0.3,  # Baixa temperatura para respostas mais consistentes
+            'max_tokens': 300
+        }
+
+        try:
+            response = requests.post(
+                f'{self.base_url}/chat/completions',
+                headers=headers,
+                json=payload,
+                timeout=self.timeout
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                content = data['choices'][0]['message']['content'].strip()
+
+                # Tentar extrair JSON da resposta
+                # A API pode retornar markdown com ```json```
+                if '```json' in content:
+                    content = content.split('```json')[1].split('```')[0].strip()
+                elif '```' in content:
+                    content = content.split('```')[1].split('```')[0].strip()
+
+                resultado = json.loads(content)
+                return resultado
+            else:
+                logger.error(f"Erro na API DeepSeek: {response.status_code} - {response.text}")
+                return None
+
+        except Exception as e:
+            logger.error(f"Exceção ao chamar DeepSeek API: {e}")
+            return None
 
 
 # =============================================================================
@@ -904,15 +1143,15 @@ def processar_planilha(arquivo, campanha_id):
             return False, f"Colunas obrigatorias nao encontradas. Disponiveis: {list(df.columns)}", 0
 
         criados = 0
-        
+
         # Agrupar por Nome e Data de Nascimento (se houver) para unificar contatos
         pessoas = {} # chave: (nome, data_nascimento_str) -> {telefones: set(), proc: str, data_nasc_obj: date}
-        
+
         for _, row in df.iterrows():
             nome = str(row.get(col_nome, '')).strip()
             if not nome or nome.lower() == 'nan':
                 continue
-                
+
             # Tratamento Data Nascimento
             dt_nasc = None
             dt_nasc_str = ''
@@ -928,9 +1167,9 @@ def processar_planilha(arquivo, campanha_id):
                         dt_nasc_str = dt_nasc.isoformat()
                     except:
                         pass
-            
+
             chave = (nome, dt_nasc_str)
-            
+
             if chave not in pessoas:
                 # Procedimento
                 proc = str(row.get(col_proc, 'o procedimento')).strip() if col_proc else 'o procedimento'
@@ -939,14 +1178,14 @@ def processar_planilha(arquivo, campanha_id):
                     partes = proc.split('-', 1)
                     if partes[0].strip().isdigit():
                         proc = partes[1].strip()
-                
+
                 pessoas[chave] = {
                     'nome': nome,
                     'nascimento': dt_nasc,
                     'procedimento': proc,
                     'telefones': set()
                 }
-            
+
             # Telefones
             tels = str(row.get(col_tel, '')).strip()
             if tels and tels.lower() != 'nan':
@@ -957,21 +1196,53 @@ def processar_planilha(arquivo, campanha_id):
                     if fmt:
                         pessoas[chave]['telefones'].add((tel, fmt))
 
+        # =========================================================================
+        # NORMALIZAÇÃO DE PROCEDIMENTOS COM IA (DeepSeek)
+        # =========================================================================
+        # Coletar procedimentos únicos da planilha
+        procedimentos_unicos = set()
+        for dados in pessoas.values():
+            if dados['procedimento']:
+                procedimentos_unicos.add(dados['procedimento'])
+
+        # Normalizar procedimentos únicos usando IA com cache
+        ai = DeepSeekAI()
+        mapa_normalizacao = {}  # original -> normalizado
+
+        logger.info(f"Normalizando {len(procedimentos_unicos)} procedimentos únicos...")
+
+        for proc_original in procedimentos_unicos:
+            resultado = ai.normalizar_procedimento(proc_original)
+            if resultado:
+                mapa_normalizacao[proc_original] = resultado['normalizado']
+                logger.info(f"Normalizado: '{proc_original}' -> '{resultado['normalizado']}' (fonte: {resultado['fonte']})")
+            else:
+                # Fallback: usar o original
+                mapa_normalizacao[proc_original] = proc_original
+
+        logger.info(f"Normalização concluída. {len(mapa_normalizacao)} mapeamentos criados.")
+        # =========================================================================
+
         # Salvar no Banco
         for chave, dados in pessoas.items():
             if not dados['telefones']:
                 continue
-                
+
+            # Obter procedimento normalizado
+            proc_original = dados['procedimento']
+            proc_normalizado = mapa_normalizacao.get(proc_original, proc_original)
+
             c = Contato(
                 campanha_id=campanha_id,
                 nome=dados['nome'][:200],
                 data_nascimento=dados['nascimento'],
-                procedimento=dados['procedimento'][:500],
+                procedimento=proc_original[:500],  # Termo original
+                procedimento_normalizado=proc_normalizado[:300],  # Termo normalizado
                 status='pendente'
             )
             db.session.add(c)
             db.session.flush() # Para ter o ID
-            
+
             for i, (original, fmt) in enumerate(dados['telefones']):
                 t = Telefone(
                     contato_id=c.id,
@@ -980,7 +1251,7 @@ def processar_planilha(arquivo, campanha_id):
                     prioridade=i+1
                 )
                 db.session.add(t)
-            
+
             criados += 1
 
         db.session.commit()
@@ -1177,7 +1448,9 @@ def enviar_campanha_bg(campanha_id):
 
                 # Envio
                 if c.status == 'pronto_envio':
-                    msg = camp.mensagem.replace('{nome}', c.nome).replace('{procedimento}', c.procedimento or 'o procedimento')
+                    # Usar procedimento normalizado (mais simples) se disponível, senão usar original
+                    procedimento_msg = c.procedimento_normalizado or c.procedimento or 'o procedimento'
+                    msg = camp.mensagem.replace('{nome}', c.nome).replace('{procedimento}', procedimento_msg)
                     
                     # Enviar para TODOS os numeros validos da pessoa
                     telefones_validos = c.telefones.filter_by(whatsapp_valido=True).all()
@@ -1412,6 +1685,72 @@ def criar_faqs_padrao():
                 'gatilhos': ['acompanhante', 'acompanhar', 'pode ir com', 'levar alguém', 'levar alguem'],
                 'resposta': '👥 Sim, você pode e deve trazer um acompanhante maior de 18 anos. O acompanhante é essencial para o pós-operatório.',
                 'prioridade': 3
+            },
+            {
+                'categoria': 'agendamento',
+                'gatilhos': ['prazo', 'quanto tempo', 'demora', 'demorar', 'tempo de espera'],
+                'resposta': '⏱️ O prazo para contato varia conforme a fila de espera. Nossa equipe priorizará seu atendimento após sua confirmação.',
+                'prioridade': 4
+            },
+            {
+                'categoria': 'cancelamento',
+                'gatilhos': ['cancelar', 'desmarcar', 'não posso', 'nao posso', 'remarcar'],
+                'resposta': '📞 Para cancelar ou remarcar, entre em contato pelo telefone (85) 3366-8000 ou responda esta mensagem informando sua situação.',
+                'prioridade': 5
+            },
+            {
+                'categoria': 'convenio',
+                'gatilhos': ['plano', 'convênio', 'convenio', 'particular', 'sus', 'pagar'],
+                'resposta': '🏥 O Hospital Universitário Walter Cantídio atende pelo SUS (Sistema Único de Saúde). O atendimento é gratuito.',
+                'prioridade': 4
+            },
+            {
+                'categoria': 'resultado_exames',
+                'gatilhos': ['resultado', 'exame', 'laudo', 'buscar resultado'],
+                'resposta': '📋 Resultados de exames podem ser retirados na recepção do hospital com documento de identidade.',
+                'prioridade': 3
+            },
+            {
+                'categoria': 'telefone',
+                'gatilhos': ['contato', 'falar', 'ligar', 'telefone', 'telefone hospital'],
+                'resposta': '📱 *Telefones do HUWC:*\n• Central: (85) 3366-8000\n• Agendamento: (85) 3366-8001\n• Horário: Segunda a Sexta, 7h às 18h',
+                'prioridade': 5
+            },
+            {
+                'categoria': 'pos_operatorio',
+                'gatilhos': ['depois', 'pós', 'pos', 'recuperação', 'recuperacao', 'repouso'],
+                'resposta': '🏠 As orientações de pós-operatório serão fornecidas pela equipe médica. Geralmente inclui repouso, cuidados com a ferida e retorno ambulatorial.',
+                'prioridade': 3
+            },
+            {
+                'categoria': 'medicacao',
+                'gatilhos': ['remédio', 'remedio', 'medicamento', 'comprar', 'farmácia', 'farmacia'],
+                'resposta': '💊 As medicações necessárias serão prescritas pelo médico. Algumas são fornecidas pelo hospital, outras podem precisar ser adquiridas.',
+                'prioridade': 3
+            },
+            {
+                'categoria': 'estacionamento',
+                'gatilhos': ['estacionar', 'carro', 'vaga', 'estacionamento', 'onde parar'],
+                'resposta': '🚗 O hospital possui estacionamento próprio. Há também estacionamento rotativo nas ruas próximas.',
+                'prioridade': 2
+            },
+            {
+                'categoria': 'alimentacao',
+                'gatilhos': ['comer', 'beber', 'alimento', 'café', 'lanche', 'alimentar'],
+                'resposta': '🍽️ As orientações sobre alimentação pré-operatória serão passadas pela equipe. Geralmente é necessário jejum antes de cirurgias.',
+                'prioridade': 3
+            },
+            {
+                'categoria': 'covid',
+                'gatilhos': ['covid', 'máscara', 'mascara', 'teste', 'vacina', 'coronavirus'],
+                'resposta': '😷 *Protocolos COVID-19:*\n• Uso de máscara obrigatório\n• Evite aglomerações\n• Higienize as mãos\n• Um acompanhante por paciente',
+                'prioridade': 4
+            },
+            {
+                'categoria': 'transporte',
+                'gatilhos': ['transporte', 'ônibus', 'onibus', 'como chegar', 'uber'],
+                'resposta': '🚌 *Como chegar:*\n• Ônibus: Linhas 051, 072, 073\n• Endereço para apps: Rua Cap. Francisco Pedro, 1290\n• Hospital fica próximo à Av. da Universidade',
+                'prioridade': 2
             }
         ]
 
@@ -2287,19 +2626,26 @@ def criar_tutoriais_padrao():
 
 def criar_admin():
     try:
-        if not Usuario.query.filter_by(email=ADMIN_EMAIL).first():
-            u = Usuario(nome=ADMIN_NOME, email=ADMIN_EMAIL)
+        admin = Usuario.query.filter_by(email=ADMIN_EMAIL).first()
+        if not admin:
+            u = Usuario(nome=ADMIN_NOME, email=ADMIN_EMAIL, is_admin=True)
             u.set_password(ADMIN_SENHA)
             db.session.add(u)
             db.session.commit()
             logger.info(f"Admin criado: {ADMIN_EMAIL}")
+        else:
+            # Garantir que o admin existente tenha is_admin=True
+            if not admin.is_admin:
+                admin.is_admin = True
+                db.session.commit()
+                logger.info(f"Admin atualizado com flag is_admin: {ADMIN_EMAIL}")
     except Exception as e:
         logger.warning(f"Erro ao criar admin (banco desatualizado?): {e}")
         # Tentar recriar tabelas
         db.session.rollback()
         db.drop_all()
         db.create_all()
-        u = Usuario(nome=ADMIN_NOME, email=ADMIN_EMAIL)
+        u = Usuario(nome=ADMIN_NOME, email=ADMIN_EMAIL, is_admin=True)
         u.set_password(ADMIN_SENHA)
         db.session.add(u)
         db.session.commit()
@@ -2313,6 +2659,20 @@ def criar_admin():
 @login_manager.user_loader
 def load_user(uid):
     return db.session.get(Usuario, int(uid))
+
+
+# Decorator para rotas que exigem permissão de administrador
+def admin_required(f):
+    from functools import wraps
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated:
+            return redirect(url_for('login'))
+        if not current_user.is_admin:
+            flash('❌ Acesso negado. Apenas administradores podem acessar esta página.', 'danger')
+            return redirect(url_for('dashboard'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 
 # =============================================================================
@@ -2803,6 +3163,7 @@ def editar_contato(id):
 # Configuracoes
 @app.route('/configuracoes', methods=['GET', 'POST'])
 @login_required
+@admin_required
 def configuracoes():
     cfg = ConfigWhatsApp.get()
 
@@ -3045,11 +3406,31 @@ def webhook():
                     if any(r in texto_up for r in RESPOSTAS_SIM):
                         c.confirmado = True
                         c.rejeitado = False
-                        msg_final = "✅ *Confirmado*! Obrigado por confirmar seu interesse."
+                        msg_final = """✅ *Confirmação Registrada com Sucesso!*
+
+Obrigado por confirmar seu interesse no procedimento.
+
+📞 *Próximos Passos:*
+• Nossa equipe entrará em contato em breve
+• Mantenha seu telefone com notificações ativas
+• Fique atento às ligações do hospital
+
+❓ *Tem dúvidas?*
+Digite sua pergunta a qualquer momento que responderemos!
+
+_Hospital Universitário Walter Cantídio_"""
                     elif any(r in texto_up for r in RESPOSTAS_NAO):
                         c.confirmado = False
                         c.rejeitado = True
-                        msg_final = "✅ Obrigado. Registramos que você não tem interesse."
+                        msg_final = """✅ *Registro Atualizado*
+
+Obrigado por sua resposta.
+
+Registramos que você não tem mais interesse no procedimento. Seus dados serão atualizados em nosso sistema.
+
+Se mudar de ideia ou tiver alguma dúvida, pode entrar em contato conosco.
+
+_Hospital Universitário Walter Cantídio_"""
 
                     c.status = 'concluido'
                     c.resposta = texto
@@ -3070,8 +3451,14 @@ def webhook():
                 db.session.commit()
                 c.campanha.atualizar_stats()
                 db.session.commit()
-                
-                ws.enviar(numero, "✅ Obrigado. Vamos atualizar nossos registros.")
+
+                ws.enviar(numero, """✅ *Obrigado pela informação!*
+
+Vamos atualizar nossos registros e remover seu contato da nossa lista.
+
+Desculpe pelo transtorno.
+
+_Hospital Universitário Walter Cantídio_""")
                 
         elif c.status == 'aguardando_nascimento':
             # Verificar Data
@@ -3096,11 +3483,31 @@ def webhook():
                     if any(r in intent_up for r in RESPOSTAS_SIM):
                         c.confirmado = True
                         c.rejeitado = False
-                        msg_final = "✅ *Confirmado*! Obrigado por confirmar seu interesse."
+                        msg_final = """✅ *Confirmação Registrada com Sucesso!*
+
+Obrigado por confirmar seu interesse no procedimento.
+
+📞 *Próximos Passos:*
+• Nossa equipe entrará em contato em breve
+• Mantenha seu telefone com notificações ativas
+• Fique atento às ligações do hospital
+
+❓ *Tem dúvidas?*
+Digite sua pergunta a qualquer momento que responderemos!
+
+_Hospital Universitário Walter Cantídio_"""
                     elif any(r in intent_up for r in RESPOSTAS_NAO):
                         c.confirmado = False
                         c.rejeitado = True
-                        msg_final = "✅ Obrigado. Registramos que você não tem interesse."
+                        msg_final = """✅ *Registro Atualizado*
+
+Obrigado por sua resposta.
+
+Registramos que você não tem mais interesse no procedimento. Seus dados serão atualizados em nosso sistema.
+
+Se mudar de ideia ou tiver alguma dúvida, pode entrar em contato conosco.
+
+_Hospital Universitário Walter Cantídio_"""
                     
                     c.status = 'concluido'
                     c.data_resposta = datetime.utcnow()
@@ -3298,15 +3705,22 @@ def responder_ticket(id):
 
     # Enviar via WhatsApp
     ws = WhatsApp()
-    telefones = ticket.contato.telefones.filter_by(whatsapp_valido=True).all()
+
+    # Priorizar telefones validados, mas aceitar todos se não houver validados
+    telefones_validados = ticket.contato.telefones.filter_by(whatsapp_valido=True).all()
+    telefones_todos = ticket.contato.telefones.all()
+
+    # Usar validados se houver, senão usar todos
+    telefones = telefones_validados if telefones_validados else telefones_todos
 
     if not telefones:
-        flash('Nenhum telefone válido para enviar resposta', 'danger')
+        flash('Nenhum telefone cadastrado para este contato', 'danger')
         return redirect(url_for('detalhe_ticket', id=id))
 
     enviado = False
+    erro_msg = None
     for tel in telefones:
-        ok, _ = ws.enviar(tel.numero_fmt, f"👤 *Resposta do atendente {current_user.nome}:*\n\n{resposta}")
+        ok, resultado = ws.enviar(tel.numero_fmt, f"👤 *Resposta do atendente {current_user.nome}:*\n\n{resposta}")
         if ok:
             enviado = True
 
@@ -3321,6 +3735,8 @@ def responder_ticket(id):
             )
             db.session.add(log)
             break
+        else:
+            erro_msg = resultado
 
     if enviado:
         # Resolver ticket
@@ -3329,9 +3745,12 @@ def responder_ticket(id):
         ticket.resposta = resposta
         db.session.commit()
 
-        flash('Resposta enviada e ticket resolvido!', 'success')
+        flash('✅ Resposta enviada e ticket resolvido com sucesso!', 'success')
     else:
-        flash('Erro ao enviar resposta', 'danger')
+        msg_erro = f'❌ Erro ao enviar resposta via WhatsApp'
+        if erro_msg:
+            msg_erro += f': {erro_msg}'
+        flash(msg_erro, 'danger')
 
     return redirect(url_for('painel_atendimento'))
 

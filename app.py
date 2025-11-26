@@ -2989,8 +2989,9 @@ def webhook():
             return jsonify({'status': 'ok'}), 200
 
         # Maquina de Estados
-        # Aceita 'pronto_envio' tambem pois pode haver race condition (usuario responde antes do loop de envio terminar)
-        if c.status in ['enviado', 'pronto_envio']:
+        # Aceita 'pronto_envio' e 'pendente' tambem pois pode haver race condition (usuario responde antes do loop de envio terminar)
+        # 'pendente' permite processar respostas de mensagens enviadas manualmente
+        if c.status in ['enviado', 'pronto_envio', 'pendente']:
             if any(r in texto_up for r in RESPOSTAS_SIM) or any(r in texto_up for r in RESPOSTAS_NAO):
                 # Verificar se contato TEM data de nascimento cadastrada
                 if c.data_nascimento:

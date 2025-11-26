@@ -2940,13 +2940,36 @@ def webhook():
         # Aceita 'pronto_envio' tambem pois pode haver race condition (usuario responde antes do loop de envio terminar)
         if c.status in ['enviado', 'pronto_envio']:
             if any(r in texto_up for r in RESPOSTAS_SIM) or any(r in texto_up for r in RESPOSTAS_NAO):
-                # Pedir Data de Nascimento para AMBOS
-                c.status = 'aguardando_nascimento'
-                c.resposta = texto # Guarda a intencao original (1 ou 2)
-                c.data_resposta = datetime.utcnow()
-                db.session.commit()
-                
-                ws.enviar(numero, "🔒 Por segurança, por favor digite sua *Data de Nascimento* (ex: 03/09/1954).")
+                # Verificar se contato TEM data de nascimento cadastrada
+                if c.data_nascimento:
+                    # Pedir Data de Nascimento para validação
+                    c.status = 'aguardando_nascimento'
+                    c.resposta = texto # Guarda a intencao original (1 ou 2)
+                    c.data_resposta = datetime.utcnow()
+                    db.session.commit()
+
+                    ws.enviar(numero, "🔒 Por segurança, por favor digite sua *Data de Nascimento* (ex: 03/09/1954).")
+                else:
+                    # NÃO tem data de nascimento - confirma/rejeita imediatamente
+                    msg_final = "✅ Obrigado."
+
+                    if any(r in texto_up for r in RESPOSTAS_SIM):
+                        c.confirmado = True
+                        c.rejeitado = False
+                        msg_final = "✅ *Confirmado*! Obrigado por confirmar seu interesse."
+                    elif any(r in texto_up for r in RESPOSTAS_NAO):
+                        c.confirmado = False
+                        c.rejeitado = True
+                        msg_final = "✅ Obrigado. Registramos que você não tem interesse."
+
+                    c.status = 'concluido'
+                    c.resposta = texto
+                    c.data_resposta = datetime.utcnow()
+                    db.session.commit()
+                    c.campanha.atualizar_stats()
+                    db.session.commit()
+
+                    ws.enviar(numero, msg_final)
                 
             elif any(r in texto_up for r in RESPOSTAS_DESCONHECO):
                 c.rejeitado = True

@@ -174,6 +174,16 @@ class Campanha(db.Model):
     limite_diario = db.Column(db.Integer, default=50)
     tempo_entre_envios = db.Column(db.Integer, default=15)
 
+    # Campos de agendamento avançado
+    meta_diaria = db.Column(db.Integer, default=50)  # Meta de pessoas por dia
+    hora_inicio = db.Column(db.Integer, default=8)   # Hora de início (0-23)
+    hora_fim = db.Column(db.Integer, default=18)     # Hora de fim (0-23)
+    dias_duracao = db.Column(db.Integer, default=0)  # 0 = até acabar, >0 = quantidade de dias
+
+    # Controle diário
+    enviados_hoje = db.Column(db.Integer, default=0)
+    data_ultimo_envio = db.Column(db.Date)
+
     criador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     data_inicio = db.Column(db.DateTime)
@@ -196,7 +206,10 @@ class Campanha(db.Model):
         # Melhor: Pessoas que ja foram validadas e nao tem nenhum valido
         # Por enquanto vamos usar a logica simples de status do contato se tiver
         
-        self.total_enviados = self.contatos.filter_by(status='enviado').count() # Ou concluido/aguardando
+        # Contar pessoas enviadas (todos os status que indicam que a pessoa foi contactada)
+        self.total_enviados = self.contatos.filter(
+            Contato.status.in_(['enviado', 'aguardando_nascimento', 'concluido'])
+        ).count()
         self.total_confirmados = self.contatos.filter_by(confirmado=True).count()
         self.total_rejeitados = self.contatos.filter_by(rejeitado=True).count()
         self.total_erros = self.contatos.filter(Contato.erro.isnot(None)).count()
@@ -225,6 +238,55 @@ class Campanha(db.Model):
     def pendentes_enviar(self):
         # Pessoas validas que ainda nao foram enviadas
         return self.contatos.join(Telefone).filter(Telefone.whatsapp_valido == True, Contato.status == 'pendente').distinct().count()
+
+    def pode_enviar_hoje(self):
+        """Verifica se ainda pode enviar hoje baseado na meta diária"""
+        hoje = date.today()
+
+        # Se mudou o dia, resetar contador
+        if self.data_ultimo_envio != hoje:
+            self.enviados_hoje = 0
+            self.data_ultimo_envio = hoje
+            db.session.commit()
+
+        # Verificar se atingiu a meta
+        return self.enviados_hoje < self.meta_diaria
+
+    def pode_enviar_agora(self):
+        """Verifica se está dentro do horário de funcionamento"""
+        agora = datetime.now()
+        hora_atual = agora.hour
+
+        # Verificar horário
+        if self.hora_inicio <= self.hora_fim:
+            # Horário normal (ex: 8h às 18h)
+            dentro_horario = self.hora_inicio <= hora_atual < self.hora_fim
+        else:
+            # Horário overnight (ex: 22h às 6h)
+            dentro_horario = hora_atual >= self.hora_inicio or hora_atual < self.hora_fim
+
+        return dentro_horario
+
+    def atingiu_duracao(self):
+        """Verifica se atingiu o número de dias definido"""
+        if self.dias_duracao == 0:
+            return False  # Até acabar
+
+        if not self.data_inicio:
+            return False
+
+        dias_decorridos = (datetime.now() - self.data_inicio).days
+        return dias_decorridos >= self.dias_duracao
+
+    def registrar_envio(self):
+        """Registra que um envio foi realizado hoje"""
+        hoje = date.today()
+        if self.data_ultimo_envio != hoje:
+            self.enviados_hoje = 1
+            self.data_ultimo_envio = hoje
+        else:
+            self.enviados_hoje += 1
+        db.session.commit()
 
 
 class Contato(db.Model):
@@ -1026,9 +1088,24 @@ def enviar_campanha_bg(campanha_id):
                 if camp.status != 'em_andamento':
                     break
 
-                if enviados_pessoas >= camp.limite_diario:
+                # Verificar se atingiu duração máxima
+                if camp.atingiu_duracao():
+                    camp.status = 'concluida'
+                    camp.status_msg = f'Duração de {camp.dias_duracao} dias atingida'
+                    db.session.commit()
+                    break
+
+                # Verificar se está dentro do horário de funcionamento
+                if not camp.pode_enviar_agora():
                     camp.status = 'pausada'
-                    camp.status_msg = f'Limite diario atingido ({camp.limite_diario} pessoas)'
+                    camp.status_msg = f'Fora do horário ({camp.hora_inicio}h-{camp.hora_fim}h)'
+                    db.session.commit()
+                    break
+
+                # Verificar se atingiu meta diária
+                if not camp.pode_enviar_hoje():
+                    camp.status = 'pausada'
+                    camp.status_msg = f'Meta diária atingida ({camp.meta_diaria} pessoas)'
                     db.session.commit()
                     break
 
@@ -1081,19 +1158,26 @@ def enviar_campanha_bg(campanha_id):
                     
                     for t in telefones_validos:
                         ok, result = ws.enviar(t.numero_fmt, msg)
-                        
+
                         if ok:
                             t.enviado = True
                             t.data_envio = datetime.utcnow()
                             t.msg_id = result
                             sucesso_pessoa = True
-                            
+
                             log = LogMsg(campanha_id=camp.id, contato_id=c.id, direcao='enviada',
                                          telefone=t.numero_fmt, mensagem=msg[:500], status='ok')
                             db.session.add(log)
                         else:
                             log = LogMsg(campanha_id=camp.id, contato_id=c.id, direcao='enviada',
                                          telefone=t.numero_fmt, mensagem=msg[:500], status='erro', erro=result)
+
+                    # Se conseguiu enviar para pelo menos um número, registrar o envio
+                    if sucesso_pessoa:
+                        c.status = 'enviado'
+                        camp.registrar_envio()  # Incrementar contador diário
+                        enviados_pessoas += 1
+
                     db.session.commit()
                     camp.atualizar_stats()
                     db.session.commit()
@@ -1564,8 +1648,17 @@ def dashboard():
 def criar_campanha():
     nome = request.form.get('nome', '').strip()
     msg = request.form.get('mensagem', MENSAGEM_PADRAO).strip()
-    limite = int(request.form.get('limite_diario', 50))
     tempo = int(request.form.get('tempo_entre_envios', 15))
+
+    # Novos campos de agendamento
+    meta_diaria = int(request.form.get('meta_diaria', 50))
+    horario_inicio = request.form.get('horario_inicio', '08:00')
+    horario_fim = request.form.get('horario_fim', '18:00')
+    dias_duracao = int(request.form.get('dias_duracao', 0))
+
+    # Extrair hora dos horários (formato HH:MM)
+    hora_inicio = int(horario_inicio.split(':')[0]) if horario_inicio else 8
+    hora_fim = int(horario_fim.split(':')[0]) if horario_fim else 18
 
     if not nome:
         flash('Nome obrigatorio', 'danger')
@@ -1584,8 +1677,12 @@ def criar_campanha():
         nome=nome,
         descricao=request.form.get('descricao', ''),
         mensagem=msg,
-        limite_diario=limite,
+        limite_diario=meta_diaria,  # Usar meta_diaria como limite_diario
         tempo_entre_envios=tempo,
+        meta_diaria=meta_diaria,
+        hora_inicio=hora_inicio,
+        hora_fim=hora_fim,
+        dias_duracao=dias_duracao,
         criador_id=current_user.id,
         arquivo=arq.filename
     )

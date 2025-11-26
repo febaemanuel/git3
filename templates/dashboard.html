@@ -261,23 +261,29 @@
                     </div>
 
                     <div class="row">
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label class="form-label">Meta Diária *</label>
                             <input type="number" class="form-control" name="meta_diaria" id="meta_diaria"
                                    value="50" min="1" max="500" required onchange="calcularIntervalo()">
                             <small class="text-muted">Quantas pessoas por dia</small>
                         </div>
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label class="form-label">Horário Início</label>
                             <input type="time" class="form-control" name="horario_inicio" id="horario_inicio"
                                    value="08:00" onchange="calcularIntervalo()">
                             <small class="text-muted">Início do envio</small>
                         </div>
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label class="form-label">Horário Fim</label>
                             <input type="time" class="form-control" name="horario_fim" id="horario_fim"
                                    value="18:00" onchange="calcularIntervalo()">
                             <small class="text-muted">Fim do envio</small>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">Duração (dias)</label>
+                            <input type="number" class="form-control" name="dias_duracao" id="dias_duracao"
+                                   value="0" min="0" max="365">
+                            <small class="text-muted">0 = até acabar</small>
                         </div>
                     </div>
 

@@ -109,6 +109,54 @@
         </div>
     </div>
 
+    <!-- Informações de Agendamento -->
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-calendar-check"></i> Agendamento e Controle
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <small class="text-muted">Meta Diária</small>
+                        <h5>{{ campanha.meta_diaria }} pessoas/dia</h5>
+                    </div>
+                    <div class="col-md-3">
+                        <small class="text-muted">Enviados Hoje</small>
+                        <h5>
+                            <span id="enviados-hoje">{{ campanha.enviados_hoje }}</span> / {{ campanha.meta_diaria }}
+                        </h5>
+                        <div class="progress" style="height: 5px;">
+                            <div class="progress-bar bg-info" style="width: {{ (campanha.enviados_hoje / campanha.meta_diaria * 100) if campanha.meta_diaria > 0 else 0 }}%"></div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <small class="text-muted">Horário de Funcionamento</small>
+                        <h5>{{ '%02d' % campanha.hora_inicio }}:00 - {{ '%02d' % campanha.hora_fim }}:00</h5>
+                    </div>
+                    <div class="col-md-3">
+                        <small class="text-muted">Duração</small>
+                        <h5>
+                            {% if campanha.dias_duracao == 0 %}
+                                Até acabar
+                            {% else %}
+                                {{ campanha.dias_duracao }} dia(s)
+                                {% if campanha.data_inicio %}
+                                    <br><small class="text-muted">({{ (now() - campanha.data_inicio).days }} decorridos)</small>
+                                {% endif %}
+                            {% endif %}
+                        </h5>
+                    </div>
+                </div>
+                {% if campanha.status_msg %}
+                <div class="alert alert-info mt-3 mb-0">
+                    <i class="bi bi-info-circle"></i> {{ campanha.status_msg }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
     <!-- Barra de Progresso -->
     <div class="col-12 mb-4">
         <div class="card">

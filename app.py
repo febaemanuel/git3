@@ -3008,7 +3008,18 @@ def webhook():
 
         # Maquina de Estados
         # Aceita 'pronto_envio' tambem pois pode haver race condition (usuario responde antes do loop de envio terminar)
-        if c.status in ['enviado', 'pronto_envio']:
+        # Aceita 'pendente' se a resposta é válida (1, 2, 3) - útil para testes e recuperação de erros
+        respostas_validas = (any(r in texto_up for r in RESPOSTAS_SIM) or
+                            any(r in texto_up for r in RESPOSTAS_NAO) or
+                            any(r in texto_up for r in RESPOSTAS_DESCONHECO))
+
+        if c.status in ['enviado', 'pronto_envio'] or (c.status == 'pendente' and respostas_validas):
+            # Se era pendente e recebeu resposta válida, atualiza para enviado automaticamente
+            if c.status == 'pendente' and respostas_validas:
+                c.status = 'enviado'
+                db.session.commit()
+                logger.info(f"Status de {c.nome} atualizado de 'pendente' para 'enviado' após receber resposta válida")
+
             if any(r in texto_up for r in RESPOSTAS_SIM) or any(r in texto_up for r in RESPOSTAS_NAO):
                 # Verificar se contato TEM data de nascimento cadastrada
                 if c.data_nascimento:

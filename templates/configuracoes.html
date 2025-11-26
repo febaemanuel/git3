@@ -81,6 +81,11 @@
                 <i class="bi bi-sliders"></i> Configuracoes da Evolution API
             </div>
             <div class="card-body">
+                <div class="alert alert-info mb-4">
+                    <i class="bi bi-shield-lock"></i>
+                    <strong>Acesso Restrito:</strong> Apenas administradores podem alterar as configurações da Evolution API.
+                    Essas configurações são globais e afetam todos os usuários do sistema.
+                </div>
                 <form method="POST" action="{{ url_for('configuracoes') }}">
                     <div class="row">
                         <div class="col-md-4 mb-3">

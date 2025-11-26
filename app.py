@@ -397,7 +397,11 @@ class RespostaAutomatica(db.Model):
     ativa = db.Column(db.Boolean, default=True)
     prioridade = db.Column(db.Integer, default=1)
     contador_uso = db.Column(db.Integer, default=0)
+    criador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))  # NOVO - FAQ privado do usuário
+    global_faq = db.Column(db.Boolean, default=False)  # NOVO - FAQ global (apenas admin)
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+
+    criador = db.relationship('Usuario', backref='faqs_criados')
 
     def get_gatilhos(self):
         try:
@@ -588,12 +592,31 @@ class SistemaFAQ:
     """Sistema de respostas automáticas"""
 
     @staticmethod
-    def buscar_resposta(texto):
-        """Busca resposta automática baseada no texto"""
+    def buscar_resposta(texto, usuario_id=None):
+        """Busca resposta automática baseada no texto
+
+        Busca em:
+        1. FAQs globais (global_faq=True)
+        2. FAQs privados do usuário (criador_id=usuario_id)
+        """
         texto_lower = texto.lower()
 
-        # Buscar no banco de dados
-        faqs = RespostaAutomatica.query.filter_by(ativa=True).order_by(RespostaAutomatica.prioridade.desc()).all()
+        # Buscar FAQs globais + FAQs do usuário
+        query = RespostaAutomatica.query.filter_by(ativa=True)
+
+        if usuario_id:
+            # FAQs globais OU FAQs do usuário
+            query = query.filter(
+                db.or_(
+                    RespostaAutomatica.global_faq == True,
+                    RespostaAutomatica.criador_id == usuario_id
+                )
+            )
+        else:
+            # Apenas FAQs globais (fallback se não tiver usuário)
+            query = query.filter_by(global_faq=True)
+
+        faqs = query.order_by(RespostaAutomatica.prioridade.desc()).all()
 
         for faq in faqs:
             gatilhos = faq.get_gatilhos()
@@ -1758,13 +1781,15 @@ def criar_faqs_padrao():
             faq = RespostaAutomatica(
                 categoria=faq_data['categoria'],
                 resposta=faq_data['resposta'],
-                prioridade=faq_data['prioridade']
+                prioridade=faq_data['prioridade'],
+                global_faq=True,  # FAQs padrão são globais (todos veem)
+                criador_id=None  # FAQs globais não tem criador
             )
             faq.set_gatilhos(faq_data['gatilhos'])
             db.session.add(faq)
 
         db.session.commit()
-        logger.info("FAQs padrão criadas")
+        logger.info("FAQs padrão globais criadas")
 
     except Exception as e:
         logger.error(f"Erro ao criar FAQs padrão: {e}")
@@ -3333,7 +3358,9 @@ def webhook():
         # EXCEÇÃO: Se status é 'concluido', SEMPRE permitir FAQ (mesmo para respostas válidas como 1, 2, 3)
         resposta_faq = None
         if c.status == 'concluido' or (c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio'] and not respostas_validas):
-            resposta_faq = SistemaFAQ.buscar_resposta(texto)
+            # Buscar FAQs globais + FAQs do criador da campanha
+            usuario_id = c.campanha.criador_id if c.campanha else None
+            resposta_faq = SistemaFAQ.buscar_resposta(texto, usuario_id)
 
         # Verificar se precisa criar ticket para atendimento humano
         # IMPORTANTE: NÃO criar ticket se está em fluxo ativo da campanha
@@ -3551,7 +3578,13 @@ def webhook_check():
 @app.route('/faq')
 @login_required
 def gerenciar_faq():
-    faqs = RespostaAutomatica.query.order_by(RespostaAutomatica.prioridade.desc()).all()
+    # Mostrar FAQs globais + FAQs do usuário
+    faqs = RespostaAutomatica.query.filter(
+        db.or_(
+            RespostaAutomatica.global_faq == True,
+            RespostaAutomatica.criador_id == current_user.id
+        )
+    ).order_by(RespostaAutomatica.prioridade.desc()).all()
     return render_template('faq.html', faqs=faqs)
 
 
@@ -3562,9 +3595,15 @@ def criar_faq():
     resposta = request.form.get('resposta', '').strip()
     gatilhos_str = request.form.get('gatilhos', '').strip()
     prioridade = int(request.form.get('prioridade', 1))
+    global_faq = request.form.get('global_faq') == 'on'  # Checkbox
 
     if not categoria or not resposta or not gatilhos_str:
         flash('Preencha todos os campos', 'danger')
+        return redirect(url_for('gerenciar_faq'))
+
+    # Apenas admin pode criar FAQs globais
+    if global_faq and not current_user.is_admin:
+        flash('❌ Apenas administradores podem criar FAQs globais', 'danger')
         return redirect(url_for('gerenciar_faq'))
 
     # Converter gatilhos de string para lista
@@ -3573,13 +3612,16 @@ def criar_faq():
     faq = RespostaAutomatica(
         categoria=categoria,
         resposta=resposta,
-        prioridade=prioridade
+        prioridade=prioridade,
+        global_faq=global_faq,
+        criador_id=None if global_faq else current_user.id  # Global não tem criador
     )
     faq.set_gatilhos(gatilhos)
     db.session.add(faq)
     db.session.commit()
 
-    flash('FAQ criado com sucesso!', 'success')
+    tipo = 'global' if global_faq else 'privado'
+    flash(f'✅ FAQ {tipo} criado com sucesso!', 'success')
     return redirect(url_for('gerenciar_faq'))
 
 
@@ -3587,6 +3629,16 @@ def criar_faq():
 @login_required
 def editar_faq(id):
     faq = RespostaAutomatica.query.get_or_404(id)
+
+    # Verificar permissões: só pode editar se for o criador OU se for global e for admin
+    if faq.global_faq:
+        if not current_user.is_admin:
+            flash('❌ Apenas administradores podem editar FAQs globais', 'danger')
+            return redirect(url_for('gerenciar_faq'))
+    else:
+        if faq.criador_id != current_user.id:
+            flash('❌ Você não pode editar FAQs de outros usuários', 'danger')
+            return redirect(url_for('gerenciar_faq'))
 
     faq.categoria = request.form.get('categoria', '').strip()
     faq.resposta = request.form.get('resposta', '').strip()
@@ -3598,7 +3650,7 @@ def editar_faq(id):
     faq.set_gatilhos(gatilhos)
 
     db.session.commit()
-    flash('FAQ atualizado!', 'success')
+    flash('✅ FAQ atualizado!', 'success')
     return redirect(url_for('gerenciar_faq'))
 
 
@@ -3606,9 +3658,20 @@ def editar_faq(id):
 @login_required
 def excluir_faq(id):
     faq = RespostaAutomatica.query.get_or_404(id)
+
+    # Verificar permissões: só pode excluir se for o criador OU se for global e for admin
+    if faq.global_faq:
+        if not current_user.is_admin:
+            flash('❌ Apenas administradores podem excluir FAQs globais', 'danger')
+            return redirect(url_for('gerenciar_faq'))
+    else:
+        if faq.criador_id != current_user.id:
+            flash('❌ Você não pode excluir FAQs de outros usuários', 'danger')
+            return redirect(url_for('gerenciar_faq'))
+
     db.session.delete(faq)
     db.session.commit()
-    flash('FAQ excluído!', 'success')
+    flash('✅ FAQ excluído!', 'success')
     return redirect(url_for('gerenciar_faq'))
 
 

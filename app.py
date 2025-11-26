@@ -2956,7 +2956,13 @@ def webhook():
         # Maquina de Estados
         # Aceita 'pronto_envio' tambem pois pode haver race condition (usuario responde antes do loop de envio terminar)
         if c.status in ['enviado', 'pronto_envio']:
-            if any(r in texto_up for r in RESPOSTAS_SIM) or any(r in texto_up for r in RESPOSTAS_NAO):
+            # Verificar respostas como palavras completas, não substrings
+            # Isso evita falsos positivos como 'N' in 'URGENTE' ou 'S' in 'DESISTO'
+            palavras_texto = texto_up.split()
+            tem_resposta_sim = any(r in palavras_texto or r == texto_up for r in RESPOSTAS_SIM)
+            tem_resposta_nao = any(r in palavras_texto or r == texto_up for r in RESPOSTAS_NAO)
+
+            if tem_resposta_sim or tem_resposta_nao:
                 # Verificar se contato TEM data de nascimento cadastrada
                 if c.data_nascimento:
                     # Pedir Data de Nascimento para validação
@@ -2970,11 +2976,11 @@ def webhook():
                     # NÃO tem data de nascimento - confirma/rejeita imediatamente
                     msg_final = "✅ Obrigado."
 
-                    if any(r in texto_up for r in RESPOSTAS_SIM):
+                    if tem_resposta_sim:
                         c.confirmado = True
                         c.rejeitado = False
                         msg_final = "✅ *Confirmado*! Obrigado por confirmar seu interesse."
-                    elif any(r in texto_up for r in RESPOSTAS_NAO):
+                    elif tem_resposta_nao:
                         c.confirmado = False
                         c.rejeitado = True
                         msg_final = "✅ Obrigado. Registramos que você não tem interesse."
@@ -2987,8 +2993,8 @@ def webhook():
                     db.session.commit()
 
                     ws.enviar(numero, msg_final)
-                
-            elif any(r in texto_up for r in RESPOSTAS_DESCONHECO):
+
+            elif any(r in palavras_texto or r == texto_up for r in RESPOSTAS_DESCONHECO):
                 c.rejeitado = True
                 c.confirmado = False
                 c.erro = "Desconhecido pelo portador"
@@ -3019,13 +3025,14 @@ def webhook():
                 if c.data_nascimento and dt_input == c.data_nascimento:
                     # Data Correta - Verificar intencao original
                     intent_up = (c.resposta or '').upper()
+                    palavras_intent = intent_up.split()
                     msg_final = "✅ Obrigado."
-                    
-                    if any(r in intent_up for r in RESPOSTAS_SIM):
+
+                    if any(r in palavras_intent or r == intent_up for r in RESPOSTAS_SIM):
                         c.confirmado = True
                         c.rejeitado = False
                         msg_final = "✅ *Confirmado*! Obrigado por confirmar seu interesse."
-                    elif any(r in intent_up for r in RESPOSTAS_NAO):
+                    elif any(r in palavras_intent or r == intent_up for r in RESPOSTAS_NAO):
                         c.confirmado = False
                         c.rejeitado = True
                         msg_final = "✅ Obrigado. Registramos que você não tem interesse."

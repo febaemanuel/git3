@@ -1,0 +1,775 @@
+{% extends "base.html" %}
+
+{% block title %}Relatórios{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* KPI Cards com Gradientes */
+    .kpi-card {
+        border-radius: 15px;
+        padding: 25px;
+        color: white;
+        position: relative;
+        overflow: hidden;
+        transition: transform 0.3s, box-shadow 0.3s;
+        border: none;
+    }
+
+    .kpi-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+    }
+
+    .kpi-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        right: 0;
+        width: 100px;
+        height: 100px;
+        opacity: 0.1;
+        font-size: 80px;
+    }
+
+    .kpi-total {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+
+    .kpi-enviados {
+        background: linear-gradient(135deg, #0dcaf0 0%, #0d6efd 100%);
+    }
+
+    .kpi-confirmados {
+        background: linear-gradient(135deg, #20c997 0%, #198754 100%);
+    }
+
+    .kpi-rejeitados {
+        background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+    }
+
+    .kpi-icon {
+        font-size: 3rem;
+        opacity: 0.8;
+        position: absolute;
+        right: 20px;
+        top: 50%;
+        transform: translateY(-50%);
+    }
+
+    .kpi-value {
+        font-size: 2.5rem;
+        font-weight: bold;
+        margin: 10px 0;
+    }
+
+    .kpi-label {
+        font-size: 0.9rem;
+        opacity: 0.9;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+
+    .kpi-progress {
+        background-color: rgba(255,255,255,0.3);
+        height: 8px;
+        border-radius: 10px;
+        margin-top: 15px;
+        overflow: hidden;
+    }
+
+    .kpi-progress-bar {
+        height: 100%;
+        background-color: white;
+        border-radius: 10px;
+        transition: width 0.6s ease;
+    }
+
+    .kpi-subtitle {
+        font-size: 0.85rem;
+        margin-top: 8px;
+        opacity: 0.85;
+    }
+
+    /* Gráficos */
+    .chart-container {
+        position: relative;
+        height: 350px;
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    .chart-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #f0f0f0;
+    }
+
+    /* Filtro de Campanha */
+    .filter-section {
+        background: white;
+        border-radius: 15px;
+        padding: 25px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        margin-bottom: 30px;
+    }
+
+    .filter-label {
+        font-weight: 600;
+        color: #333;
+        margin-bottom: 10px;
+        display: block;
+    }
+
+    /* Tabela de Dados */
+    .data-table {
+        background: white;
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+
+    .data-table table {
+        margin-bottom: 0;
+    }
+
+    .badge-custom {
+        padding: 8px 15px;
+        border-radius: 20px;
+        font-weight: 500;
+        font-size: 0.85rem;
+    }
+
+    .badge-enviado {
+        background-color: #0dcaf0;
+        color: white;
+    }
+
+    .badge-confirmado {
+        background-color: #198754;
+        color: white;
+    }
+
+    .badge-rejeitado {
+        background-color: #ffc107;
+        color: #333;
+    }
+
+    .badge-pendente {
+        background-color: #6c757d;
+        color: white;
+    }
+
+    .badge-erro {
+        background-color: #dc3545;
+        color: white;
+    }
+
+    /* Botões de Ação */
+    .action-buttons {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+    }
+
+    .btn-print {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border: none;
+    }
+
+    .btn-export {
+        background: linear-gradient(135deg, #20c997 0%, #198754 100%);
+        color: white;
+        border: none;
+    }
+
+    .btn-print:hover, .btn-export:hover {
+        opacity: 0.9;
+        color: white;
+    }
+
+    /* Loading overlay */
+    .loading {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255,255,255,0.9);
+        z-index: 9999;
+        justify-content: center;
+        align-items: center;
+    }
+
+    .loading.active {
+        display: flex;
+    }
+
+    @media print {
+        .no-print {
+            display: none !important;
+        }
+
+        .kpi-card, .chart-container, .data-table {
+            box-shadow: none;
+            border: 1px solid #ddd;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="loading" id="loading">
+    <div class="text-center">
+        <div class="spinner-border text-primary" style="width: 3rem; height: 3rem;" role="status">
+            <span class="visually-hidden">Carregando...</span>
+        </div>
+        <p class="mt-3 text-muted">Carregando dados...</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-12 mb-4">
+        <h2><i class="bi bi-bar-chart-line"></i> Relatórios e Análises</h2>
+        <p class="text-muted">Dashboard executivo com métricas e análises detalhadas</p>
+    </div>
+</div>
+
+<!-- Filtro de Campanha -->
+<div class="filter-section no-print">
+    <div class="row align-items-end">
+        <div class="col-md-8">
+            <label class="filter-label">
+                <i class="bi bi-funnel"></i> Selecione a Campanha
+            </label>
+            <select class="form-select form-select-lg" id="campanhaSelect" onchange="carregarDados()">
+                <option value="">-- Todas as Campanhas --</option>
+                {% for campanha in campanhas %}
+                <option value="{{ campanha.id }}" {% if campanha_selecionada and campanha.id == campanha_selecionada.id %}selected{% endif %}>
+                    {{ campanha.nome }} ({{ campanha.data_criacao.strftime('%d/%m/%Y') }})
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="col-md-4 text-end">
+            <div class="action-buttons">
+                <button class="btn btn-print" onclick="imprimirRelatorio()">
+                    <i class="bi bi-printer"></i> Imprimir
+                </button>
+                <button class="btn btn-export" onclick="exportarExcel()">
+                    <i class="bi bi-file-earmark-excel"></i> Exportar Excel
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="row mb-4">
+    <div class="col-md-3 mb-3">
+        <div class="kpi-card kpi-total">
+            <i class="bi bi-people kpi-icon"></i>
+            <div class="kpi-label">Total de Contatos</div>
+            <div class="kpi-value" id="kpi-total">0</div>
+            <div class="kpi-subtitle">Contatos cadastrados</div>
+        </div>
+    </div>
+
+    <div class="col-md-3 mb-3">
+        <div class="kpi-card kpi-enviados">
+            <i class="bi bi-send kpi-icon"></i>
+            <div class="kpi-label">Enviados</div>
+            <div class="kpi-value" id="kpi-enviados">0</div>
+            <div class="kpi-progress">
+                <div class="kpi-progress-bar" id="progress-enviados" style="width: 0%"></div>
+            </div>
+            <div class="kpi-subtitle">
+                <span id="pct-enviados">0%</span> do total
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 mb-3">
+        <div class="kpi-card kpi-confirmados">
+            <i class="bi bi-check-circle kpi-icon"></i>
+            <div class="kpi-label">Confirmados</div>
+            <div class="kpi-value" id="kpi-confirmados">0</div>
+            <div class="kpi-progress">
+                <div class="kpi-progress-bar" id="progress-confirmados" style="width: 0%"></div>
+            </div>
+            <div class="kpi-subtitle">
+                Taxa de conversão: <span id="taxa-conversao">0%</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 mb-3">
+        <div class="kpi-card kpi-rejeitados">
+            <i class="bi bi-x-circle kpi-icon"></i>
+            <div class="kpi-label">Rejeitados</div>
+            <div class="kpi-value" id="kpi-rejeitados">0</div>
+            <div class="kpi-progress">
+                <div class="kpi-progress-bar" id="progress-rejeitados" style="width: 0%"></div>
+            </div>
+            <div class="kpi-subtitle">
+                <span id="pct-rejeitados">0%</span> do total
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Gráficos -->
+<div class="row mb-4">
+    <!-- Gráfico de Pizza -->
+    <div class="col-md-6 mb-3">
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="bi bi-pie-chart"></i> Distribuição de Status
+            </div>
+            <canvas id="chartPizza"></canvas>
+        </div>
+    </div>
+
+    <!-- Gráfico de Funil -->
+    <div class="col-md-6 mb-3">
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="bi bi-funnel"></i> Funil de Conversão
+            </div>
+            <canvas id="chartFunil"></canvas>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <!-- Gauge (Velocímetro) -->
+    <div class="col-md-6 mb-3">
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="bi bi-speedometer2"></i> Taxa de Confirmação
+            </div>
+            <canvas id="chartGauge"></canvas>
+        </div>
+    </div>
+
+    <!-- Gráfico de Barras -->
+    <div class="col-md-6 mb-3">
+        <div class="chart-container">
+            <div class="chart-title">
+                <i class="bi bi-bar-chart"></i> Performance Comparativa
+            </div>
+            <canvas id="chartBarras"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Tabela Detalhada -->
+<div class="data-table">
+    <div class="chart-title">
+        <i class="bi bi-table"></i> Dados Detalhados
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover" id="tabelaDados">
+            <thead class="table-light">
+                <tr>
+                    <th>Nome</th>
+                    <th>Telefone</th>
+                    <th>Procedimento</th>
+                    <th class="text-center">Status</th>
+                    <th>Data Envio</th>
+                    <th>Resposta</th>
+                </tr>
+            </thead>
+            <tbody id="tabelaBody">
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">
+                        <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                        <p class="mt-2">Selecione uma campanha para visualizar os dados</p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
+
+<script>
+// Variáveis globais para os gráficos
+let chartPizza, chartFunil, chartGauge, chartBarras;
+
+// Função para carregar dados
+async function carregarDados() {
+    const campanhaId = document.getElementById('campanhaSelect').value;
+
+    if (!campanhaId) {
+        limparDashboard();
+        return;
+    }
+
+    document.getElementById('loading').classList.add('active');
+
+    try {
+        const response = await fetch(`/api/relatorios/${campanhaId}`);
+        if (!response.ok) throw new Error('Erro ao carregar dados');
+
+        const dados = await response.json();
+        atualizarDashboard(dados);
+    } catch (error) {
+        console.error('Erro:', error);
+        alert('Erro ao carregar dados do relatório');
+    } finally {
+        document.getElementById('loading').classList.remove('active');
+    }
+}
+
+// Atualizar dashboard com dados
+function atualizarDashboard(dados) {
+    // Atualizar KPIs
+    document.getElementById('kpi-total').textContent = dados.total_contatos;
+    document.getElementById('kpi-enviados').textContent = dados.total_enviados;
+    document.getElementById('kpi-confirmados').textContent = dados.total_confirmados;
+    document.getElementById('kpi-rejeitados').textContent = dados.total_rejeitados;
+
+    // Calcular percentuais
+    const pctEnviados = dados.total_contatos > 0 ?
+        Math.round((dados.total_enviados / dados.total_contatos) * 100) : 0;
+    const pctConfirmados = dados.total_enviados > 0 ?
+        Math.round((dados.total_confirmados / dados.total_enviados) * 100) : 0;
+    const pctRejeitados = dados.total_contatos > 0 ?
+        Math.round((dados.total_rejeitados / dados.total_contatos) * 100) : 0;
+
+    document.getElementById('pct-enviados').textContent = pctEnviados + '%';
+    document.getElementById('taxa-conversao').textContent = pctConfirmados + '%';
+    document.getElementById('pct-rejeitados').textContent = pctRejeitados + '%';
+
+    // Atualizar barras de progresso
+    document.getElementById('progress-enviados').style.width = pctEnviados + '%';
+    document.getElementById('progress-confirmados').style.width = pctConfirmados + '%';
+    document.getElementById('progress-rejeitados').style.width = pctRejeitados + '%';
+
+    // Atualizar gráficos
+    criarGraficoPizza(dados);
+    criarGraficoFunil(dados);
+    criarGraficoGauge(pctConfirmados);
+    criarGraficoBarras(dados);
+
+    // Atualizar tabela
+    atualizarTabela(dados.contatos);
+}
+
+// Gráfico de Pizza
+function criarGraficoPizza(dados) {
+    const ctx = document.getElementById('chartPizza').getContext('2d');
+
+    if (chartPizza) chartPizza.destroy();
+
+    chartPizza = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            labels: ['Confirmados', 'Rejeitados', 'Enviados', 'Pendentes', 'Erros'],
+            datasets: [{
+                data: [
+                    dados.total_confirmados,
+                    dados.total_rejeitados,
+                    dados.total_enviados - dados.total_confirmados - dados.total_rejeitados,
+                    dados.total_contatos - dados.total_enviados,
+                    dados.total_erros || 0
+                ],
+                backgroundColor: [
+                    '#198754',
+                    '#ffc107',
+                    '#0dcaf0',
+                    '#6c757d',
+                    '#dc3545'
+                ],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: 'bottom',
+                    labels: {
+                        padding: 15,
+                        font: { size: 12 }
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const value = context.parsed;
+                            const percentage = ((value / total) * 100).toFixed(1);
+                            return context.label + ': ' + value + ' (' + percentage + '%)';
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Gráfico de Funil
+function criarGraficoFunil(dados) {
+    const ctx = document.getElementById('chartFunil').getContext('2d');
+
+    if (chartFunil) chartFunil.destroy();
+
+    const responderam = dados.total_confirmados + dados.total_rejeitados;
+
+    chartFunil = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Total', 'Enviados', 'Responderam', 'Confirmados'],
+            datasets: [{
+                label: 'Contatos',
+                data: [
+                    dados.total_contatos,
+                    dados.total_enviados,
+                    responderam,
+                    dados.total_confirmados
+                ],
+                backgroundColor: [
+                    '#667eea',
+                    '#0dcaf0',
+                    '#ffc107',
+                    '#198754'
+                ],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const total = dados.total_contatos;
+                            const value = context.parsed.x;
+                            const percentage = ((value / total) * 100).toFixed(1);
+                            return value + ' (' + percentage + '% do total)';
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    grid: { display: false }
+                }
+            }
+        }
+    });
+}
+
+// Gráfico Gauge (Velocímetro)
+function criarGraficoGauge(taxa) {
+    const ctx = document.getElementById('chartGauge').getContext('2d');
+
+    if (chartGauge) chartGauge.destroy();
+
+    // Determinar cor baseada na taxa
+    let cor;
+    if (taxa >= 70) cor = '#198754'; // Verde
+    else if (taxa >= 40) cor = '#ffc107'; // Amarelo
+    else cor = '#dc3545'; // Vermelho
+
+    chartGauge = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+            datasets: [{
+                data: [taxa, 100 - taxa],
+                backgroundColor: [cor, '#e9ecef'],
+                borderWidth: 0,
+                circumference: 180,
+                rotation: 270
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { enabled: false }
+            }
+        },
+        plugins: [{
+            id: 'gaugeText',
+            afterDraw: (chart) => {
+                const ctx = chart.ctx;
+                const centerX = chart.chartArea.left + (chart.chartArea.right - chart.chartArea.left) / 2;
+                const centerY = chart.chartArea.top + (chart.chartArea.bottom - chart.chartArea.top) / 2 + 20;
+
+                ctx.save();
+                ctx.font = 'bold 48px Arial';
+                ctx.fillStyle = cor;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(taxa + '%', centerX, centerY);
+                ctx.restore();
+            }
+        }]
+    });
+}
+
+// Gráfico de Barras Comparativo
+function criarGraficoBarras(dados) {
+    const ctx = document.getElementById('chartBarras').getContext('2d');
+
+    if (chartBarras) chartBarras.destroy();
+
+    chartBarras = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Enviados', 'Confirmados', 'Rejeitados', 'Erros'],
+            datasets: [{
+                label: 'Quantidade',
+                data: [
+                    dados.total_enviados,
+                    dados.total_confirmados,
+                    dados.total_rejeitados,
+                    dados.total_erros || 0
+                ],
+                backgroundColor: [
+                    '#0dcaf0',
+                    '#198754',
+                    '#ffc107',
+                    '#dc3545'
+                ],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { stepSize: 1 }
+                }
+            }
+        }
+    });
+}
+
+// Atualizar tabela de dados
+function atualizarTabela(contatos) {
+    const tbody = document.getElementById('tabelaBody');
+
+    if (!contatos || contatos.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" class="text-center text-muted py-4">
+                    <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                    <p class="mt-2">Nenhum contato encontrado</p>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    tbody.innerHTML = contatos.map(contato => {
+        let badgeClass = 'badge-pendente';
+        let statusText = 'Pendente';
+
+        if (contato.confirmado) {
+            badgeClass = 'badge-confirmado';
+            statusText = 'Confirmado';
+        } else if (contato.rejeitado) {
+            badgeClass = 'badge-rejeitado';
+            statusText = 'Rejeitado';
+        } else if (contato.status === 'enviado') {
+            badgeClass = 'badge-enviado';
+            statusText = 'Enviado';
+        } else if (contato.erro) {
+            badgeClass = 'badge-erro';
+            statusText = 'Erro';
+        }
+
+        return `
+            <tr>
+                <td><strong>${contato.nome}</strong></td>
+                <td>${contato.telefone || '-'}</td>
+                <td>${contato.procedimento || '-'}</td>
+                <td class="text-center">
+                    <span class="badge badge-custom ${badgeClass}">${statusText}</span>
+                </td>
+                <td>${contato.data_envio ? new Date(contato.data_envio).toLocaleString('pt-BR') : '-'}</td>
+                <td>${contato.resposta || '-'}</td>
+            </tr>
+        `;
+    }).join('');
+}
+
+// Limpar dashboard
+function limparDashboard() {
+    document.getElementById('kpi-total').textContent = '0';
+    document.getElementById('kpi-enviados').textContent = '0';
+    document.getElementById('kpi-confirmados').textContent = '0';
+    document.getElementById('kpi-rejeitados').textContent = '0';
+
+    document.getElementById('pct-enviados').textContent = '0%';
+    document.getElementById('taxa-conversao').textContent = '0%';
+    document.getElementById('pct-rejeitados').textContent = '0%';
+
+    document.getElementById('progress-enviados').style.width = '0%';
+    document.getElementById('progress-confirmados').style.width = '0%';
+    document.getElementById('progress-rejeitados').style.width = '0%';
+
+    if (chartPizza) chartPizza.destroy();
+    if (chartFunil) chartFunil.destroy();
+    if (chartGauge) chartGauge.destroy();
+    if (chartBarras) chartBarras.destroy();
+
+    document.getElementById('tabelaBody').innerHTML = `
+        <tr>
+            <td colspan="6" class="text-center text-muted py-4">
+                <i class="bi bi-inbox" style="font-size: 2rem;"></i>
+                <p class="mt-2">Selecione uma campanha para visualizar os dados</p>
+            </td>
+        </tr>
+    `;
+}
+
+// Imprimir relatório
+function imprimirRelatorio() {
+    window.print();
+}
+
+// Exportar para Excel
+function exportarExcel() {
+    const campanhaId = document.getElementById('campanhaSelect').value;
+    if (!campanhaId) {
+        alert('Selecione uma campanha para exportar');
+        return;
+    }
+    window.location.href = `/campanha/${campanhaId}/exportar`;
+}
+
+// Carregar dados ao iniciar se houver campanha selecionada
+{% if campanha_selecionada %}
+window.addEventListener('load', () => {
+    carregarDados();
+});
+{% endif %}
+</script>
+{% endblock %}

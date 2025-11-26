@@ -2940,15 +2940,15 @@ def webhook():
 
         # Primeiro, tentar responder com FAQ automático
         # IMPORTANTE: NÃO processar FAQ se contato está em fluxo ativo da campanha
-        # (status enviado/pronto_envio/aguardando_nascimento devem ir direto para a máquina de estados)
+        # (status pendente/enviado/pronto_envio/aguardando_nascimento devem ir direto para a máquina de estados)
         resposta_faq = None
-        if c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio']:
+        if c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio', 'pendente']:
             resposta_faq = SistemaFAQ.buscar_resposta(texto)
 
         # Verificar se precisa criar ticket para atendimento humano
         # IMPORTANTE: NÃO criar ticket se está em fluxo ativo da campanha
         prioridade_ticket = None
-        if c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio']:
+        if c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio', 'pendente']:
             prioridade_ticket = SistemaFAQ.requer_atendimento_humano(texto, c)
 
         # Se tem FAQ e NÃO é urgente, responde com FAQ (FAQ não responde mensagens urgentes)
@@ -2959,8 +2959,8 @@ def webhook():
 
         # Se é urgente/importante mas tem FAQ, ainda assim cria ticket mas envia FAQ primeiro
         # IMPORTANTE: Não cria ticket se contato está em fluxo ativo da campanha
-        # (status enviado/pronto_envio/aguardando_nascimento devem ser processados pela máquina de estados)
-        if prioridade_ticket and c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio']:
+        # (status pendente/enviado/pronto_envio/aguardando_nascimento devem ser processados pela máquina de estados)
+        if prioridade_ticket and c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio', 'pendente']:
             # Se tem FAQ, envia como resposta imediata antes de criar o ticket
             if resposta_faq:
                 ws.enviar(numero, resposta_faq)
@@ -2990,7 +2990,8 @@ def webhook():
 
         # Maquina de Estados
         # Aceita 'pronto_envio' tambem pois pode haver race condition (usuario responde antes do loop de envio terminar)
-        if c.status in ['enviado', 'pronto_envio']:
+        # Aceita 'pendente' para casos onde mensagem foi enviada manualmente
+        if c.status in ['enviado', 'pronto_envio', 'pendente']:
             if any(r in texto_up for r in RESPOSTAS_SIM) or any(r in texto_up for r in RESPOSTAS_NAO):
                 # Verificar se contato TEM data de nascimento cadastrada
                 if c.data_nascimento:

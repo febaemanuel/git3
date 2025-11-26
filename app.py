@@ -297,8 +297,9 @@ class Contato(db.Model):
 
     nome = db.Column(db.String(200), nullable=False)
     data_nascimento = db.Column(db.Date) # NOVO
-    procedimento = db.Column(db.String(500))
-    
+    procedimento = db.Column(db.String(500))  # Termo original da planilha
+    procedimento_normalizado = db.Column(db.String(300))  # Termo normalizado pela IA
+
     # Status do contato/pessoa
     status = db.Column(db.String(50), default='pendente') # pendente, validando, pronto_envio, enviado, respondido, concluido, erro
     
@@ -1142,15 +1143,15 @@ def processar_planilha(arquivo, campanha_id):
             return False, f"Colunas obrigatorias nao encontradas. Disponiveis: {list(df.columns)}", 0
 
         criados = 0
-        
+
         # Agrupar por Nome e Data de Nascimento (se houver) para unificar contatos
         pessoas = {} # chave: (nome, data_nascimento_str) -> {telefones: set(), proc: str, data_nasc_obj: date}
-        
+
         for _, row in df.iterrows():
             nome = str(row.get(col_nome, '')).strip()
             if not nome or nome.lower() == 'nan':
                 continue
-                
+
             # Tratamento Data Nascimento
             dt_nasc = None
             dt_nasc_str = ''
@@ -1166,9 +1167,9 @@ def processar_planilha(arquivo, campanha_id):
                         dt_nasc_str = dt_nasc.isoformat()
                     except:
                         pass
-            
+
             chave = (nome, dt_nasc_str)
-            
+
             if chave not in pessoas:
                 # Procedimento
                 proc = str(row.get(col_proc, 'o procedimento')).strip() if col_proc else 'o procedimento'
@@ -1177,14 +1178,14 @@ def processar_planilha(arquivo, campanha_id):
                     partes = proc.split('-', 1)
                     if partes[0].strip().isdigit():
                         proc = partes[1].strip()
-                
+
                 pessoas[chave] = {
                     'nome': nome,
                     'nascimento': dt_nasc,
                     'procedimento': proc,
                     'telefones': set()
                 }
-            
+
             # Telefones
             tels = str(row.get(col_tel, '')).strip()
             if tels and tels.lower() != 'nan':
@@ -1195,21 +1196,53 @@ def processar_planilha(arquivo, campanha_id):
                     if fmt:
                         pessoas[chave]['telefones'].add((tel, fmt))
 
+        # =========================================================================
+        # NORMALIZAÇÃO DE PROCEDIMENTOS COM IA (DeepSeek)
+        # =========================================================================
+        # Coletar procedimentos únicos da planilha
+        procedimentos_unicos = set()
+        for dados in pessoas.values():
+            if dados['procedimento']:
+                procedimentos_unicos.add(dados['procedimento'])
+
+        # Normalizar procedimentos únicos usando IA com cache
+        ai = DeepSeekAI()
+        mapa_normalizacao = {}  # original -> normalizado
+
+        logger.info(f"Normalizando {len(procedimentos_unicos)} procedimentos únicos...")
+
+        for proc_original in procedimentos_unicos:
+            resultado = ai.normalizar_procedimento(proc_original)
+            if resultado:
+                mapa_normalizacao[proc_original] = resultado['normalizado']
+                logger.info(f"Normalizado: '{proc_original}' -> '{resultado['normalizado']}' (fonte: {resultado['fonte']})")
+            else:
+                # Fallback: usar o original
+                mapa_normalizacao[proc_original] = proc_original
+
+        logger.info(f"Normalização concluída. {len(mapa_normalizacao)} mapeamentos criados.")
+        # =========================================================================
+
         # Salvar no Banco
         for chave, dados in pessoas.items():
             if not dados['telefones']:
                 continue
-                
+
+            # Obter procedimento normalizado
+            proc_original = dados['procedimento']
+            proc_normalizado = mapa_normalizacao.get(proc_original, proc_original)
+
             c = Contato(
                 campanha_id=campanha_id,
                 nome=dados['nome'][:200],
                 data_nascimento=dados['nascimento'],
-                procedimento=dados['procedimento'][:500],
+                procedimento=proc_original[:500],  # Termo original
+                procedimento_normalizado=proc_normalizado[:300],  # Termo normalizado
                 status='pendente'
             )
             db.session.add(c)
             db.session.flush() # Para ter o ID
-            
+
             for i, (original, fmt) in enumerate(dados['telefones']):
                 t = Telefone(
                     contato_id=c.id,
@@ -1218,7 +1251,7 @@ def processar_planilha(arquivo, campanha_id):
                     prioridade=i+1
                 )
                 db.session.add(t)
-            
+
             criados += 1
 
         db.session.commit()
@@ -1415,7 +1448,9 @@ def enviar_campanha_bg(campanha_id):
 
                 # Envio
                 if c.status == 'pronto_envio':
-                    msg = camp.mensagem.replace('{nome}', c.nome).replace('{procedimento}', c.procedimento or 'o procedimento')
+                    # Usar procedimento normalizado (mais simples) se disponível, senão usar original
+                    procedimento_msg = c.procedimento_normalizado or c.procedimento or 'o procedimento'
+                    msg = camp.mensagem.replace('{nome}', c.nome).replace('{procedimento}', procedimento_msg)
                     
                     # Enviar para TODOS os numeros validos da pessoa
                     telefones_validos = c.telefones.filter_by(whatsapp_valido=True).all()

@@ -2856,14 +2856,24 @@ def webhook():
             logger.warning(f"Webhook: Telefone nao encontrado para {numero}")
             return jsonify({'status': 'ok'}), 200
         
-        # Priorizar contatos nao concluidos
+        # Priorizar contatos em fluxo ativo da campanha (enviado, pronto_envio, aguardando_nascimento)
+        # Isso garante que respostas a campanhas ativas sejam processadas corretamente
         c = None
+
+        # Primeiro: buscar contatos em fluxo ativo
         for t in telefones:
-            if t.contato and t.contato.status != 'concluido':
+            if t.contato and t.contato.status in ['enviado', 'pronto_envio', 'aguardando_nascimento']:
                 c = t.contato
                 break
-        
-        # Se todos concluidos, pega o mais recente
+
+        # Segundo: se não há contatos em fluxo ativo, buscar não concluídos
+        if not c:
+            for t in telefones:
+                if t.contato and t.contato.status != 'concluido':
+                    c = t.contato
+                    break
+
+        # Terceiro: se todos concluídos, pega o mais recente
         if not c and telefones:
             t = telefones[-1]  # Ultimo (mais recente)
             c = t.contato

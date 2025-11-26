@@ -2866,9 +2866,18 @@ def webhook():
         if key.get('fromMe'):
             return jsonify({'status': 'ok'}), 200
 
+        # DEBUG: Log dos campos do key para diagnosticar extração incorreta
+        logger.info(f"DEBUG Webhook - remoteJid: {key.get('remoteJid')}")
+        logger.info(f"DEBUG Webhook - remoteJidAlt: {key.get('remoteJidAlt')}")
+        logger.info(f"DEBUG Webhook - participant: {key.get('participant')}")
+        logger.info(f"DEBUG Webhook - key completo: {key}")
+
         # Priorizar remoteJidAlt (numero real) sobre remoteJid (pode ser LID format)
         jid = key.get('remoteJidAlt') or key.get('remoteJid', '')
         numero = ''.join(filter(str.isdigit, jid.replace('@s.whatsapp.net', '').replace('@lid', '')))
+
+        logger.info(f"DEBUG Webhook - JID escolhido: {jid}")
+        logger.info(f"DEBUG Webhook - Numero extraido: {numero}")
 
         # Validar se conseguiu extrair um numero valido
         if not numero:

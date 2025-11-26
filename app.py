@@ -2956,17 +2956,25 @@ def webhook():
 
         ws = WhatsApp()
 
+        # Verificar primeiro se é uma resposta válida da campanha (1, 2, 3)
+        # Isso impede que respostas válidas sejam tratadas como FAQ ou tickets
+        respostas_validas = (any(r in texto_up for r in RESPOSTAS_SIM) or
+                            any(r in texto_up for r in RESPOSTAS_NAO) or
+                            any(r in texto_up for r in RESPOSTAS_DESCONHECO))
+
         # Primeiro, tentar responder com FAQ automático
         # IMPORTANTE: NÃO processar FAQ se contato está em fluxo ativo da campanha
         # (status enviado/pronto_envio/aguardando_nascimento devem ir direto para a máquina de estados)
+        # E também NÃO processar FAQ se é uma resposta válida da campanha
         resposta_faq = None
-        if c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio']:
+        if c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio'] and not respostas_validas:
             resposta_faq = SistemaFAQ.buscar_resposta(texto)
 
         # Verificar se precisa criar ticket para atendimento humano
         # IMPORTANTE: NÃO criar ticket se está em fluxo ativo da campanha
+        # E também NÃO criar ticket se é uma resposta válida da campanha
         prioridade_ticket = None
-        if c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio']:
+        if c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio'] and not respostas_validas:
             prioridade_ticket = SistemaFAQ.requer_atendimento_humano(texto, c)
 
         # Se tem FAQ e NÃO é urgente, responde com FAQ (FAQ não responde mensagens urgentes)
@@ -3009,10 +3017,6 @@ def webhook():
         # Maquina de Estados
         # Aceita 'pronto_envio' tambem pois pode haver race condition (usuario responde antes do loop de envio terminar)
         # Aceita 'pendente' se a resposta é válida (1, 2, 3) - útil para testes e recuperação de erros
-        respostas_validas = (any(r in texto_up for r in RESPOSTAS_SIM) or
-                            any(r in texto_up for r in RESPOSTAS_NAO) or
-                            any(r in texto_up for r in RESPOSTAS_DESCONHECO))
-
         if c.status in ['enviado', 'pronto_envio'] or (c.status == 'pendente' and respostas_validas):
             # Se era pendente e recebeu resposta válida, atualiza para enviado automaticamente
             if c.status == 'pendente' and respostas_validas:

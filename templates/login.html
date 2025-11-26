@@ -32,9 +32,18 @@
                         </div>
                     </div>
 
-                    <button type="submit" class="btn btn-whatsapp w-100">
+                    <button type="submit" class="btn btn-whatsapp w-100 mb-3">
                         <i class="bi bi-box-arrow-in-right"></i> Entrar
                     </button>
+
+                    <div class="text-center">
+                        <p class="text-muted mb-0">
+                            Não tem uma conta?
+                            <a href="{{ url_for('cadastro_publico') }}" class="text-decoration-none fw-bold">
+                                Cadastre-se
+                            </a>
+                        </p>
+                    </div>
                 </form>
             </div>
         </div>

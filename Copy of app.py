@@ -423,7 +423,6 @@ class TicketAtendimento(db.Model):
     data_resolucao = db.Column(db.DateTime)
 
     contato = db.relationship('Contato', backref='tickets')
-    campanha = db.relationship('Campanha', backref='tickets')
     atendente = db.relationship('Usuario', backref='tickets_atendidos')
 
 
@@ -840,33 +839,6 @@ class WhatsApp:
 # =============================================================================
 # FUNCOES AUXILIARES
 # =============================================================================
-
-def verificar_acesso_campanha(campanha_id):
-    """Verifica se o usuario atual tem acesso a campanha.
-    Retorna a campanha se tiver acesso, senao retorna None."""
-    from flask import abort
-    camp = Campanha.query.get_or_404(campanha_id)
-    if camp.criador_id != current_user.id:
-        abort(403)  # Forbidden
-    return camp
-
-def verificar_acesso_ticket(ticket_id):
-    """Verifica se o usuario atual tem acesso ao ticket.
-    Retorna o ticket se tiver acesso, senao retorna None."""
-    from flask import abort
-    ticket = TicketAtendimento.query.get_or_404(ticket_id)
-    if ticket.campanha and ticket.campanha.criador_id != current_user.id:
-        abort(403)  # Forbidden
-    return ticket
-
-def verificar_acesso_contato(contato_id):
-    """Verifica se o usuario atual tem acesso ao contato.
-    Retorna o contato se tiver acesso, senao retorna None."""
-    from flask import abort
-    contato = Contato.query.get_or_404(contato_id)
-    if contato.campanha.criador_id != current_user.id:
-        abort(403)  # Forbidden
-    return contato
 
 def formatar_numero(num):
     if not num:
@@ -2354,8 +2326,7 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
-    # Filtrar apenas campanhas do usuario atual
-    camps = Campanha.query.filter_by(criador_id=current_user.id).order_by(Campanha.data_criacao.desc()).all()
+    camps = Campanha.query.order_by(Campanha.data_criacao.desc()).all()
     for c in camps:
         c.atualizar_stats()
 
@@ -2365,13 +2336,11 @@ def dashboard():
     if ws_ativo:
         ws_conn, _ = ws.conectado()
 
-    # Estatisticas apenas das campanhas do usuario atual
-    user_campanhas_ids = [c.id for c in camps]
     stats = {
-        'campanhas': len(camps),
-        'contatos': Contato.query.filter(Contato.campanha_id.in_(user_campanhas_ids)).count() if user_campanhas_ids else 0,
-        'confirmados': Contato.query.filter(Contato.campanha_id.in_(user_campanhas_ids), Contato.confirmado == True).count() if user_campanhas_ids else 0,
-        'rejeitados': Contato.query.filter(Contato.campanha_id.in_(user_campanhas_ids), Contato.rejeitado == True).count() if user_campanhas_ids else 0
+        'campanhas': Campanha.query.count(),
+        'contatos': Contato.query.count(),
+        'confirmados': Contato.query.filter_by(confirmado=True).count(),
+        'rejeitados': Contato.query.filter_by(rejeitado=True).count()
     }
 
     return render_template('dashboard.html', campanhas=camps, whatsapp_ativo=ws_ativo,
@@ -2441,7 +2410,7 @@ def criar_campanha():
 @app.route('/campanha/<int:id>')
 @login_required
 def campanha_detalhe(id):
-    camp = verificar_acesso_campanha(id)
+    camp = Campanha.query.get_or_404(id)
     camp.atualizar_stats()
 
     filtro = request.args.get('filtro', 'todos')
@@ -2481,7 +2450,7 @@ def campanha_detalhe(id):
 @app.route('/campanha/<int:id>/validar', methods=['POST'])
 @login_required
 def validar_campanha(id):
-    camp = verificar_acesso_campanha(id)
+    camp = Campanha.query.get_or_404(id)
     if camp.status in ['validando', 'em_andamento']:
         return jsonify({'erro': 'Ja em processamento'}), 400
 
@@ -2499,7 +2468,7 @@ def validar_campanha(id):
 @app.route('/campanha/<int:id>/iniciar', methods=['POST'])
 @login_required
 def iniciar_campanha(id):
-    camp = verificar_acesso_campanha(id)
+    camp = Campanha.query.get_or_404(id)
     if camp.status == 'em_andamento':
         return jsonify({'erro': 'Ja em andamento'}), 400
     
@@ -2523,7 +2492,7 @@ def iniciar_campanha(id):
 @app.route('/campanha/<int:id>/pausar', methods=['POST'])
 @login_required
 def pausar_campanha(id):
-    camp = verificar_acesso_campanha(id)
+    camp = Campanha.query.get_or_404(id)
     camp.status = 'pausada'
     camp.status_msg = 'Pausada'
     db.session.commit()
@@ -2533,7 +2502,7 @@ def pausar_campanha(id):
 @app.route('/campanha/<int:id>/retomar', methods=['POST'])
 @login_required
 def retomar_campanha(id):
-    camp = verificar_acesso_campanha(id)
+    camp = Campanha.query.get_or_404(id)
     # Verifica se tem pendentes ou prontos
     pendentes = camp.contatos.filter(Contato.status.in_(['pendente', 'pronto_envio'])).count()
     if pendentes == 0:
@@ -2549,7 +2518,7 @@ def retomar_campanha(id):
 @app.route('/campanha/<int:id>/cancelar', methods=['POST'])
 @login_required
 def cancelar_campanha(id):
-    camp = verificar_acesso_campanha(id)
+    camp = Campanha.query.get_or_404(id)
     camp.status = 'cancelada'
     camp.status_msg = 'Cancelada'
     db.session.commit()
@@ -2559,7 +2528,7 @@ def cancelar_campanha(id):
 @app.route('/campanha/<int:id>/excluir', methods=['POST'])
 @login_required
 def excluir_campanha(id):
-    camp = verificar_acesso_campanha(id)
+    camp = Campanha.query.get_or_404(id)
     if camp.status in ['em_andamento', 'validando']:
         flash('Nao pode excluir em andamento', 'danger')
         return redirect(url_for('campanha_detalhe', id=id))
@@ -2573,7 +2542,7 @@ def excluir_campanha(id):
 @app.route('/campanha/<int:id>/exportar')
 @login_required
 def exportar_campanha(id):
-    camp = verificar_acesso_campanha(id)
+    camp = Campanha.query.get_or_404(id)
 
     dados = []
     for c in camp.contatos.order_by(Contato.id).all():
@@ -2607,21 +2576,15 @@ def exportar_campanha(id):
 @login_required
 def api_dashboard_tickets():
     """Retorna estatísticas de tickets para o dashboard"""
-    # Filtrar apenas tickets das campanhas do usuario atual
-    user_campanhas_ids = [c.id for c in Campanha.query.filter_by(criador_id=current_user.id).all()]
-    if user_campanhas_ids:
-        urgentes = TicketAtendimento.query.filter(TicketAtendimento.campanha_id.in_(user_campanhas_ids), TicketAtendimento.status == 'pendente', TicketAtendimento.prioridade == 'urgente').count()
-        pendentes = TicketAtendimento.query.filter(TicketAtendimento.campanha_id.in_(user_campanhas_ids), TicketAtendimento.status == 'pendente').count()
-    else:
-        urgentes = 0
-        pendentes = 0
+    urgentes = TicketAtendimento.query.filter_by(status='pendente', prioridade='urgente').count()
+    pendentes = TicketAtendimento.query.filter_by(status='pendente').count()
     return jsonify({'urgentes': urgentes, 'pendentes': pendentes})
 
 
 @app.route('/api/campanha/<int:id>/status')
 @login_required
 def api_status(id):
-    camp = verificar_acesso_campanha(id)
+    camp = Campanha.query.get_or_404(id)
     camp.atualizar_stats()
     return jsonify({
         'status': camp.status,
@@ -2648,7 +2611,7 @@ def api_status(id):
 @app.route('/api/contato/<int:id>/confirmar', methods=['POST'])
 @login_required
 def api_confirmar(id):
-    c = verificar_acesso_contato(id)
+    c = Contato.query.get_or_404(id)
     c.confirmado = True
     c.rejeitado = False
     c.data_resposta = datetime.utcnow()
@@ -2663,7 +2626,7 @@ def api_confirmar(id):
 @app.route('/api/contato/<int:id>/rejeitar', methods=['POST'])
 @login_required
 def api_rejeitar(id):
-    c = verificar_acesso_contato(id)
+    c = Contato.query.get_or_404(id)
     c.rejeitado = True
     c.confirmado = False
     c.data_resposta = datetime.utcnow()
@@ -2678,7 +2641,7 @@ def api_rejeitar(id):
 @app.route('/api/contato/<int:id>/reenviar', methods=['POST'])
 @login_required
 def api_reenviar(id):
-    c = verificar_acesso_contato(id)
+    c = Contato.query.get_or_404(id)
     ws = WhatsApp()
     if not ws.ok():
         return jsonify({'erro': 'WhatsApp nao configurado'}), 400
@@ -2718,7 +2681,7 @@ def api_reenviar(id):
 @app.route('/api/contato/<int:id>/revalidar', methods=['POST'])
 @login_required
 def api_revalidar(id):
-    c = verificar_acesso_contato(id)
+    c = Contato.query.get_or_404(id)
     ws = WhatsApp()
     if not ws.ok():
         return jsonify({'erro': 'WhatsApp nao configurado'}), 400
@@ -2756,7 +2719,7 @@ def api_revalidar(id):
 @app.route('/contato/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
 def editar_contato(id):
-    c = verificar_acesso_contato(id)
+    c = Contato.query.get_or_404(id)
     
     if request.method == 'POST':
         c.nome = request.form.get('nome', '').strip()[:200]
@@ -2866,17 +2829,50 @@ def webhook():
         if key.get('fromMe'):
             return jsonify({'status': 'ok'}), 200
 
-        # Priorizar remoteJidAlt (numero real) sobre remoteJid (pode ser LID format)
-        jid = key.get('remoteJidAlt') or key.get('remoteJid', '')
-        numero = ''.join(filter(str.isdigit, jid.replace('@s.whatsapp.net', '').replace('@lid', '')))
-
-        # Validar se conseguiu extrair um numero valido
+        # Extrair numero do usuario
+        # Para mensagens de celular (linked devices), usar remoteJidAlt que contem o numero real
+        # Para mensagens de computador, usar remoteJid normal
+        numero = None
+        
+        # Prioridade 1: remoteJidAlt (presente em mensagens de linked devices/mobile)
+        remote_jid_alt = key.get('remoteJidAlt', '')
+        if remote_jid_alt and '@s.whatsapp.net' in remote_jid_alt:
+            numero = ''.join(filter(str.isdigit, remote_jid_alt.split('@')[0]))
+        
+        # Prioridade 2: remoteJid (mensagens normais de computador)
         if not numero:
-            logger.warning(f"Webhook: Numero de telefone invalido ou vazio. JID: {jid}")
-            return jsonify({'status': 'ok'}), 200
+            remote_jid = key.get('remoteJid', '')
+            if '@s.whatsapp.net' in remote_jid:
+                numero = ''.join(filter(str.isdigit, remote_jid.split('@')[0]))
+
+        # Ignorar mensagens de grupos, status ou lixo
+        if not numero or len(numero) < 8:
+             return jsonify({'status': 'ok'}), 200
 
         message = msg_data.get('message', {})
-        texto = (message.get('conversation') or message.get('extendedTextMessage', {}).get('text') or '').strip()
+        
+        # Extracao de texto melhorada (suporte a mobile/ephemeral)
+        texto = ''
+        if 'conversation' in message:
+            texto = message['conversation']
+        elif 'extendedTextMessage' in message:
+            texto = message['extendedTextMessage'].get('text', '')
+        elif 'ephemeralMessage' in message:
+            # Mensagens temporarias (comum no mobile)
+            inner = message['ephemeralMessage'].get('message', {})
+            if 'conversation' in inner:
+                texto = inner['conversation']
+            elif 'extendedTextMessage' in inner:
+                texto = inner['extendedTextMessage'].get('text', '')
+        elif 'viewOnceMessage' in message:
+            # Visualizacao unica
+            inner = message['viewOnceMessage'].get('message', {})
+            if 'conversation' in inner:
+                texto = inner['conversation']
+            elif 'extendedTextMessage' in inner:
+                texto = inner['extendedTextMessage'].get('text', '')
+
+        texto = (texto or '').strip()
 
         if not texto:
             return jsonify({'status': 'ok'}), 200
@@ -2901,14 +2897,24 @@ def webhook():
             logger.warning(f"Webhook: Telefone nao encontrado para {numero}")
             return jsonify({'status': 'ok'}), 200
         
-        # Priorizar contatos nao concluidos
+        # Priorizar contatos em fluxo ativo da campanha (enviado, pronto_envio, aguardando_nascimento)
+        # Isso garante que respostas a campanhas ativas sejam processadas corretamente
         c = None
+
+        # Primeiro: buscar contatos em fluxo ativo
         for t in telefones:
-            if t.contato and t.contato.status != 'concluido':
+            if t.contato and t.contato.status in ['enviado', 'pronto_envio', 'aguardando_nascimento']:
                 c = t.contato
                 break
-        
-        # Se todos concluidos, pega o mais recente
+
+        # Segundo: se não há contatos em fluxo ativo, buscar não concluídos
+        if not c:
+            for t in telefones:
+                if t.contato and t.contato.status != 'concluido':
+                    c = t.contato
+                    break
+
+        # Terceiro: se todos concluídos, pega o mais recente
         if not c and telefones:
             t = telefones[-1]  # Ultimo (mais recente)
             c = t.contato
@@ -2991,7 +2997,13 @@ def webhook():
         # Maquina de Estados
         # Aceita 'pronto_envio' tambem pois pode haver race condition (usuario responde antes do loop de envio terminar)
         if c.status in ['enviado', 'pronto_envio']:
-            if any(r in texto_up for r in RESPOSTAS_SIM) or any(r in texto_up for r in RESPOSTAS_NAO):
+            # Verificar respostas como palavras completas, não substrings
+            # Isso evita falsos positivos como 'N' in 'URGENTE' ou 'S' in 'DESISTO'
+            palavras_texto = texto_up.split()
+            tem_resposta_sim = any(r in palavras_texto or r == texto_up for r in RESPOSTAS_SIM)
+            tem_resposta_nao = any(r in palavras_texto or r == texto_up for r in RESPOSTAS_NAO)
+
+            if tem_resposta_sim or tem_resposta_nao:
                 # Verificar se contato TEM data de nascimento cadastrada
                 if c.data_nascimento:
                     # Pedir Data de Nascimento para validação
@@ -3005,11 +3017,11 @@ def webhook():
                     # NÃO tem data de nascimento - confirma/rejeita imediatamente
                     msg_final = "✅ Obrigado."
 
-                    if any(r in texto_up for r in RESPOSTAS_SIM):
+                    if tem_resposta_sim:
                         c.confirmado = True
                         c.rejeitado = False
                         msg_final = "✅ *Confirmado*! Obrigado por confirmar seu interesse."
-                    elif any(r in texto_up for r in RESPOSTAS_NAO):
+                    elif tem_resposta_nao:
                         c.confirmado = False
                         c.rejeitado = True
                         msg_final = "✅ Obrigado. Registramos que você não tem interesse."
@@ -3022,8 +3034,8 @@ def webhook():
                     db.session.commit()
 
                     ws.enviar(numero, msg_final)
-                
-            elif any(r in texto_up for r in RESPOSTAS_DESCONHECO):
+
+            elif any(r in palavras_texto or r == texto_up for r in RESPOSTAS_DESCONHECO):
                 c.rejeitado = True
                 c.confirmado = False
                 c.erro = "Desconhecido pelo portador"
@@ -3054,13 +3066,14 @@ def webhook():
                 if c.data_nascimento and dt_input == c.data_nascimento:
                     # Data Correta - Verificar intencao original
                     intent_up = (c.resposta or '').upper()
+                    palavras_intent = intent_up.split()
                     msg_final = "✅ Obrigado."
-                    
-                    if any(r in intent_up for r in RESPOSTAS_SIM):
+
+                    if any(r in palavras_intent or r == intent_up for r in RESPOSTAS_SIM):
                         c.confirmado = True
                         c.rejeitado = False
                         msg_final = "✅ *Confirmado*! Obrigado por confirmar seu interesse."
-                    elif any(r in intent_up for r in RESPOSTAS_NAO):
+                    elif any(r in palavras_intent or r == intent_up for r in RESPOSTAS_NAO):
                         c.confirmado = False
                         c.rejeitado = True
                         msg_final = "✅ Obrigado. Registramos que você não tem interesse."
@@ -3178,15 +3191,7 @@ def painel_atendimento():
     filtro = request.args.get('filtro', 'pendente')
     page = request.args.get('page', 1, type=int)
 
-    # Filtrar apenas tickets das campanhas do usuario atual
-    user_campanhas_ids = [c.id for c in Campanha.query.filter_by(criador_id=current_user.id).all()]
-
     q = TicketAtendimento.query
-    if user_campanhas_ids:
-        q = q.filter(TicketAtendimento.campanha_id.in_(user_campanhas_ids))
-    else:
-        # Se nao tem campanhas, nao tem tickets
-        q = q.filter(TicketAtendimento.id == None)
 
     if filtro == 'pendente':
         q = q.filter_by(status='pendente')
@@ -3204,20 +3209,16 @@ def painel_atendimento():
         TicketAtendimento.data_criacao.asc()
     ).paginate(page=page, per_page=20)
 
-    # Estatísticas apenas dos tickets das campanhas do usuario
-    if user_campanhas_ids:
-        stats = {
-            'pendente': TicketAtendimento.query.filter(TicketAtendimento.campanha_id.in_(user_campanhas_ids), TicketAtendimento.status == 'pendente').count(),
-            'em_atendimento': TicketAtendimento.query.filter(TicketAtendimento.campanha_id.in_(user_campanhas_ids), TicketAtendimento.status == 'em_atendimento').count(),
-            'urgente': TicketAtendimento.query.filter(TicketAtendimento.campanha_id.in_(user_campanhas_ids), TicketAtendimento.prioridade == 'urgente', TicketAtendimento.status == 'pendente').count(),
-            'resolvido_hoje': TicketAtendimento.query.filter(
-                TicketAtendimento.campanha_id.in_(user_campanhas_ids),
-                TicketAtendimento.status == 'resolvido',
-                TicketAtendimento.data_resolucao >= datetime.utcnow().replace(hour=0, minute=0, second=0)
-            ).count()
-        }
-    else:
-        stats = {'pendente': 0, 'em_atendimento': 0, 'urgente': 0, 'resolvido_hoje': 0}
+    # Estatísticas
+    stats = {
+        'pendente': TicketAtendimento.query.filter_by(status='pendente').count(),
+        'em_atendimento': TicketAtendimento.query.filter_by(status='em_atendimento').count(),
+        'urgente': TicketAtendimento.query.filter_by(prioridade='urgente', status='pendente').count(),
+        'resolvido_hoje': TicketAtendimento.query.filter(
+            TicketAtendimento.status == 'resolvido',
+            TicketAtendimento.data_resolucao >= datetime.utcnow().replace(hour=0, minute=0, second=0)
+        ).count()
+    }
 
     return render_template('atendimento.html', tickets=tickets, filtro=filtro, stats=stats)
 
@@ -3225,7 +3226,7 @@ def painel_atendimento():
 @app.route('/atendimento/<int:id>')
 @login_required
 def detalhe_ticket(id):
-    ticket = verificar_acesso_ticket(id)
+    ticket = TicketAtendimento.query.get_or_404(id)
     # Buscar histórico de mensagens do contato
     logs = LogMsg.query.filter_by(contato_id=ticket.contato_id).order_by(LogMsg.data.desc()).limit(20).all()
     return render_template('ticket_detalhe.html', ticket=ticket, logs=logs)
@@ -3234,7 +3235,7 @@ def detalhe_ticket(id):
 @app.route('/atendimento/<int:id>/assumir', methods=['POST'])
 @login_required
 def assumir_ticket(id):
-    ticket = verificar_acesso_ticket(id)
+    ticket = TicketAtendimento.query.get_or_404(id)
 
     if ticket.status != 'pendente':
         flash('Ticket já está em atendimento', 'warning')
@@ -3252,7 +3253,7 @@ def assumir_ticket(id):
 @app.route('/atendimento/<int:id>/responder', methods=['POST'])
 @login_required
 def responder_ticket(id):
-    ticket = verificar_acesso_ticket(id)
+    ticket = TicketAtendimento.query.get_or_404(id)
     resposta = request.form.get('resposta', '').strip()
 
     if not resposta:
@@ -3302,7 +3303,7 @@ def responder_ticket(id):
 @app.route('/atendimento/<int:id>/cancelar', methods=['POST'])
 @login_required
 def cancelar_ticket(id):
-    ticket = verificar_acesso_ticket(id)
+    ticket = TicketAtendimento.query.get_or_404(id)
     ticket.status = 'cancelado'
     db.session.commit()
     flash('Ticket cancelado', 'info')
@@ -3455,8 +3456,7 @@ def logs():
         q = q.filter_by(direcao=direcao)
 
     logs = q.order_by(LogMsg.data.desc()).paginate(page=page, per_page=100)
-    # Filtrar apenas campanhas do usuario atual
-    camps = Campanha.query.filter_by(criador_id=current_user.id).order_by(Campanha.data_criacao.desc()).all()
+    camps = Campanha.query.order_by(Campanha.data_criacao.desc()).all()
 
     return render_template('logs.html', logs=logs, campanhas=camps, campanha_id=camp_id, direcao=direcao)
 
@@ -3465,15 +3465,13 @@ def logs():
 @login_required
 def relatorios():
     """Página de relatórios com dashboard executivo"""
-    # Filtrar apenas campanhas do usuario atual
-    campanhas = Campanha.query.filter_by(criador_id=current_user.id).order_by(Campanha.data_criacao.desc()).all()
+    campanhas = Campanha.query.order_by(Campanha.data_criacao.desc()).all()
 
     # Se houver uma campanha selecionada via query param
     campanha_id = request.args.get('campanha_id', type=int)
     campanha_selecionada = None
     if campanha_id:
-        # Verificar se a campanha pertence ao usuario
-        campanha_selecionada = Campanha.query.filter_by(id=campanha_id, criador_id=current_user.id).first()
+        campanha_selecionada = Campanha.query.get(campanha_id)
 
     return render_template('relatorios.html',
                           campanhas=campanhas,
@@ -3484,7 +3482,7 @@ def relatorios():
 @login_required
 def api_relatorios(campanha_id):
     """API para retornar dados de relatórios de uma campanha específica"""
-    campanha = verificar_acesso_campanha(campanha_id)
+    campanha = Campanha.query.get_or_404(campanha_id)
 
     # Atualizar estatísticas
     campanha.atualizar_stats()

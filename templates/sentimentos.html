@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard de Sentimentos{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>📊 Análise de Sentimentos e Satisfação</h2>
+</div>
+
+<!-- Estatísticas de Sentimento -->
+<div class="card mb-4">
+    <div class="card-header">
+        <h5 class="mb-0">Análise de Sentimento das Respostas</h5>
+    </div>
+    <div class="card-body">
+        <div class="row text-center">
+            <div class="col-md-2">
+                <div class="card bg-success text-white">
+                    <div class="card-body">
+                        <h3>{{ stats_sentimento.get('positivo', 0) }}</h3>
+                        <small>😊 Positivo</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card bg-secondary text-white">
+                    <div class="card-body">
+                        <h3>{{ stats_sentimento.get('neutro', 0) }}</h3>
+                        <small>😐 Neutro</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card bg-warning">
+                    <div class="card-body">
+                        <h3>{{ stats_sentimento.get('negativo', 0) }}</h3>
+                        <small>😟 Negativo</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card bg-danger text-white">
+                    <div class="card-body">
+                        <h3>{{ stats_sentimento.get('urgente', 0) }}</h3>
+                        <small>🚨 Urgente</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card bg-info text-white">
+                    <div class="card-body">
+                        <h3>{{ stats_sentimento.get('duvida', 0) }}</h3>
+                        <small>❓ Dúvida</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-2">
+                <div class="card" style="background-color: #ff6b6b; color: white;">
+                    <div class="card-body">
+                        <h3>{{ stats_sentimento.get('insatisfeito', 0) }}</h3>
+                        <small>😠 Insatisfeito</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Tickets por Prioridade -->
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">Tickets Pendentes por Prioridade</h6>
+            </div>
+            <div class="card-body">
+                <div class="list-group">
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        🚨 Urgente
+                        <span class="badge bg-danger">{{ stats_tickets.get('urgente', 0) }}</span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        ⚠️ Alta
+                        <span class="badge bg-warning text-dark">{{ stats_tickets.get('alta', 0) }}</span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        💬 Média
+                        <span class="badge bg-info">{{ stats_tickets.get('media', 0) }}</span>
+                    </div>
+                    <div class="list-group-item d-flex justify-content-between align-items-center">
+                        📝 Baixa
+                        <span class="badge bg-secondary">{{ stats_tickets.get('baixa', 0) }}</span>
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <a href="{{ url_for('painel_atendimento') }}" class="btn btn-primary btn-sm w-100">
+                        Ver Todos os Tickets
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">Top 10 - FAQs Mais Utilizadas</h6>
+            </div>
+            <div class="card-body">
+                {% if faqs_top %}
+                    <div class="list-group">
+                        {% for faq in faqs_top %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>{{ faq.categoria }}</strong>
+                                <br>
+                                <small class="text-muted">{{ faq.get_gatilhos()[:3]|join(', ') }}</small>
+                            </div>
+                            <span class="badge bg-primary">{{ faq.contador_uso }} usos</span>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <p class="text-muted">Nenhuma FAQ utilizada ainda.</p>
+                {% endif %}
+                <div class="mt-3">
+                    <a href="{{ url_for('gerenciar_faq') }}" class="btn btn-outline-primary btn-sm w-100">
+                        Gerenciar FAQs
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Dicas -->
+<div class="alert alert-info">
+    <h6><i class="bi bi-lightbulb"></i> Dicas:</h6>
+    <ul class="mb-0">
+        <li>Mensagens com sentimento <strong>urgente</strong> criam automaticamente tickets com prioridade alta</li>
+        <li>FAQs bem configuradas reduzem a necessidade de atendimento manual</li>
+        <li>Monitore mensagens com sentimento <strong>insatisfeito</strong> para melhorar o atendimento</li>
+    </ul>
+</div>
+{% endblock %}

@@ -20,7 +20,7 @@ celery = Celery(
     include=['tasks']  # Importar tasks automaticamente
 )
 
-# Configurações
+# Configurações otimizadas para produção
 celery.conf.update(
     # Serialização
     task_serializer='json',
@@ -30,16 +30,20 @@ celery.conf.update(
     enable_utc=True,
 
     # Resultados
-    result_expires=3600,  # 1 hora
-    result_backend_transport_options={'master_name': 'mymaster'},
+    result_expires=3600,  # 1 hora (limpa automaticamente)
+    result_extended=True,  # Armazena info adicional sobre tasks
 
-    # Retry
+    # Retry e confiabilidade
     task_acks_late=True,  # Acknowledge task após completar (permite retry em falha)
-    task_reject_on_worker_lost=True,
+    task_reject_on_worker_lost=True,  # Reprocessa se worker cair
 
     # Performance
     worker_prefetch_multiplier=1,  # Pega 1 task por vez (melhor para tasks longas)
     worker_max_tasks_per_child=100,  # Reinicia worker após 100 tasks (previne memory leak)
+
+    # Segurança e estabilidade
+    broker_connection_retry_on_startup=True,  # Retry ao conectar no broker
+    worker_cancel_long_running_tasks_on_connection_loss=False,  # Não cancela tasks em andamento
 
     # Logging
     worker_log_format='[%(asctime)s: %(levelname)s/%(processName)s] %(message)s',

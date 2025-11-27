@@ -212,7 +212,7 @@ class Campanha(db.Model):
     enviados_hoje = db.Column(db.Integer, default=0)
     data_ultimo_envio = db.Column(db.Date)
 
-    criador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    criador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id', ondelete='SET NULL'))
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     data_inicio = db.Column(db.DateTime)
     data_fim = db.Column(db.DateTime)
@@ -354,7 +354,7 @@ class Campanha(db.Model):
 class Contato(db.Model):
     __tablename__ = 'contatos'
     id = db.Column(db.Integer, primary_key=True)
-    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas.id'), nullable=False)
+    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas.id', ondelete='CASCADE'), nullable=False)
 
     nome = db.Column(db.String(200), nullable=False)
     data_nascimento = db.Column(db.Date) # NOVO
@@ -418,7 +418,7 @@ class Contato(db.Model):
 class Telefone(db.Model):
     __tablename__ = 'telefones'
     id = db.Column(db.Integer, primary_key=True)
-    contato_id = db.Column(db.Integer, db.ForeignKey('contatos.id'), nullable=False)
+    contato_id = db.Column(db.Integer, db.ForeignKey('contatos.id', ondelete='CASCADE'), nullable=False)
     
     numero = db.Column(db.String(20), nullable=False)
     numero_fmt = db.Column(db.String(20)) # 558599999999
@@ -437,8 +437,8 @@ class Telefone(db.Model):
 class LogMsg(db.Model):
     __tablename__ = 'logs'
     id = db.Column(db.Integer, primary_key=True)
-    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas.id'))
-    contato_id = db.Column(db.Integer, db.ForeignKey('contatos.id'))
+    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas.id', ondelete='CASCADE'))
+    contato_id = db.Column(db.Integer, db.ForeignKey('contatos.id', ondelete='CASCADE'))
     direcao = db.Column(db.String(10))
     telefone = db.Column(db.String(20))
     mensagem = db.Column(db.Text)
@@ -458,7 +458,7 @@ class RespostaAutomatica(db.Model):
     ativa = db.Column(db.Boolean, default=True)
     prioridade = db.Column(db.Integer, default=1)
     contador_uso = db.Column(db.Integer, default=0)
-    criador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))  # NOVO - FAQ privado do usuário
+    criador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id', ondelete='SET NULL'))  # NOVO - FAQ privado do usuário
     global_faq = db.Column(db.Boolean, default=False)  # NOVO - FAQ global (apenas admin)
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -477,12 +477,12 @@ class RespostaAutomatica(db.Model):
 class TicketAtendimento(db.Model):
     __tablename__ = 'tickets_atendimento'
     id = db.Column(db.Integer, primary_key=True)
-    contato_id = db.Column(db.Integer, db.ForeignKey('contatos.id'))
-    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas.id'))
+    contato_id = db.Column(db.Integer, db.ForeignKey('contatos.id', ondelete='CASCADE'))
+    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas.id', ondelete='CASCADE'))
     mensagem_usuario = db.Column(db.Text)
     status = db.Column(db.String(20), default='pendente')  # pendente, em_atendimento, resolvido, cancelado
     prioridade = db.Column(db.String(20), default='media')  # baixa, media, alta, urgente
-    atendente_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    atendente_id = db.Column(db.Integer, db.ForeignKey('usuarios.id', ondelete='SET NULL'))
     notas_atendente = db.Column(db.Text)
     resposta = db.Column(db.Text)
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
@@ -497,7 +497,7 @@ class TicketAtendimento(db.Model):
 class TentativaContato(db.Model):
     __tablename__ = 'tentativas_contato'
     id = db.Column(db.Integer, primary_key=True)
-    contato_id = db.Column(db.Integer, db.ForeignKey('contatos.id'))
+    contato_id = db.Column(db.Integer, db.ForeignKey('contatos.id', ondelete='CASCADE'))
     numero_tentativa = db.Column(db.Integer)
     data_tentativa = db.Column(db.DateTime, default=datetime.utcnow)
     proxima_tentativa = db.Column(db.DateTime)

@@ -4000,16 +4000,43 @@ def painel_atendimento():
     tickets_agrupados = PaginacaoSimulada(grupos_paginados, page, per_page, total)
 
     # Estatísticas apenas dos tickets das campanhas do usuario
+    # IMPORTANTE: Contar grupos (contato+campanha), não tickets individuais
     if user_campanhas_ids:
+        # Buscar tickets pendentes e agrupar
+        tickets_pendentes = TicketAtendimento.query.filter(
+            TicketAtendimento.campanha_id.in_(user_campanhas_ids),
+            TicketAtendimento.status == 'pendente'
+        ).all()
+        grupos_pendentes = set((t.contato_id, t.campanha_id) for t in tickets_pendentes)
+
+        # Em atendimento
+        tickets_atendimento = TicketAtendimento.query.filter(
+            TicketAtendimento.campanha_id.in_(user_campanhas_ids),
+            TicketAtendimento.status == 'em_atendimento'
+        ).all()
+        grupos_atendimento = set((t.contato_id, t.campanha_id) for t in tickets_atendimento)
+
+        # Urgentes pendentes
+        tickets_urgentes = TicketAtendimento.query.filter(
+            TicketAtendimento.campanha_id.in_(user_campanhas_ids),
+            TicketAtendimento.prioridade == 'urgente',
+            TicketAtendimento.status == 'pendente'
+        ).all()
+        grupos_urgentes = set((t.contato_id, t.campanha_id) for t in tickets_urgentes)
+
+        # Resolvidos hoje
+        tickets_resolvidos = TicketAtendimento.query.filter(
+            TicketAtendimento.campanha_id.in_(user_campanhas_ids),
+            TicketAtendimento.status == 'resolvido',
+            TicketAtendimento.data_resolucao >= datetime.utcnow().replace(hour=0, minute=0, second=0)
+        ).all()
+        grupos_resolvidos = set((t.contato_id, t.campanha_id) for t in tickets_resolvidos)
+
         stats = {
-            'pendente': TicketAtendimento.query.filter(TicketAtendimento.campanha_id.in_(user_campanhas_ids), TicketAtendimento.status == 'pendente').count(),
-            'em_atendimento': TicketAtendimento.query.filter(TicketAtendimento.campanha_id.in_(user_campanhas_ids), TicketAtendimento.status == 'em_atendimento').count(),
-            'urgente': TicketAtendimento.query.filter(TicketAtendimento.campanha_id.in_(user_campanhas_ids), TicketAtendimento.prioridade == 'urgente', TicketAtendimento.status == 'pendente').count(),
-            'resolvido_hoje': TicketAtendimento.query.filter(
-                TicketAtendimento.campanha_id.in_(user_campanhas_ids),
-                TicketAtendimento.status == 'resolvido',
-                TicketAtendimento.data_resolucao >= datetime.utcnow().replace(hour=0, minute=0, second=0)
-            ).count()
+            'pendente': len(grupos_pendentes),
+            'em_atendimento': len(grupos_atendimento),
+            'urgente': len(grupos_urgentes),
+            'resolvido_hoje': len(grupos_resolvidos)
         }
     else:
         stats = {'pendente': 0, 'em_atendimento': 0, 'urgente': 0, 'resolvido_hoje': 0}
@@ -4043,12 +4070,26 @@ def assumir_ticket(id):
         flash('Ticket já está em atendimento', 'warning')
         return redirect(url_for('detalhe_ticket', id=id))
 
+    # Assumir ticket atual
     ticket.status = 'em_atendimento'
     ticket.atendente_id = current_user.id
     ticket.data_atendimento = datetime.utcnow()
+
+    # Assumir TODOS os tickets relacionados (mesmo contato e campanha)
+    tickets_relacionados = TicketAtendimento.query.filter_by(
+        contato_id=ticket.contato_id,
+        campanha_id=ticket.campanha_id,
+        status='pendente'
+    ).all()
+
+    for t in tickets_relacionados:
+        t.status = 'em_atendimento'
+        t.atendente_id = current_user.id
+        t.data_atendimento = datetime.utcnow()
+
     db.session.commit()
 
-    flash('Ticket assumido!', 'success')
+    flash(f'✅ {len(tickets_relacionados)} ticket(s) assumido(s)!', 'success')
     return redirect(url_for('detalhe_ticket', id=id))
 
 
@@ -4098,13 +4139,25 @@ def responder_ticket(id):
             erro_msg = resultado
 
     if enviado:
-        # Resolver ticket
+        # Resolver ticket atual
         ticket.status = 'resolvido'
         ticket.data_resolucao = datetime.utcnow()
         ticket.resposta = resposta
+
+        # Resolver TODOS os tickets relacionados (mesmo contato e campanha)
+        tickets_relacionados = TicketAtendimento.query.filter_by(
+            contato_id=ticket.contato_id,
+            campanha_id=ticket.campanha_id
+        ).filter(TicketAtendimento.status != 'resolvido').all()
+
+        for t in tickets_relacionados:
+            t.status = 'resolvido'
+            t.data_resolucao = datetime.utcnow()
+            t.resposta = resposta
+
         db.session.commit()
 
-        flash('✅ Resposta enviada e ticket resolvido com sucesso!', 'success')
+        flash(f'✅ Resposta enviada e {len(tickets_relacionados)} ticket(s) resolvido(s) com sucesso!', 'success')
     else:
         msg_erro = f'❌ Erro ao enviar resposta via WhatsApp'
         if erro_msg:
@@ -4118,9 +4171,22 @@ def responder_ticket(id):
 @login_required
 def cancelar_ticket(id):
     ticket = verificar_acesso_ticket(id)
+
+    # Cancelar ticket atual
     ticket.status = 'cancelado'
+
+    # Cancelar TODOS os tickets relacionados (mesmo contato e campanha)
+    tickets_relacionados = TicketAtendimento.query.filter_by(
+        contato_id=ticket.contato_id,
+        campanha_id=ticket.campanha_id
+    ).filter(TicketAtendimento.status.in_(['pendente', 'em_atendimento'])).all()
+
+    for t in tickets_relacionados:
+        t.status = 'cancelado'
+
     db.session.commit()
-    flash('Ticket cancelado', 'info')
+
+    flash(f'✅ {len(tickets_relacionados)} ticket(s) cancelado(s)', 'info')
     return redirect(url_for('painel_atendimento'))
 
 

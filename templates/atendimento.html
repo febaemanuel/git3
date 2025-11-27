@@ -76,35 +76,49 @@
     <div class="card-body">
         {% if tickets.items %}
             <div class="list-group">
-                {% for ticket in tickets.items %}
-                <a href="{{ url_for('detalhe_ticket', id=ticket.id) }}"
-                   class="list-group-item list-group-item-action {% if ticket.prioridade == 'urgente' %}border-danger{% endif %}">
+                {% for grupo in tickets.items %}
+                <a href="{{ url_for('detalhe_ticket', id=grupo.ticket_principal.id) }}"
+                   class="list-group-item list-group-item-action {% if grupo.prioridade == 'urgente' %}border-danger{% endif %}">
                     <div class="d-flex w-100 justify-content-between">
                         <h6 class="mb-1">
-                            {% if ticket.prioridade == 'urgente' %}🚨{% elif ticket.prioridade == 'alta' %}⚠️{% else %}💬{% endif %}
-                            {{ ticket.contato.nome if ticket.contato else 'Sem contato' }}
+                            {% if grupo.prioridade == 'urgente' %}🚨{% elif grupo.prioridade == 'alta' %}⚠️{% else %}💬{% endif %}
+                            {{ grupo.contato.nome if grupo.contato else 'Sem contato' }}
 
-                            {% if ticket.prioridade == 'urgente' %}
+                            {% if grupo.prioridade == 'urgente' %}
                                 <span class="badge bg-danger">URGENTE</span>
-                            {% elif ticket.prioridade == 'alta' %}
+                            {% elif grupo.prioridade == 'alta' %}
                                 <span class="badge bg-warning text-dark">Alta</span>
                             {% endif %}
+
+                            {% if grupo.count > 1 %}
+                                <span class="badge bg-info">{{ grupo.count }} mensagens</span>
+                            {% endif %}
                         </h6>
-                        <small class="text-muted">{{ ticket.data_criacao.strftime('%d/%m/%Y %H:%M') }}</small>
+                        <small class="text-muted">{{ grupo.data_criacao.strftime('%d/%m/%Y %H:%M') }}</small>
                     </div>
-                    <p class="mb-1 text-truncate">{{ ticket.mensagem_usuario }}</p>
+
+                    <!-- Exibir todas as mensagens do grupo -->
+                    {% for ticket in grupo.tickets[:3] %}
+                    <p class="mb-1 {% if loop.index > 1 %}text-muted small{% endif %}">
+                        {{ ticket.mensagem_usuario }}
+                    </p>
+                    {% endfor %}
+                    {% if grupo.count > 3 %}
+                    <p class="mb-1 text-muted small"><em>... e mais {{ grupo.count - 3 }} mensagens</em></p>
+                    {% endif %}
+
                     <div class="d-flex justify-content-between align-items-center">
                         <small class="text-muted">
-                            Campanha: {{ ticket.campanha.nome if ticket.campanha else 'N/A' }}
+                            Campanha: {{ grupo.campanha.nome if grupo.campanha else 'N/A' }}
                         </small>
                         <div>
-                            {% if ticket.status == 'pendente' %}
+                            {% if grupo.status == 'pendente' %}
                                 <span class="badge bg-warning">Pendente</span>
-                            {% elif ticket.status == 'em_atendimento' %}
+                            {% elif grupo.status == 'em_atendimento' %}
                                 <span class="badge bg-primary">
-                                    Em atendimento - {{ ticket.atendente.nome if ticket.atendente else '' }}
+                                    Em atendimento - {{ grupo.atendente.nome if grupo.atendente else '' }}
                                 </span>
-                            {% elif ticket.status == 'resolvido' %}
+                            {% elif grupo.status == 'resolvido' %}
                                 <span class="badge bg-success">Resolvido</span>
                             {% endif %}
                         </div>

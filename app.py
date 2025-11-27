@@ -128,22 +128,49 @@ class Usuario(UserMixin, db.Model):
         return check_password_hash(self.senha_hash, senha)
 
 
-class ConfigWhatsApp(db.Model):
-    __tablename__ = 'config_whatsapp'
+class ConfigGlobal(db.Model):
+    """Configurações globais da Evolution API (definidas pelo admin)"""
+    __tablename__ = 'config_global'
     id = db.Column(db.Integer, primary_key=True)
-    api_url = db.Column(db.String(200))
-    instance_name = db.Column(db.String(100))
-    api_key = db.Column(db.String(200))
+    evolution_api_url = db.Column(db.String(200))  # Ex: https://api.evolution.com
+    evolution_api_key = db.Column(db.String(200))  # Global API key
     ativo = db.Column(db.Boolean, default=False)
-    tempo_entre_envios = db.Column(db.Integer, default=15)
-    limite_diario = db.Column(db.Integer, default=100)
     atualizado_em = db.Column(db.DateTime, default=datetime.utcnow)
+    atualizado_por = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
 
     @classmethod
     def get(cls):
+        """Obtém ou cria configuração global"""
         c = cls.query.first()
         if not c:
             c = cls()
+            db.session.add(c)
+            db.session.commit()
+        return c
+
+
+class ConfigWhatsApp(db.Model):
+    """Configuração de instância WhatsApp por usuário (criada automaticamente)"""
+    __tablename__ = 'config_whatsapp'
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, unique=True)
+    instance_name = db.Column(db.String(100))  # Gerado automaticamente: hospital_user_{id}
+    conectado = db.Column(db.Boolean, default=False)  # Status da conexão
+    tempo_entre_envios = db.Column(db.Integer, default=15)
+    limite_diario = db.Column(db.Integer, default=100)
+    data_conexao = db.Column(db.DateTime)  # Quando conectou pela última vez
+    atualizado_em = db.Column(db.DateTime, default=datetime.utcnow)
+
+    usuario = db.relationship('Usuario', backref='config_whatsapp_obj')
+
+    @classmethod
+    def get(cls, usuario_id):
+        """Obtém ou cria config para um usuário específico"""
+        c = cls.query.filter_by(usuario_id=usuario_id).first()
+        if not c:
+            # Gerar instance_name automaticamente
+            instance_name = f"hospital_user_{usuario_id}"
+            c = cls(usuario_id=usuario_id, instance_name=instance_name)
             db.session.add(c)
             db.session.commit()
         return c
@@ -397,7 +424,11 @@ class RespostaAutomatica(db.Model):
     ativa = db.Column(db.Boolean, default=True)
     prioridade = db.Column(db.Integer, default=1)
     contador_uso = db.Column(db.Integer, default=0)
+    criador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))  # NOVO - FAQ privado do usuário
+    global_faq = db.Column(db.Boolean, default=False)  # NOVO - FAQ global (apenas admin)
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+
+    criador = db.relationship('Usuario', backref='faqs_criados')
 
     def get_gatilhos(self):
         try:
@@ -588,12 +619,31 @@ class SistemaFAQ:
     """Sistema de respostas automáticas"""
 
     @staticmethod
-    def buscar_resposta(texto):
-        """Busca resposta automática baseada no texto"""
+    def buscar_resposta(texto, usuario_id=None):
+        """Busca resposta automática baseada no texto
+
+        Busca em:
+        1. FAQs globais (global_faq=True)
+        2. FAQs privados do usuário (criador_id=usuario_id)
+        """
         texto_lower = texto.lower()
 
-        # Buscar no banco de dados
-        faqs = RespostaAutomatica.query.filter_by(ativa=True).order_by(RespostaAutomatica.prioridade.desc()).all()
+        # Buscar FAQs globais + FAQs do usuário
+        query = RespostaAutomatica.query.filter_by(ativa=True)
+
+        if usuario_id:
+            # FAQs globais OU FAQs do usuário
+            query = query.filter(
+                db.or_(
+                    RespostaAutomatica.global_faq == True,
+                    RespostaAutomatica.criador_id == usuario_id
+                )
+            )
+        else:
+            # Apenas FAQs globais (fallback se não tiver usuário)
+            query = query.filter_by(global_faq=True)
+
+        faqs = query.order_by(RespostaAutomatica.prioridade.desc()).all()
 
         for faq in faqs:
             gatilhos = faq.get_gatilhos()
@@ -844,14 +894,39 @@ Responda APENAS com o JSON, sem texto adicional."""
 # =============================================================================
 
 class WhatsApp:
-    def __init__(self):
-        c = ConfigWhatsApp.get()
-        self.url = (c.api_url or '').rstrip('/')
-        self.instance = c.instance_name or ''
-        self.key = c.api_key or ''
-        self.ativo = c.ativo
+    def __init__(self, usuario_id=None):
+        """
+        Inicializa conexão WhatsApp para um usuário específico
+        API URL e Key vêm do ConfigGlobal (admin)
+        Instance name é única por usuário
+
+        Args:
+            usuario_id: ID do usuário (obrigatório)
+        """
+        if not usuario_id:
+            # Fallback: pegar do current_user se disponível
+            from flask_login import current_user
+            if current_user and current_user.is_authenticated:
+                usuario_id = current_user.id
+            else:
+                raise ValueError("usuario_id é obrigatório para WhatsApp")
+
+        # Buscar config global (API URL e Key definidos pelo admin)
+        cfg_global = ConfigGlobal.get()
+
+        # Buscar config do usuário (instance name única)
+        cfg_user = ConfigWhatsApp.get(usuario_id)
+
+        self.url = (cfg_global.evolution_api_url or '').rstrip('/')
+        self.key = cfg_global.evolution_api_key or ''
+        self.instance = cfg_user.instance_name or ''
+        self.ativo = cfg_global.ativo  # Global ativo
+        self.conectado = cfg_user.conectado  # Usuário conectado
+        self.usuario_id = usuario_id
+        self.cfg_user = cfg_user  # Guardar referência para atualizar depois
 
     def ok(self):
+        """Verifica se configuração global está ativa"""
         return bool(self.ativo and self.url and self.instance and self.key)
 
     def _headers(self):
@@ -1277,7 +1352,8 @@ def validar_campanha_bg(campanha_id):
             camp.status_msg = 'Verificando numeros...'
             db.session.commit()
 
-            ws = WhatsApp()
+            # Usar WhatsApp do criador da campanha
+            ws = WhatsApp(camp.criador_id)
             if not ws.ok():
                 camp.status = 'erro'
                 camp.status_msg = 'WhatsApp nao configurado'
@@ -1356,7 +1432,7 @@ def enviar_campanha_bg(campanha_id):
             if not camp:
                 return
 
-            ws = WhatsApp()
+            ws = WhatsApp(camp.criador_id)
             if not ws.ok():
                 camp.status = 'erro'
                 camp.status_msg = 'WhatsApp nao configurado'
@@ -1547,11 +1623,6 @@ Se ainda tiver interesse, responda URGENTE nesta mensagem ou ligue para (85) 336
 Caso contrário, sua vaga será disponibilizada."""
             }
 
-            ws = WhatsApp()
-            if not ws.ok():
-                logger.error("WhatsApp não configurado")
-                return
-
             data_limite = datetime.utcnow() - timedelta(days=config.intervalo_dias)
 
             # Buscar contatos que precisam de follow-up
@@ -1604,6 +1675,16 @@ Caso contrário, sua vaga será disponibilizada."""
                 msg = msg_template.replace('{nome}', c.nome).replace(
                     '{procedimento}', c.procedimento or 'o procedimento'
                 ).replace('{dias}', str(config.intervalo_dias))
+
+                # Criar WhatsApp instance para o criador da campanha
+                if not c.campanha or not c.campanha.criador_id:
+                    logger.warning(f"Contato {c.id} sem campanha ou criador válido")
+                    continue
+
+                ws = WhatsApp(c.campanha.criador_id)
+                if not ws.ok():
+                    logger.error(f"WhatsApp não configurado para usuário {c.campanha.criador_id}")
+                    continue
 
                 telefones = c.telefones.filter_by(whatsapp_valido=True).all()
                 enviado = False
@@ -1758,13 +1839,15 @@ def criar_faqs_padrao():
             faq = RespostaAutomatica(
                 categoria=faq_data['categoria'],
                 resposta=faq_data['resposta'],
-                prioridade=faq_data['prioridade']
+                prioridade=faq_data['prioridade'],
+                global_faq=True,  # FAQs padrão são globais (todos veem)
+                criador_id=None  # FAQs globais não tem criador
             )
             faq.set_gatilhos(faq_data['gatilhos'])
             db.session.add(faq)
 
         db.session.commit()
-        logger.info("FAQs padrão criadas")
+        logger.info("FAQs padrão globais criadas")
 
     except Exception as e:
         logger.error(f"Erro ao criar FAQs padrão: {e}")
@@ -2719,7 +2802,7 @@ def dashboard():
     for c in camps:
         c.atualizar_stats()
 
-    ws = WhatsApp()
+    ws = WhatsApp(current_user.id)
     ws_ativo = ws.ok()
     ws_conn = False
     if ws_ativo:
@@ -2845,7 +2928,7 @@ def validar_campanha(id):
     if camp.status in ['validando', 'em_andamento']:
         return jsonify({'erro': 'Ja em processamento'}), 400
 
-    ws = WhatsApp()
+    ws = WhatsApp(camp.criador_id)
     if not ws.ok():
         return jsonify({'erro': 'WhatsApp nao configurado'}), 400
 
@@ -2862,13 +2945,13 @@ def iniciar_campanha(id):
     camp = verificar_acesso_campanha(id)
     if camp.status == 'em_andamento':
         return jsonify({'erro': 'Ja em andamento'}), 400
-    
+
     # Verifica se tem pendentes ou prontos
     pendentes = camp.contatos.filter(Contato.status.in_(['pendente', 'pronto_envio'])).count()
     if pendentes == 0:
         return jsonify({'erro': 'Nenhum contato para enviar'}), 400
 
-    ws = WhatsApp()
+    ws = WhatsApp(camp.criador_id)
     conn, _ = ws.conectado()
     if not conn:
         return jsonify({'erro': 'WhatsApp desconectado'}), 400
@@ -3039,7 +3122,7 @@ def api_rejeitar(id):
 @login_required
 def api_reenviar(id):
     c = verificar_acesso_contato(id)
-    ws = WhatsApp()
+    ws = WhatsApp(c.campanha.criador_id)
     if not ws.ok():
         return jsonify({'erro': 'WhatsApp nao configurado'}), 400
 
@@ -3079,7 +3162,7 @@ def api_reenviar(id):
 @login_required
 def api_revalidar(id):
     c = verificar_acesso_contato(id)
-    ws = WhatsApp()
+    ws = WhatsApp(c.campanha.criador_id)
     if not ws.ok():
         return jsonify({'erro': 'WhatsApp nao configurado'}), 400
 
@@ -3161,36 +3244,138 @@ def editar_contato(id):
 
 
 # Configuracoes
-@app.route('/configuracoes', methods=['GET', 'POST'])
+@app.route('/configuracoes')
+@login_required
+def configuracoes():
+    """
+    Tela de configurações WhatsApp
+    - ADMIN: Pode configurar API global (URL e Key)
+    - USUÁRIO: Apenas conecta seu WhatsApp (instância criada automaticamente)
+    """
+    cfg_global = ConfigGlobal.get()
+    cfg_user = ConfigWhatsApp.get(current_user.id)
+
+    # Verificar status de conexão
+    conectado = False
+    status_msg = "Não configurado"
+
+    if cfg_global.ativo:
+        try:
+            ws = WhatsApp(current_user.id)
+            if ws.ok():
+                conectado, status_msg = ws.conectado()
+        except Exception as e:
+            status_msg = f"Erro: {str(e)}"
+
+    return render_template('configuracoes.html',
+                         config_global=cfg_global,
+                         config_user=cfg_user,
+                         conectado=conectado,
+                         status_msg=status_msg,
+                         is_admin=current_user.is_admin)
+
+
+@app.route('/configuracoes/global', methods=['POST'])
 @login_required
 @admin_required
-def configuracoes():
-    cfg = ConfigWhatsApp.get()
+def configuracoes_global():
+    """Admin atualiza configuração global da Evolution API"""
+    cfg = ConfigGlobal.get()
 
-    if request.method == 'POST':
-        cfg.api_url = request.form.get('api_url', '').strip().rstrip('/')
-        cfg.instance_name = request.form.get('instance_name', '').strip()
-        cfg.api_key = request.form.get('api_key', '').strip()
-        cfg.ativo = request.form.get('ativo') == 'on'
-        cfg.tempo_entre_envios = int(request.form.get('tempo_entre_envios', 15))
-        cfg.limite_diario = int(request.form.get('limite_diario', 100))
-        cfg.atualizado_em = datetime.utcnow()
-        db.session.commit()
-        flash('Salvo!', 'success')
-        return redirect(url_for('configuracoes'))
+    cfg.evolution_api_url = request.form.get('api_url', '').strip().rstrip('/')
+    cfg.evolution_api_key = request.form.get('api_key', '').strip()
+    cfg.ativo = request.form.get('ativo') == 'on'
+    cfg.atualizado_em = datetime.utcnow()
+    cfg.atualizado_por = current_user.id
+    db.session.commit()
 
-    ws = WhatsApp()
-    conn, msg = ws.conectado() if ws.ok() else (False, 'Nao configurado')
+    flash('✅ Configuração global salva com sucesso!', 'success')
+    return redirect(url_for('configuracoes'))
 
-    return render_template('configuracoes.html', config=cfg, conectado=conn, status_msg=msg)
+
+@app.route('/configuracoes/usuario', methods=['POST'])
+@login_required
+def configuracoes_usuario():
+    """Usuário atualiza suas configurações de envio"""
+    cfg = ConfigWhatsApp.get(current_user.id)
+
+    cfg.tempo_entre_envios = int(request.form.get('tempo_entre_envios', 15))
+    cfg.limite_diario = int(request.form.get('limite_diario', 100))
+    cfg.atualizado_em = datetime.utcnow()
+    db.session.commit()
+
+    flash('✅ Configurações atualizadas!', 'success')
+    return redirect(url_for('configuracoes'))
+
+
+@app.route('/api/whatsapp/conectar', methods=['POST'])
+@login_required
+def api_conectar_whatsapp():
+    """
+    Conectar WhatsApp automaticamente:
+    1. Verifica config global
+    2. Cria instância se necessário
+    3. Retorna QR code
+    """
+    try:
+        # Verificar se admin configurou API global
+        cfg_global = ConfigGlobal.get()
+        if not cfg_global.ativo or not cfg_global.evolution_api_url or not cfg_global.evolution_api_key:
+            return jsonify({
+                'erro': 'Sistema não configurado. Entre em contato com o administrador.'
+            }), 400
+
+        # Inicializar WhatsApp com config do usuário
+        ws = WhatsApp(current_user.id)
+
+        if not ws.ok():
+            return jsonify({'erro': 'Erro ao inicializar WhatsApp'}), 500
+
+        # Tentar criar instância (se já existir, retorna sucesso)
+        sucesso_criar, msg_criar = ws.criar_instancia()
+
+        if not sucesso_criar and 'ja existe' not in msg_criar.lower():
+            return jsonify({'erro': f'Erro ao criar instância: {msg_criar}'}), 500
+
+        # Obter QR code
+        ok, result = ws.qrcode()
+        if ok:
+            # Atualizar status no banco
+            ws.cfg_user.conectado = False  # Ainda não conectou, apenas obteve QR
+            ws.cfg_user.atualizado_em = datetime.utcnow()
+            db.session.commit()
+
+            return jsonify({
+                'sucesso': True,
+                'qrcode': result,
+                'instance_name': ws.instance
+            })
+        else:
+            if 'conectado' in result.lower() or 'open' in result.lower():
+                # Já está conectado!
+                ws.cfg_user.conectado = True
+                ws.cfg_user.data_conexao = datetime.utcnow()
+                db.session.commit()
+
+                return jsonify({
+                    'conectado': True,
+                    'mensagem': 'WhatsApp já está conectado!',
+                    'instance_name': ws.instance
+                })
+            return jsonify({'erro': result}), 400
+
+    except Exception as e:
+        logger.error(f"Erro ao conectar WhatsApp: {str(e)}")
+        return jsonify({'erro': str(e)}), 500
 
 
 @app.route('/api/whatsapp/qrcode')
 @login_required
 def api_qrcode():
-    ws = WhatsApp()
+    """Obter QR code (mantido por compatibilidade, mas use /conectar)"""
+    ws = WhatsApp(current_user.id)
     if not ws.ok():
-        return jsonify({'erro': 'Nao configurado'}), 400
+        return jsonify({'erro': 'Sistema não configurado'}), 400
 
     ok, result = ws.qrcode()
     if ok:
@@ -3204,7 +3389,7 @@ def api_qrcode():
 @app.route('/api/whatsapp/status')
 @login_required
 def api_ws_status():
-    ws = WhatsApp()
+    ws = WhatsApp(current_user.id)
     if not ws.ok():
         return jsonify({'conectado': False, 'mensagem': 'Nao configurado'})
     conn, msg = ws.conectado()
@@ -3319,7 +3504,7 @@ def webhook():
         db.session.add(log)
         db.session.commit()
 
-        ws = WhatsApp()
+        ws = WhatsApp(c.campanha.criador_id)
 
         # Verificar primeiro se é uma resposta válida da campanha (1, 2, 3)
         # Isso impede que respostas válidas sejam tratadas como FAQ ou tickets
@@ -3333,7 +3518,9 @@ def webhook():
         # EXCEÇÃO: Se status é 'concluido', SEMPRE permitir FAQ (mesmo para respostas válidas como 1, 2, 3)
         resposta_faq = None
         if c.status == 'concluido' or (c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio'] and not respostas_validas):
-            resposta_faq = SistemaFAQ.buscar_resposta(texto)
+            # Buscar FAQs globais + FAQs do criador da campanha
+            usuario_id = c.campanha.criador_id if c.campanha else None
+            resposta_faq = SistemaFAQ.buscar_resposta(texto, usuario_id)
 
         # Verificar se precisa criar ticket para atendimento humano
         # IMPORTANTE: NÃO criar ticket se está em fluxo ativo da campanha
@@ -3551,7 +3738,13 @@ def webhook_check():
 @app.route('/faq')
 @login_required
 def gerenciar_faq():
-    faqs = RespostaAutomatica.query.order_by(RespostaAutomatica.prioridade.desc()).all()
+    # Mostrar FAQs globais + FAQs do usuário
+    faqs = RespostaAutomatica.query.filter(
+        db.or_(
+            RespostaAutomatica.global_faq == True,
+            RespostaAutomatica.criador_id == current_user.id
+        )
+    ).order_by(RespostaAutomatica.prioridade.desc()).all()
     return render_template('faq.html', faqs=faqs)
 
 
@@ -3562,9 +3755,15 @@ def criar_faq():
     resposta = request.form.get('resposta', '').strip()
     gatilhos_str = request.form.get('gatilhos', '').strip()
     prioridade = int(request.form.get('prioridade', 1))
+    global_faq = request.form.get('global_faq') == 'on'  # Checkbox
 
     if not categoria or not resposta or not gatilhos_str:
         flash('Preencha todos os campos', 'danger')
+        return redirect(url_for('gerenciar_faq'))
+
+    # Apenas admin pode criar FAQs globais
+    if global_faq and not current_user.is_admin:
+        flash('❌ Apenas administradores podem criar FAQs globais', 'danger')
         return redirect(url_for('gerenciar_faq'))
 
     # Converter gatilhos de string para lista
@@ -3573,13 +3772,16 @@ def criar_faq():
     faq = RespostaAutomatica(
         categoria=categoria,
         resposta=resposta,
-        prioridade=prioridade
+        prioridade=prioridade,
+        global_faq=global_faq,
+        criador_id=None if global_faq else current_user.id  # Global não tem criador
     )
     faq.set_gatilhos(gatilhos)
     db.session.add(faq)
     db.session.commit()
 
-    flash('FAQ criado com sucesso!', 'success')
+    tipo = 'global' if global_faq else 'privado'
+    flash(f'✅ FAQ {tipo} criado com sucesso!', 'success')
     return redirect(url_for('gerenciar_faq'))
 
 
@@ -3587,6 +3789,16 @@ def criar_faq():
 @login_required
 def editar_faq(id):
     faq = RespostaAutomatica.query.get_or_404(id)
+
+    # Verificar permissões: só pode editar se for o criador OU se for global e for admin
+    if faq.global_faq:
+        if not current_user.is_admin:
+            flash('❌ Apenas administradores podem editar FAQs globais', 'danger')
+            return redirect(url_for('gerenciar_faq'))
+    else:
+        if faq.criador_id != current_user.id:
+            flash('❌ Você não pode editar FAQs de outros usuários', 'danger')
+            return redirect(url_for('gerenciar_faq'))
 
     faq.categoria = request.form.get('categoria', '').strip()
     faq.resposta = request.form.get('resposta', '').strip()
@@ -3598,7 +3810,7 @@ def editar_faq(id):
     faq.set_gatilhos(gatilhos)
 
     db.session.commit()
-    flash('FAQ atualizado!', 'success')
+    flash('✅ FAQ atualizado!', 'success')
     return redirect(url_for('gerenciar_faq'))
 
 
@@ -3606,9 +3818,20 @@ def editar_faq(id):
 @login_required
 def excluir_faq(id):
     faq = RespostaAutomatica.query.get_or_404(id)
+
+    # Verificar permissões: só pode excluir se for o criador OU se for global e for admin
+    if faq.global_faq:
+        if not current_user.is_admin:
+            flash('❌ Apenas administradores podem excluir FAQs globais', 'danger')
+            return redirect(url_for('gerenciar_faq'))
+    else:
+        if faq.criador_id != current_user.id:
+            flash('❌ Você não pode excluir FAQs de outros usuários', 'danger')
+            return redirect(url_for('gerenciar_faq'))
+
     db.session.delete(faq)
     db.session.commit()
-    flash('FAQ excluído!', 'success')
+    flash('✅ FAQ excluído!', 'success')
     return redirect(url_for('gerenciar_faq'))
 
 
@@ -3703,8 +3926,8 @@ def responder_ticket(id):
         flash('Digite uma resposta', 'danger')
         return redirect(url_for('detalhe_ticket', id=id))
 
-    # Enviar via WhatsApp
-    ws = WhatsApp()
+    # Enviar via WhatsApp usando a instância do criador da campanha
+    ws = WhatsApp(ticket.campanha.criador_id)
 
     # Priorizar telefones validados, mas aceitar todos se não houver validados
     telefones_validados = ticket.contato.telefones.filter_by(whatsapp_valido=True).all()

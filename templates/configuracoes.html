@@ -1,13 +1,13 @@
 {% extends "base.html" %}
 
-{% block title %}Configuracoes{% endblock %}
+{% block title %}Configurações{% endblock %}
 
 {% block content %}
 <div class="row">
-    <!-- Cabecalho -->
+    <!-- Cabeçalho -->
     <div class="col-12 mb-4">
-        <h2><i class="bi bi-gear"></i> Configuracoes</h2>
-        <p class="text-muted">Configure a integracao com WhatsApp</p>
+        <h2><i class="bi bi-gear"></i> Configurações</h2>
+        <p class="text-muted">Configure sua conexão WhatsApp</p>
     </div>
 
     <!-- Status do WhatsApp -->
@@ -23,6 +23,7 @@
                 </div>
                 <h5 class="text-success">Conectado</h5>
                 <p class="text-muted">WhatsApp pronto para enviar mensagens</p>
+                <small class="text-muted">Instância: {{ config_user.instance_name }}</small>
                 {% else %}
                 <div class="mb-3">
                     <i class="bi bi-x-circle-fill text-danger" style="font-size: 4rem;"></i>
@@ -30,10 +31,12 @@
                 <h5 class="text-danger">Desconectado</h5>
                 <p class="text-muted">{{ status_msg }}</p>
 
-                {% if config.ativo and config.api_url %}
-                <button class="btn btn-whatsapp" onclick="obterQRCode()">
-                    <i class="bi bi-qr-code"></i> Gerar QR Code
+                {% if config_global.ativo %}
+                <button class="btn btn-whatsapp" onclick="conectarWhatsApp()">
+                    <i class="bi bi-qr-code"></i> Conectar WhatsApp
                 </button>
+                {% else %}
+                <p class="text-warning"><small>Aguardando configuração do administrador</small></p>
                 {% endif %}
                 {% endif %}
             </div>
@@ -49,88 +52,116 @@
             <div class="card-body text-center" id="qrcode-container">
                 <div class="text-muted py-5">
                     <i class="bi bi-phone" style="font-size: 3rem;"></i>
-                    <p class="mt-2">Clique em "Gerar QR Code" para conectar</p>
+                    <p class="mt-2">Clique em "Conectar WhatsApp" para gerar o QR Code</p>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Instrucoes -->
+    <!-- Instruções -->
     <div class="col-md-4 mb-4">
         <div class="card h-100">
             <div class="card-header">
-                <i class="bi bi-info-circle"></i> Instrucoes
+                <i class="bi bi-info-circle"></i> Instruções
             </div>
             <div class="card-body">
                 <ol class="mb-0">
-                    <li class="mb-2">Preencha as configuracoes da Evolution API</li>
-                    <li class="mb-2">Ative o WhatsApp</li>
-                    <li class="mb-2">Clique em "Gerar QR Code"</li>
+                    <li class="mb-2">Clique em "Conectar WhatsApp"</li>
+                    <li class="mb-2">Um QR Code será gerado automaticamente</li>
                     <li class="mb-2">Abra o WhatsApp no celular</li>
-                    <li class="mb-2">Va em Configuracoes > Aparelhos conectados</li>
+                    <li class="mb-2">Vá em Configurações → Aparelhos conectados</li>
                     <li class="mb-2">Escaneie o QR Code</li>
+                    <li class="mb-2">Aguarde a confirmação de conexão</li>
                 </ol>
             </div>
         </div>
     </div>
 
-    <!-- Formulario de Configuracao -->
+    {% if is_admin %}
+    <!-- Configuração Global (Apenas Admin) -->
     <div class="col-12">
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-sliders"></i> Configuracoes da Evolution API
+        <div class="card border-primary">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-shield-lock"></i> Configuração Global da Evolution API (Admin)
             </div>
             <div class="card-body">
                 <div class="alert alert-info mb-4">
-                    <i class="bi bi-shield-lock"></i>
-                    <strong>Acesso Restrito:</strong> Apenas administradores podem alterar as configurações da Evolution API.
-                    Essas configurações são globais e afetam todos os usuários do sistema.
+                    <i class="bi bi-info-circle"></i>
+                    <strong>Atenção:</strong> Estas configurações são globais e afetam todos os usuários do sistema.
+                    Configure a URL e API Key da Evolution API.
                 </div>
-                <form method="POST" action="{{ url_for('configuracoes') }}">
+                <form method="POST" action="{{ url_for('configuracoes_global') }}">
                     <div class="row">
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-5 mb-3">
                             <label class="form-label">URL da Evolution API *</label>
                             <input type="url" class="form-control" name="api_url"
-                                   value="{{ config.api_url or '' }}"
-                                   placeholder="https://sua-api.com">
-                            <small class="text-muted">Ex: https://api.example.com</small>
+                                   value="{{ config_global.evolution_api_url or '' }}"
+                                   placeholder="https://sua-api.com:8080">
+                            <small class="text-muted">Ex: http://chsistemas.cloud:8080</small>
                         </div>
 
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">Nome da Instancia *</label>
-                            <input type="text" class="form-control" name="instance_name"
-                                   value="{{ config.instance_name or '' }}"
-                                   placeholder="minha_instancia">
-                            <small class="text-muted">Nome unico da sua instancia</small>
-                        </div>
-
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">API Key *</label>
+                        <div class="col-md-5 mb-3">
+                            <label class="form-label">API Key Global *</label>
                             <input type="text" class="form-control" name="api_key"
-                                   value="{{ config.api_key or '' }}"
-                                   placeholder="sua-api-key">
-                            <small class="text-muted">Chave de autenticacao da API</small>
+                                   value="{{ config_global.evolution_api_key or '' }}"
+                                   placeholder="B6D711FCDE4D4FD5936544120E713976">
+                            <small class="text-muted">Chave global de autenticação da API</small>
+                        </div>
+
+                        <div class="col-md-2 mb-3 d-flex align-items-center">
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" name="ativo" id="ativo"
+                                       {% if config_global.ativo %}checked{% endif %}>
+                                <label class="form-check-label" for="ativo">
+                                    <strong>Ativar</strong>
+                                </label>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="mb-3">
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" name="ativo" id="ativo"
-                                   {% if config.ativo %}checked{% endif %}>
-                            <label class="form-check-label" for="ativo">
-                                <strong>Ativar WhatsApp</strong>
-                            </label>
+                    <div class="d-flex justify-content-end">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg"></i> Salvar Configuração Global
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Configurações Pessoais -->
+    <div class="col-12 mt-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-sliders"></i> Minhas Configurações de Envio
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('configuracoes_usuario') }}">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Tempo entre envios (segundos)</label>
+                            <input type="number" class="form-control" name="tempo_entre_envios"
+                                   value="{{ config_user.tempo_entre_envios or 15 }}"
+                                   min="5" max="300">
+                            <small class="text-muted">Intervalo entre cada mensagem enviada</small>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Limite diário de envios</label>
+                            <input type="number" class="form-control" name="limite_diario"
+                                   value="{{ config_user.limite_diario or 100 }}"
+                                   min="10" max="1000">
+                            <small class="text-muted">Máximo de mensagens por dia</small>
                         </div>
                     </div>
-
-                    <hr>
 
                     <div class="d-flex justify-content-between">
                         <button type="button" class="btn btn-outline-secondary" onclick="verificarStatus()">
                             <i class="bi bi-arrow-clockwise"></i> Verificar Status
                         </button>
-                        <button type="submit" class="btn btn-whatsapp">
-                            <i class="bi bi-check-lg"></i> Salvar Configuracoes
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-check-lg"></i> Salvar Minhas Configurações
                         </button>
                     </div>
                 </form>
@@ -142,10 +173,10 @@
     <div class="col-12 mt-4">
         <div class="card">
             <div class="card-header">
-                <i class="bi bi-link-45deg"></i> Webhook
+                <i class="bi bi-link-45deg"></i> Webhook (Informação técnica)
             </div>
             <div class="card-body">
-                <p>Configure o webhook na Evolution API para receber respostas automaticamente:</p>
+                <p>URL do webhook para configurar na Evolution API:</p>
                 <div class="input-group">
                     <span class="input-group-text"><i class="bi bi-globe"></i></span>
                     <input type="text" class="form-control" readonly
@@ -156,7 +187,7 @@
                     </button>
                 </div>
                 <small class="text-muted">
-                    Esta URL deve ser configurada na Evolution API para receber as mensagens dos pacientes.
+                    Esta URL deve ser configurada na Evolution API para receber respostas automáticas.
                 </small>
             </div>
         </div>
@@ -166,16 +197,21 @@
 
 {% block extra_js %}
 <script>
-function obterQRCode() {
+function conectarWhatsApp() {
     const container = document.getElementById('qrcode-container');
     container.innerHTML = `
         <div class="text-center py-4">
             <div class="spinner-border text-success" role="status"></div>
-            <p class="mt-2">Gerando QR Code...</p>
+            <p class="mt-2">Criando instância e gerando QR Code...</p>
         </div>
     `;
 
-    fetch('/api/whatsapp/qrcode')
+    fetch('/api/whatsapp/conectar', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    })
         .then(res => res.json())
         .then(data => {
             if (data.conectado) {
@@ -183,25 +219,31 @@ function obterQRCode() {
                     <div class="text-success py-4">
                         <i class="bi bi-check-circle-fill" style="font-size: 4rem;"></i>
                         <p class="mt-2">${data.mensagem}</p>
+                        <button class="btn btn-success" onclick="location.reload()">
+                            <i class="bi bi-arrow-clockwise"></i> Atualizar Página
+                        </button>
                     </div>
                 `;
+                setTimeout(() => location.reload(), 2000);
             } else if (data.qrcode) {
                 container.innerHTML = `
                     <img src="${data.qrcode}" alt="QR Code" class="img-fluid" style="max-width: 250px;">
                     <p class="mt-2 text-muted">Escaneie com o WhatsApp</p>
-                    <button class="btn btn-sm btn-outline-secondary" onclick="obterQRCode()">
-                        <i class="bi bi-arrow-clockwise"></i> Atualizar
+                    <small class="text-muted">Instância: ${data.instance_name}</small>
+                    <br>
+                    <button class="btn btn-sm btn-outline-secondary mt-2" onclick="conectarWhatsApp()">
+                        <i class="bi bi-arrow-clockwise"></i> Atualizar QR
                     </button>
                 `;
 
-                // Auto-verificar conexao a cada 5 segundos
+                // Auto-verificar conexão a cada 5 segundos
                 setTimeout(verificarStatusSilent, 5000);
             } else if (data.erro) {
                 container.innerHTML = `
                     <div class="text-danger py-4">
                         <i class="bi bi-x-circle" style="font-size: 3rem;"></i>
                         <p class="mt-2">${data.erro}</p>
-                        <button class="btn btn-sm btn-outline-danger" onclick="obterQRCode()">
+                        <button class="btn btn-sm btn-outline-danger" onclick="conectarWhatsApp()">
                             <i class="bi bi-arrow-clockwise"></i> Tentar novamente
                         </button>
                     </div>
@@ -212,7 +254,10 @@ function obterQRCode() {
             container.innerHTML = `
                 <div class="text-danger py-4">
                     <i class="bi bi-exclamation-triangle" style="font-size: 3rem;"></i>
-                    <p class="mt-2">Erro de conexao</p>
+                    <p class="mt-2">Erro de conexão: ${err.message}</p>
+                    <button class="btn btn-sm btn-outline-danger" onclick="conectarWhatsApp()">
+                        <i class="bi bi-arrow-clockwise"></i> Tentar novamente
+                    </button>
                 </div>
             `;
         });

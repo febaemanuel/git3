@@ -128,16 +128,37 @@ class Usuario(UserMixin, db.Model):
         return check_password_hash(self.senha_hash, senha)
 
 
+class ConfigGlobal(db.Model):
+    """Configurações globais da Evolution API (definidas pelo admin)"""
+    __tablename__ = 'config_global'
+    id = db.Column(db.Integer, primary_key=True)
+    evolution_api_url = db.Column(db.String(200))  # Ex: https://api.evolution.com
+    evolution_api_key = db.Column(db.String(200))  # Global API key
+    ativo = db.Column(db.Boolean, default=False)
+    atualizado_em = db.Column(db.DateTime, default=datetime.utcnow)
+    atualizado_por = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+
+    @classmethod
+    def get(cls):
+        """Obtém ou cria configuração global"""
+        c = cls.query.first()
+        if not c:
+            c = cls()
+            db.session.add(c)
+            db.session.commit()
+        return c
+
+
 class ConfigWhatsApp(db.Model):
+    """Configuração de instância WhatsApp por usuário (criada automaticamente)"""
     __tablename__ = 'config_whatsapp'
     id = db.Column(db.Integer, primary_key=True)
-    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, unique=True)  # NOVO - Config por usuário
-    api_url = db.Column(db.String(200))
-    instance_name = db.Column(db.String(100))
-    api_key = db.Column(db.String(200))
-    ativo = db.Column(db.Boolean, default=False)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, unique=True)
+    instance_name = db.Column(db.String(100))  # Gerado automaticamente: hospital_user_{id}
+    conectado = db.Column(db.Boolean, default=False)  # Status da conexão
     tempo_entre_envios = db.Column(db.Integer, default=15)
     limite_diario = db.Column(db.Integer, default=100)
+    data_conexao = db.Column(db.DateTime)  # Quando conectou pela última vez
     atualizado_em = db.Column(db.DateTime, default=datetime.utcnow)
 
     usuario = db.relationship('Usuario', backref='config_whatsapp_obj')
@@ -147,7 +168,9 @@ class ConfigWhatsApp(db.Model):
         """Obtém ou cria config para um usuário específico"""
         c = cls.query.filter_by(usuario_id=usuario_id).first()
         if not c:
-            c = cls(usuario_id=usuario_id)
+            # Gerar instance_name automaticamente
+            instance_name = f"hospital_user_{usuario_id}"
+            c = cls(usuario_id=usuario_id, instance_name=instance_name)
             db.session.add(c)
             db.session.commit()
         return c
@@ -874,6 +897,8 @@ class WhatsApp:
     def __init__(self, usuario_id=None):
         """
         Inicializa conexão WhatsApp para um usuário específico
+        API URL e Key vêm do ConfigGlobal (admin)
+        Instance name é única por usuário
 
         Args:
             usuario_id: ID do usuário (obrigatório)
@@ -886,14 +911,22 @@ class WhatsApp:
             else:
                 raise ValueError("usuario_id é obrigatório para WhatsApp")
 
-        c = ConfigWhatsApp.get(usuario_id)
-        self.url = (c.api_url or '').rstrip('/')
-        self.instance = c.instance_name or ''
-        self.key = c.api_key or ''
-        self.ativo = c.ativo
+        # Buscar config global (API URL e Key definidos pelo admin)
+        cfg_global = ConfigGlobal.get()
+
+        # Buscar config do usuário (instance name única)
+        cfg_user = ConfigWhatsApp.get(usuario_id)
+
+        self.url = (cfg_global.evolution_api_url or '').rstrip('/')
+        self.key = cfg_global.evolution_api_key or ''
+        self.instance = cfg_user.instance_name or ''
+        self.ativo = cfg_global.ativo  # Global ativo
+        self.conectado = cfg_user.conectado  # Usuário conectado
         self.usuario_id = usuario_id
+        self.cfg_user = cfg_user  # Guardar referência para atualizar depois
 
     def ok(self):
+        """Verifica se configuração global está ativa"""
         return bool(self.ativo and self.url and self.instance and self.key)
 
     def _headers(self):
@@ -3211,36 +3244,138 @@ def editar_contato(id):
 
 
 # Configuracoes
-@app.route('/configuracoes', methods=['GET', 'POST'])
+@app.route('/configuracoes')
 @login_required
 def configuracoes():
-    """Configurações do WhatsApp Evolution API - INDIVIDUAL POR USUÁRIO"""
+    """
+    Tela de configurações WhatsApp
+    - ADMIN: Pode configurar API global (URL e Key)
+    - USUÁRIO: Apenas conecta seu WhatsApp (instância criada automaticamente)
+    """
+    cfg_global = ConfigGlobal.get()
+    cfg_user = ConfigWhatsApp.get(current_user.id)
+
+    # Verificar status de conexão
+    conectado = False
+    status_msg = "Não configurado"
+
+    if cfg_global.ativo:
+        try:
+            ws = WhatsApp(current_user.id)
+            if ws.ok():
+                conectado, status_msg = ws.conectado()
+        except Exception as e:
+            status_msg = f"Erro: {str(e)}"
+
+    return render_template('configuracoes.html',
+                         config_global=cfg_global,
+                         config_user=cfg_user,
+                         conectado=conectado,
+                         status_msg=status_msg,
+                         is_admin=current_user.is_admin)
+
+
+@app.route('/configuracoes/global', methods=['POST'])
+@login_required
+@admin_required
+def configuracoes_global():
+    """Admin atualiza configuração global da Evolution API"""
+    cfg = ConfigGlobal.get()
+
+    cfg.evolution_api_url = request.form.get('api_url', '').strip().rstrip('/')
+    cfg.evolution_api_key = request.form.get('api_key', '').strip()
+    cfg.ativo = request.form.get('ativo') == 'on'
+    cfg.atualizado_em = datetime.utcnow()
+    cfg.atualizado_por = current_user.id
+    db.session.commit()
+
+    flash('✅ Configuração global salva com sucesso!', 'success')
+    return redirect(url_for('configuracoes'))
+
+
+@app.route('/configuracoes/usuario', methods=['POST'])
+@login_required
+def configuracoes_usuario():
+    """Usuário atualiza suas configurações de envio"""
     cfg = ConfigWhatsApp.get(current_user.id)
 
-    if request.method == 'POST':
-        cfg.api_url = request.form.get('api_url', '').strip().rstrip('/')
-        cfg.instance_name = request.form.get('instance_name', '').strip()
-        cfg.api_key = request.form.get('api_key', '').strip()
-        cfg.ativo = request.form.get('ativo') == 'on'
-        cfg.tempo_entre_envios = int(request.form.get('tempo_entre_envios', 15))
-        cfg.limite_diario = int(request.form.get('limite_diario', 100))
-        cfg.atualizado_em = datetime.utcnow()
-        db.session.commit()
-        flash('✅ Configurações salvas com sucesso!', 'success')
-        return redirect(url_for('configuracoes'))
+    cfg.tempo_entre_envios = int(request.form.get('tempo_entre_envios', 15))
+    cfg.limite_diario = int(request.form.get('limite_diario', 100))
+    cfg.atualizado_em = datetime.utcnow()
+    db.session.commit()
 
-    ws = WhatsApp(current_user.id)
-    conn, msg = ws.conectado() if ws.ok() else (False, 'Nao configurado')
+    flash('✅ Configurações atualizadas!', 'success')
+    return redirect(url_for('configuracoes'))
 
-    return render_template('configuracoes.html', config=cfg, conectado=conn, status_msg=msg)
+
+@app.route('/api/whatsapp/conectar', methods=['POST'])
+@login_required
+def api_conectar_whatsapp():
+    """
+    Conectar WhatsApp automaticamente:
+    1. Verifica config global
+    2. Cria instância se necessário
+    3. Retorna QR code
+    """
+    try:
+        # Verificar se admin configurou API global
+        cfg_global = ConfigGlobal.get()
+        if not cfg_global.ativo or not cfg_global.evolution_api_url or not cfg_global.evolution_api_key:
+            return jsonify({
+                'erro': 'Sistema não configurado. Entre em contato com o administrador.'
+            }), 400
+
+        # Inicializar WhatsApp com config do usuário
+        ws = WhatsApp(current_user.id)
+
+        if not ws.ok():
+            return jsonify({'erro': 'Erro ao inicializar WhatsApp'}), 500
+
+        # Tentar criar instância (se já existir, retorna sucesso)
+        sucesso_criar, msg_criar = ws.criar_instancia()
+
+        if not sucesso_criar and 'ja existe' not in msg_criar.lower():
+            return jsonify({'erro': f'Erro ao criar instância: {msg_criar}'}), 500
+
+        # Obter QR code
+        ok, result = ws.qrcode()
+        if ok:
+            # Atualizar status no banco
+            ws.cfg_user.conectado = False  # Ainda não conectou, apenas obteve QR
+            ws.cfg_user.atualizado_em = datetime.utcnow()
+            db.session.commit()
+
+            return jsonify({
+                'sucesso': True,
+                'qrcode': result,
+                'instance_name': ws.instance
+            })
+        else:
+            if 'conectado' in result.lower() or 'open' in result.lower():
+                # Já está conectado!
+                ws.cfg_user.conectado = True
+                ws.cfg_user.data_conexao = datetime.utcnow()
+                db.session.commit()
+
+                return jsonify({
+                    'conectado': True,
+                    'mensagem': 'WhatsApp já está conectado!',
+                    'instance_name': ws.instance
+                })
+            return jsonify({'erro': result}), 400
+
+    except Exception as e:
+        logger.error(f"Erro ao conectar WhatsApp: {str(e)}")
+        return jsonify({'erro': str(e)}), 500
 
 
 @app.route('/api/whatsapp/qrcode')
 @login_required
 def api_qrcode():
+    """Obter QR code (mantido por compatibilidade, mas use /conectar)"""
     ws = WhatsApp(current_user.id)
     if not ws.ok():
-        return jsonify({'erro': 'Nao configurado'}), 400
+        return jsonify({'erro': 'Sistema não configurado'}), 400
 
     ok, result = ws.qrcode()
     if ok:

@@ -46,6 +46,7 @@ services:
       - .env
     environment:
       - REDIS_URL=redis://redis:6379/0
+      - TZ=America/Fortaleza
     volumes:
       - ./uploads:/app/uploads
     depends_on:
@@ -75,6 +76,7 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - PYTHONPATH=/app
+      - TZ=America/Fortaleza
     volumes:
       - ./uploads:/app/uploads
     depends_on:
@@ -96,6 +98,7 @@ services:
     environment:
       - REDIS_URL=redis://redis:6379/0
       - PYTHONPATH=/app
+      - TZ=America/Fortaleza
     volumes:
       - ./uploads:/app/uploads
     depends_on:

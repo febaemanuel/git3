@@ -2972,11 +2972,15 @@ def validar_campanha(id):
     if not ws.ok():
         return jsonify({'erro': 'WhatsApp nao configurado'}), 400
 
-    t = threading.Thread(target=validar_campanha_bg, args=(id,))
-    t.daemon = True
-    t.start()
+    # Iniciar task Celery em vez de thread
+    from tasks import validar_campanha_task
+    task = validar_campanha_task.delay(id)
 
-    return jsonify({'sucesso': True})
+    return jsonify({
+        'sucesso': True,
+        'task_id': task.id,
+        'status_url': url_for('task_status', task_id=task.id)
+    })
 
 
 @app.route('/campanha/<int:id>/iniciar', methods=['POST'])
@@ -2996,11 +3000,15 @@ def iniciar_campanha(id):
     if not conn:
         return jsonify({'erro': 'WhatsApp desconectado'}), 400
 
-    t = threading.Thread(target=enviar_campanha_bg, args=(id,))
-    t.daemon = True
-    t.start()
+    # Iniciar task Celery em vez de thread
+    from tasks import enviar_campanha_task
+    task = enviar_campanha_task.delay(id)
 
-    return jsonify({'sucesso': True})
+    return jsonify({
+        'sucesso': True,
+        'task_id': task.id,
+        'status_url': url_for('task_status', task_id=task.id)
+    })
 
 
 @app.route('/campanha/<int:id>/pausar', methods=['POST'])
@@ -4239,6 +4247,72 @@ def init_db():
 
 
 # Init
+# =============================================================================
+# CELERY TASK STATUS
+# =============================================================================
+
+@app.route('/api/task/<task_id>/status')
+@login_required
+def task_status(task_id):
+    """
+    Endpoint para verificar status de uma task Celery
+
+    Retorna:
+        - state: PENDING, PROGRESS, SUCCESS, FAILURE, RETRY
+        - meta: Informações adicionais (progresso, erro, etc)
+    """
+    from celery.result import AsyncResult
+
+    task = AsyncResult(task_id)
+
+    response = {
+        'task_id': task_id,
+        'state': task.state,
+        'ready': task.ready(),
+        'successful': task.successful() if task.ready() else None,
+        'failed': task.failed() if task.ready() else None
+    }
+
+    if task.state == 'PENDING':
+        response['meta'] = {
+            'status': 'Aguardando processamento...'
+        }
+    elif task.state == 'PROGRESS':
+        response['meta'] = task.info
+    elif task.state == 'SUCCESS':
+        response['result'] = task.result
+    elif task.state == 'FAILURE':
+        response['error'] = str(task.info)
+    elif task.state == 'RETRY':
+        response['meta'] = task.info
+    else:
+        response['meta'] = task.info
+
+    return jsonify(response)
+
+
+@app.route('/api/task/<task_id>/cancel', methods=['POST'])
+@login_required
+def task_cancel(task_id):
+    """
+    Cancela uma task Celery em andamento
+    """
+    from celery.result import AsyncResult
+
+    task = AsyncResult(task_id)
+    task.revoke(terminate=True)
+
+    return jsonify({
+        'sucesso': True,
+        'task_id': task_id,
+        'message': 'Task cancelada'
+    })
+
+
+# =============================================================================
+# INICIALIZACAO
+# =============================================================================
+
 with app.app_context():
     db.create_all()
     criar_admin()

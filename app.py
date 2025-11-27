@@ -1726,8 +1726,10 @@ Caso contrário, sua vaga será disponibilizada."""
 
                 # Enviar follow-up
                 msg_template = MENSAGENS_FOLLOWUP.get(num_tentativa, MENSAGENS_FOLLOWUP[1])
+                # Usar procedimento normalizado (mais simples) se disponível, senão usar original
+                procedimento_msg = c.procedimento_normalizado or c.procedimento or 'o procedimento'
                 msg = msg_template.replace('{nome}', c.nome).replace(
-                    '{procedimento}', c.procedimento or 'o procedimento'
+                    '{procedimento}', procedimento_msg
                 ).replace('{dias}', str(config.intervalo_dias))
 
                 # Criar WhatsApp instance para o criador da campanha
@@ -3193,16 +3195,19 @@ def api_reenviar(id):
         return jsonify({'erro': 'WhatsApp nao configurado'}), 400
 
     c.erro = None
-    msg = c.campanha.mensagem.replace('{nome}', c.nome).replace('{procedimento}', c.procedimento or 'o procedimento')
+
+    # Usar procedimento normalizado (mais simples) se disponível, senão usar original
+    procedimento_msg = c.procedimento_normalizado or c.procedimento or 'o procedimento'
+    msg = c.campanha.mensagem.replace('{nome}', c.nome).replace('{procedimento}', procedimento_msg)
 
     # Enviar para TODOS os numeros validos
     tels = c.telefones.filter_by(whatsapp_valido=True).all()
     if not tels:
         return jsonify({'erro': 'Nenhum numero valido'}), 400
-        
+
     sucesso = False
     erros = []
-    
+
     for t in tels:
         ok, result = ws.enviar(t.numero_fmt, msg)
         if ok:

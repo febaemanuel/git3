@@ -20,6 +20,21 @@ services:
       timeout: 5s
       retries: 5
 
+  # Redis (Message Broker para Celery)
+  redis:
+    image: redis:7-alpine
+    container_name: busca-ativa-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - busca-ativa-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   # Aplicação Flask
   web:
     build: .
@@ -29,10 +44,14 @@ services:
       - "5000:5000"
     env_file:
       - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
     volumes:
       - ./uploads:/app/uploads
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     networks:
       - busca-ativa-network
@@ -45,6 +64,46 @@ services:
         echo 'Iniciando aplicação...' &&
         gunicorn --bind 0.0.0.0:5000 --workers 4 --timeout 120 --log-level info app:app
       "
+
+  # Celery Worker (Processa tarefas assíncronas)
+  celery_worker:
+    build: .
+    container_name: busca-ativa-celery-worker
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - busca-ativa-network
+    command: celery -A celery_app.celery worker --loglevel=info --concurrency=4
+
+  # Celery Beat (Agendador de tarefas periódicas)
+  celery_beat:
+    build: .
+    container_name: busca-ativa-celery-beat
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - busca-ativa-network
+    command: celery -A celery_app.celery beat --loglevel=info
 
 volumes:
   postgres_data:

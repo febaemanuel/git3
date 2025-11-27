@@ -67,11 +67,17 @@
                     <li>Marca como "sem resposta" se esgotar as tentativas</li>
                 </ol>
                 <hr>
-                <h6>⚙️ Automação</h6>
-                <p class="small text-muted">
-                    Para executar automaticamente, configure um cron job no servidor:
+                <h6>✅ Automação Ativa</h6>
+                <div class="alert alert-success p-2 mb-0">
+                    <small>
+                        <i class="bi bi-check-circle"></i> <strong>Follow-up automático está ativo!</strong><br>
+                        O sistema executa automaticamente todos os dias às <strong>9:00 AM</strong> via Celery Beat.<br>
+                        <em>Não é necessário configurar cron manualmente.</em>
+                    </small>
+                </div>
+                <p class="small text-muted mt-2 mb-0">
+                    <i class="bi bi-info-circle"></i> Use o botão "Processar Agora" acima apenas para testes.
                 </p>
-                <code class="small">0 9 * * * python -c "from app import processar_followup_bg; processar_followup_bg()"</code>
             </div>
         </div>
     </div>

@@ -24,6 +24,8 @@ RUN mkdir -p /app/uploads
 # Expor porta usada pelo gunicorn
 EXPOSE 5000
 
+# Configurar timezone
+ENV TZ=America/Fortaleza
 ENV FLASK_APP=app.py
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app

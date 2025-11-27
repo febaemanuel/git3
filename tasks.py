@@ -16,7 +16,7 @@ logger = get_task_logger(__name__)
 class DatabaseTask(Task):
     """Task base com gerenciamento automático de sessão do banco"""
     _db = None
-    _app = None
+    _flask_app = None
 
     @property
     def db(self):
@@ -27,15 +27,16 @@ class DatabaseTask(Task):
         return self._db
 
     @property
-    def app_context(self):
-        if self._app is None:
-            from app import app
-            self._app = app
-        return self._app.app_context()
+    def flask_app(self):
+        if self._flask_app is None:
+            # Import aqui para evitar circular dependency
+            from app import app as flask_app
+            self._flask_app = flask_app
+        return self._flask_app
 
     def __call__(self, *args, **kwargs):
         """Executa task com context do Flask"""
-        with self.app_context:
+        with self.flask_app.app_context():
             return super().__call__(*args, **kwargs)
 
 

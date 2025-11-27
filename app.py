@@ -3293,21 +3293,6 @@ def configuracoes_global():
     return redirect(url_for('configuracoes'))
 
 
-@app.route('/configuracoes/usuario', methods=['POST'])
-@login_required
-def configuracoes_usuario():
-    """Usuário atualiza suas configurações de envio"""
-    cfg = ConfigWhatsApp.get(current_user.id)
-
-    cfg.tempo_entre_envios = int(request.form.get('tempo_entre_envios', 15))
-    cfg.limite_diario = int(request.form.get('limite_diario', 100))
-    cfg.atualizado_em = datetime.utcnow()
-    db.session.commit()
-
-    flash('✅ Configurações atualizadas!', 'success')
-    return redirect(url_for('configuracoes'))
-
-
 @app.route('/api/whatsapp/conectar', methods=['POST'])
 @login_required
 def api_conectar_whatsapp():

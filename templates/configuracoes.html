@@ -130,45 +130,6 @@
     </div>
     {% endif %}
 
-    <!-- Configurações Pessoais -->
-    <div class="col-12 mt-4">
-        <div class="card">
-            <div class="card-header">
-                <i class="bi bi-sliders"></i> Minhas Configurações de Envio
-            </div>
-            <div class="card-body">
-                <form method="POST" action="{{ url_for('configuracoes_usuario') }}">
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Tempo entre envios (segundos)</label>
-                            <input type="number" class="form-control" name="tempo_entre_envios"
-                                   value="{{ config_user.tempo_entre_envios or 15 }}"
-                                   min="5" max="300">
-                            <small class="text-muted">Intervalo entre cada mensagem enviada</small>
-                        </div>
-
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Limite diário de envios</label>
-                            <input type="number" class="form-control" name="limite_diario"
-                                   value="{{ config_user.limite_diario or 100 }}"
-                                   min="10" max="1000">
-                            <small class="text-muted">Máximo de mensagens por dia</small>
-                        </div>
-                    </div>
-
-                    <div class="d-flex justify-content-between">
-                        <button type="button" class="btn btn-outline-secondary" onclick="verificarStatus()">
-                            <i class="bi bi-arrow-clockwise"></i> Verificar Status
-                        </button>
-                        <button type="submit" class="btn btn-success">
-                            <i class="bi bi-check-lg"></i> Salvar Minhas Configurações
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
     <!-- Webhook Info -->
     <div class="col-12 mt-4">
         <div class="card">

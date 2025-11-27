@@ -1379,6 +1379,11 @@ def processar_planilha(arquivo, campanha_id):
 
 
 def validar_campanha_bg(campanha_id):
+    """
+    DEPRECATED: Esta função foi substituída pela task Celery validar_campanha_task.
+    Mantida apenas para compatibilidade temporária.
+    Use tasks.validar_campanha_task.delay(campanha_id) ao invés desta função.
+    """
     with app.app_context():
         try:
             camp = db.session.get(Campanha, campanha_id)
@@ -1463,6 +1468,11 @@ def validar_campanha_bg(campanha_id):
 
 
 def enviar_campanha_bg(campanha_id):
+    """
+    DEPRECATED: Esta função foi substituída pela task Celery enviar_campanha_task.
+    Mantida apenas para compatibilidade temporária.
+    Use tasks.enviar_campanha_task.delay(campanha_id) ao invés desta função.
+    """
     with app.app_context():
         try:
             camp = db.session.get(Campanha, campanha_id)
@@ -1623,7 +1633,11 @@ def enviar_campanha_bg(campanha_id):
 
 
 def processar_followup_bg():
-    """Processa follow-up para contatos que não responderam"""
+    """
+    DEPRECATED: Esta função foi substituída pela task Celery follow_up_automatico_task.
+    Mantida apenas para compatibilidade temporária.
+    Use tasks.follow_up_automatico_task.delay() ao invés desta função.
+    """
     with app.app_context():
         try:
             config = ConfigTentativas.get()
@@ -3030,11 +3044,15 @@ def retomar_campanha(id):
     if pendentes == 0:
         return jsonify({'erro': 'Nenhum contato pendente'}), 400
 
-    t = threading.Thread(target=enviar_campanha_bg, args=(id,))
-    t.daemon = True
-    t.start()
+    # Iniciar task Celery em vez de thread
+    from tasks import enviar_campanha_task
+    task = enviar_campanha_task.delay(id)
 
-    return jsonify({'sucesso': True})
+    return jsonify({
+        'sucesso': True,
+        'task_id': task.id,
+        'status_url': url_for('task_status', task_id=task.id)
+    })
 
 
 @app.route('/campanha/<int:id>/cancelar', methods=['POST'])
@@ -4114,8 +4132,10 @@ def configurar_followup():
 @login_required
 def processar_followup_manual():
     """Executar follow-up manualmente (para testes)"""
-    threading.Thread(target=processar_followup_bg).start()
-    flash('Follow-up iniciado em background', 'info')
+    # Usar task Celery em vez de thread
+    from tasks import follow_up_automatico_task
+    task = follow_up_automatico_task.delay()
+    flash(f'Follow-up iniciado (Task ID: {task.id})', 'info')
     return redirect(url_for('dashboard'))
 
 

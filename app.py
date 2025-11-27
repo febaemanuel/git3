@@ -316,6 +316,40 @@ class Campanha(db.Model):
             self.enviados_hoje += 1
         db.session.commit()
 
+    def calcular_intervalo(self):
+        """
+        Calcula automaticamente o intervalo entre envios baseado em:
+        - Horário de trabalho (hora_inicio até hora_fim)
+        - Meta diária de envios
+
+        Retorna: intervalo em segundos
+
+        Exemplo:
+        - Horário: 8h às 18h = 10 horas = 36000 segundos
+        - Meta: 100 pessoas/dia
+        - Intervalo: 36000 / 100 = 360 segundos (6 minutos)
+        """
+        if self.meta_diaria <= 0:
+            return 15  # Padrão: 15 segundos se meta inválida
+
+        # Calcular horas disponíveis
+        if self.hora_inicio <= self.hora_fim:
+            horas_trabalho = self.hora_fim - self.hora_inicio
+        else:
+            # Horário overnight (ex: 22h às 6h)
+            horas_trabalho = (24 - self.hora_inicio) + self.hora_fim
+
+        # Converter para segundos
+        segundos_disponiveis = horas_trabalho * 3600
+
+        # Calcular intervalo
+        intervalo = segundos_disponiveis / self.meta_diaria
+
+        # Garantir mínimo de 5 segundos (evitar flood)
+        intervalo = max(5, int(intervalo))
+
+        return intervalo
+
 
 class Contato(db.Model):
     __tablename__ = 'contatos'
@@ -1563,7 +1597,10 @@ def enviar_campanha_bg(campanha_id):
                     db.session.commit()
 
                     if i < total - 1:
-                        time.sleep(camp.tempo_entre_envios)
+                        # Calcular intervalo automaticamente baseado no horário e meta diária
+                        intervalo = camp.calcular_intervalo()
+                        logger.info(f"Aguardando {intervalo}s até próximo envio (baseado em {camp.hora_inicio}h-{camp.hora_fim}h, meta: {camp.meta_diaria})")
+                        time.sleep(intervalo)
 
             # Verificar se acabou
             # Se nao tem mais pendentes ou pronto_envio

@@ -3922,10 +3922,82 @@ def painel_atendimento():
     elif filtro == 'urgente':
         q = q.filter_by(prioridade='urgente', status='pendente')
 
-    tickets = q.order_by(
+    # Buscar todos os tickets (nao paginados ainda)
+    all_tickets = q.order_by(
         TicketAtendimento.prioridade.desc(),
-        TicketAtendimento.data_criacao.asc()
-    ).paginate(page=page, per_page=20)
+        TicketAtendimento.data_criacao.desc()
+    ).all()
+
+    # Agrupar tickets por (contato_id, campanha_id)
+    from collections import defaultdict
+    grupos = defaultdict(list)
+    for ticket in all_tickets:
+        chave = (ticket.contato_id, ticket.campanha_id)
+        grupos[chave].append(ticket)
+
+    # Criar lista de grupos com informacoes agregadas
+    grupos_lista = []
+    prioridade_ordem = {'urgente': 4, 'alta': 3, 'media': 2, 'baixa': 1}
+
+    for (contato_id, campanha_id), tickets_grupo in grupos.items():
+        # Ordenar tickets do grupo por data (mais recente primeiro)
+        tickets_grupo.sort(key=lambda t: t.data_criacao, reverse=True)
+
+        # Pegar a maior prioridade do grupo
+        maior_prioridade = max(tickets_grupo, key=lambda t: prioridade_ordem.get(t.prioridade, 0))
+
+        grupo_obj = {
+            'tickets': tickets_grupo,
+            'ticket_principal': tickets_grupo[0],  # Mais recente
+            'contato': tickets_grupo[0].contato,
+            'campanha': tickets_grupo[0].campanha,
+            'prioridade': maior_prioridade.prioridade,
+            'status': tickets_grupo[0].status,
+            'data_criacao': tickets_grupo[0].data_criacao,
+            'count': len(tickets_grupo),
+            'atendente': tickets_grupo[0].atendente
+        }
+        grupos_lista.append(grupo_obj)
+
+    # Ordenar grupos por prioridade e data
+    grupos_lista.sort(
+        key=lambda g: (prioridade_ordem.get(g['prioridade'], 0), g['data_criacao']),
+        reverse=True
+    )
+
+    # Paginar os grupos
+    per_page = 20
+    total = len(grupos_lista)
+    total_pages = (total + per_page - 1) // per_page
+    start = (page - 1) * per_page
+    end = start + per_page
+    grupos_paginados = grupos_lista[start:end]
+
+    # Criar objeto de paginacao simulado
+    class PaginacaoSimulada:
+        def __init__(self, items, page, per_page, total):
+            self.items = items
+            self.page = page
+            self.per_page = per_page
+            self.total = total
+            self.pages = (total + per_page - 1) // per_page
+            self.has_prev = page > 1
+            self.has_next = page < self.pages
+            self.prev_num = page - 1 if self.has_prev else None
+            self.next_num = page + 1 if self.has_next else None
+
+        def iter_pages(self, left_edge=2, left_current=2, right_current=5, right_edge=2):
+            last = 0
+            for num in range(1, self.pages + 1):
+                if num <= left_edge or \
+                   (num > self.page - left_current - 1 and num < self.page + right_current) or \
+                   num > self.pages - right_edge:
+                    if last + 1 != num:
+                        yield None
+                    yield num
+                    last = num
+
+    tickets_agrupados = PaginacaoSimulada(grupos_paginados, page, per_page, total)
 
     # Estatísticas apenas dos tickets das campanhas do usuario
     if user_campanhas_ids:
@@ -3942,16 +4014,24 @@ def painel_atendimento():
     else:
         stats = {'pendente': 0, 'em_atendimento': 0, 'urgente': 0, 'resolvido_hoje': 0}
 
-    return render_template('atendimento.html', tickets=tickets, filtro=filtro, stats=stats)
+    return render_template('atendimento.html', tickets=tickets_agrupados, filtro=filtro, stats=stats)
 
 
 @app.route('/atendimento/<int:id>')
 @login_required
 def detalhe_ticket(id):
     ticket = verificar_acesso_ticket(id)
+
+    # Buscar todos os tickets do mesmo grupo (mesmo contato e campanha)
+    tickets_relacionados = TicketAtendimento.query.filter_by(
+        contato_id=ticket.contato_id,
+        campanha_id=ticket.campanha_id
+    ).order_by(TicketAtendimento.data_criacao.desc()).all()
+
     # Buscar histórico de mensagens do contato
     logs = LogMsg.query.filter_by(contato_id=ticket.contato_id).order_by(LogMsg.data.desc()).limit(20).all()
-    return render_template('ticket_detalhe.html', ticket=ticket, logs=logs)
+
+    return render_template('ticket_detalhe.html', ticket=ticket, tickets_relacionados=tickets_relacionados, logs=logs)
 
 
 @app.route('/atendimento/<int:id>/assumir', methods=['POST'])

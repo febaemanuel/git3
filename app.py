@@ -921,9 +921,12 @@ class WhatsApp:
         self.key = cfg_global.evolution_api_key or ''
         self.instance = cfg_user.instance_name or ''
         self.ativo = cfg_global.ativo  # Global ativo
-        self.conectado = cfg_user.conectado  # Usuário conectado
         self.usuario_id = usuario_id
         self.cfg_user = cfg_user  # Guardar referência para atualizar depois
+
+        # Configurações de envio (valores padrão)
+        self.tempo_entre_envios = cfg_user.tempo_entre_envios or 15  # 15 segundos padrão
+        self.limite_diario = cfg_user.limite_diario or 500  # 500 mensagens/dia padrão
 
     def ok(self):
         """Verifica se configuração global está ativa"""

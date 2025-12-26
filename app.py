@@ -26,6 +26,7 @@ from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime, timedelta, date
+from sqlalchemy.exc import IntegrityError
 import pandas as pd
 import os
 import threading
@@ -563,16 +564,52 @@ class ProcedimentoNormalizado(db.Model):
     @classmethod
     def salvar_normalizacao(cls, termo_original, termo_normalizado, termo_simples, explicacao, fonte='deepseek'):
         """Salva uma normalização no cache"""
-        proc = cls(
-            termo_original=termo_original.upper().strip(),
-            termo_normalizado=termo_normalizado,
-            termo_simples=termo_simples,
-            explicacao=explicacao,
-            fonte=fonte
-        )
-        db.session.add(proc)
-        db.session.commit()
-        return proc
+        termo_original_upper = termo_original.upper().strip()
+
+        try:
+            # Verificar se já existe um registro com este termo_original
+            proc = cls.query.filter_by(termo_original=termo_original_upper).first()
+
+            if proc:
+                # Atualizar registro existente
+                proc.termo_normalizado = termo_normalizado
+                proc.termo_simples = termo_simples
+                proc.explicacao = explicacao
+                proc.fonte = fonte
+                proc.atualizado_em = datetime.utcnow()
+            else:
+                # Criar novo registro
+                proc = cls(
+                    termo_original=termo_original_upper,
+                    termo_normalizado=termo_normalizado,
+                    termo_simples=termo_simples,
+                    explicacao=explicacao,
+                    fonte=fonte
+                )
+                db.session.add(proc)
+
+            db.session.commit()
+            return proc
+
+        except IntegrityError:
+            # Em caso de erro de integridade (ex: duplicate key), fazer rollback e tentar atualizar
+            db.session.rollback()
+            proc = cls.query.filter_by(termo_original=termo_original_upper).first()
+            if proc:
+                proc.termo_normalizado = termo_normalizado
+                proc.termo_simples = termo_simples
+                proc.explicacao = explicacao
+                proc.fonte = fonte
+                proc.atualizado_em = datetime.utcnow()
+                db.session.commit()
+                return proc
+            else:
+                raise
+        except Exception as e:
+            # Para qualquer outro erro, fazer rollback
+            db.session.rollback()
+            logging.error(f"Erro ao salvar normalização: {str(e)}")
+            raise
 
 
 # =============================================================================

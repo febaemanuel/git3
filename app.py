@@ -896,22 +896,41 @@ class DeepSeekAI:
 
     def _chamar_api(self, procedimento):
         """Chama a API DeepSeek para normalizar o procedimento"""
-        prompt = f"""Você é um assistente médico especializado em comunicação com pacientes.
+        prompt = f"""Você é um assistente médico especializado em comunicação com pacientes de um hospital de referência.
 
-TAREFA: Simplifique o seguinte termo médico para que pacientes leigos possam entender facilmente.
+TAREFA: Simplifique o seguinte termo médico técnico para uma linguagem clara e profissional que pacientes possam entender.
 
 TERMO MÉDICO: {procedimento}
 
+DIRETRIZES:
+- Use linguagem FORMAL mas ACESSÍVEL (não use gírias ou termos muito coloquiais)
+- Mantenha tom PROFISSIONAL apropriado para um hospital de referência
+- Prefira estruturas: "Cirurgia de/para/da...", "Tratamento de/para...", "Procedimento de/para..."
+- Evite termos infantilizados (ex: "tubinho", "machucado")
+- Use termos médicos simplificados quando apropriado (ex: "cateter" ao invés de "tubinho")
+
 RETORNE UM JSON com:
-1. "termo_normalizado": Nome mais amigável do procedimento (máximo 60 caracteres)
-2. "termo_simples": Versão ultra-simplificada (máximo 40 caracteres)
+1. "termo_normalizado": Nome profissional simplificado (máximo 70 caracteres)
+2. "termo_simples": Versão mais curta e direta (máximo 50 caracteres)
 3. "explicacao": Breve explicação em 1 linha do que é o procedimento
 
-EXEMPLO:
+EXEMPLOS CORRETOS:
 {{
-  "termo_normalizado": "Cirurgia de correção da bexiga e região íntima",
-  "termo_simples": "Cirurgia ginecológica",
-  "explicacao": "Procedimento para corrigir problemas na região íntima feminina"
+  "termo_normalizado": "Cirurgia para correção de hérnia inguinal",
+  "termo_simples": "Cirurgia de hérnia",
+  "explicacao": "Procedimento cirúrgico para reparar hérnia na região da virilha"
+}}
+
+{{
+  "termo_normalizado": "Cirurgia para colocar cateter urinário duplo",
+  "termo_simples": "Cirurgia para cateter na bexiga",
+  "explicacao": "Procedimento para instalar cateter especial que drena a urina"
+}}
+
+{{
+  "termo_normalizado": "Cirurgia de remoção de pedra nos rins",
+  "termo_simples": "Cirurgia renal para pedras",
+  "explicacao": "Procedimento para retirar cálculos renais pela pele"
 }}
 
 Responda APENAS com o JSON, sem texto adicional."""

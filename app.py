@@ -57,6 +57,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Importar Celery app configurado com backend Redis
+try:
+    from celery_app import celery as celery_app
+    from celery.result import AsyncResult
+except ImportError as e:
+    celery_app = None
+    AsyncResult = None
+    logger.warning(f"Celery não disponível - funcionalidades assíncronas desabilitadas: {e}")
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'busca-ativa-huwc-2024-secret')
 
@@ -3208,9 +3217,14 @@ def progresso_campanha(id):
 @login_required
 def status_processamento(task_id):
     """API para polling do status da task de processamento"""
-    from celery.result import AsyncResult
+    if not AsyncResult or not celery_app:
+        return jsonify({
+            'state': 'FAILURE',
+            'status': 'Celery não configurado',
+            'percent': 0
+        })
 
-    task = AsyncResult(task_id)
+    task = AsyncResult(task_id, app=celery_app)
 
     if task.state == 'PENDING':
         response = {
@@ -4740,9 +4754,14 @@ def task_status(task_id):
         - state: PENDING, PROGRESS, SUCCESS, FAILURE, RETRY
         - meta: Informações adicionais (progresso, erro, etc)
     """
-    from celery.result import AsyncResult
+    if not AsyncResult or not celery_app:
+        return jsonify({
+            'task_id': task_id,
+            'state': 'FAILURE',
+            'error': 'Celery não configurado'
+        })
 
-    task = AsyncResult(task_id)
+    task = AsyncResult(task_id, app=celery_app)
 
     response = {
         'task_id': task_id,
@@ -4776,9 +4795,14 @@ def task_cancel(task_id):
     """
     Cancela uma task Celery em andamento
     """
-    from celery.result import AsyncResult
+    if not AsyncResult or not celery_app:
+        return jsonify({
+            'sucesso': False,
+            'task_id': task_id,
+            'message': 'Celery não configurado'
+        })
 
-    task = AsyncResult(task_id)
+    task = AsyncResult(task_id, app=celery_app)
     task.revoke(terminate=True)
 
     return jsonify({

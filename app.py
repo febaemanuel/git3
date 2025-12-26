@@ -4443,6 +4443,7 @@ def api_relatorios(campanha_id):
             'nome': contato.nome,
             'telefone': telefone_str,
             'procedimento': contato.procedimento,
+            'procedimento_normalizado': contato.procedimento_normalizado,
             'status': contato.status,
             'confirmado': contato.confirmado,
             'rejeitado': contato.rejeitado,

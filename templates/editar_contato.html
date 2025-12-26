@@ -39,9 +39,15 @@
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label">Procedimento</label>
+                        <label class="form-label">Procedimento (Termo Técnico/Original)</label>
                         <input type="text" class="form-control" name="procedimento"
                             value="{{ contato.procedimento or '' }}">
+                        {% if contato.procedimento_normalizado and contato.procedimento_normalizado != contato.procedimento %}
+                        <small class="form-text text-muted">
+                            <i class="bi bi-info-circle"></i> Normalizado para o paciente:
+                            <strong class="text-success">{{ contato.procedimento_normalizado }}</strong>
+                        </small>
+                        {% endif %}
                     </div>
 
                     <div class="mb-3">

@@ -299,6 +299,27 @@ def enviar_campanha_task(self, campanha_id):
 
             # Envio
             if c.status == 'pronto_envio':
+                # Normalização JIT (Just-In-Time) - normaliza só quando for enviar
+                from app import ProcedimentoNormalizado, DeepSeekAI
+
+                if not c.procedimento_normalizado and c.procedimento:
+                    # Verificar cache
+                    cached = ProcedimentoNormalizado.obter_ou_criar(c.procedimento)
+                    if cached and cached.aprovado and cached.termo_simples:
+                        # Usar do cache
+                        c.procedimento_normalizado = cached.termo_simples
+                        logger.info(f"[JIT CACHE] '{c.procedimento}' -> '{cached.termo_simples}'")
+                        cached.incrementar_uso()
+                        db.session.commit()
+                    else:
+                        # Normalizar via API
+                        ai = DeepSeekAI()
+                        resultado = ai.normalizar_procedimento(c.procedimento)
+                        if resultado and resultado.get('simples'):
+                            c.procedimento_normalizado = resultado['simples']
+                            logger.info(f"[JIT API] '{c.procedimento}' -> '{resultado['simples']}'")
+                            db.session.commit()
+
                 procedimento_msg = c.procedimento_normalizado or c.procedimento or 'o procedimento'
                 msg = camp.mensagem.replace('{nome}', c.nome).replace('{procedimento}', procedimento_msg)
 
@@ -724,110 +745,13 @@ def processar_planilha_task(self, arquivo_path, campanha_id):
                         if fmt:
                             pessoas[chave]['telefones'].add((tel, fmt))
 
-        # Normalizar procedimentos COM BATCH PROCESSING
-        from app import ProcedimentoNormalizado
-
-        procedimentos_unicos = set()
-        for dados in pessoas.values():
-            if dados['procedimento']:
-                procedimentos_unicos.add(dados['procedimento'])
-
+        # Salvar contatos no banco (SEM normalizar - será feito JIT no envio)
         self.update_state(
             state='PROGRESS',
             meta={
-                'current': 30,
+                'current': 50,
                 'total': 100,
-                'percent': 30,
-                'status': f'Normalizando {len(procedimentos_unicos)} procedimentos...'
-            }
-        )
-
-        camp.status_msg = f'Normalizando procedimentos...'
-        db.session.commit()
-
-        ai = DeepSeekAI()
-        mapa_normalizacao = {}
-
-        logger.info(f"Normalizando {len(procedimentos_unicos)} procedimentos únicos...")
-
-        # Separar procedimentos que já estão no cache vs que precisam normalizar
-        procedimentos_para_normalizar = []
-        for proc_original in procedimentos_unicos:
-            cached = ProcedimentoNormalizado.obter_ou_criar(proc_original)
-            if cached and cached.aprovado:
-                # Usar do cache
-                mapa_normalizacao[proc_original] = cached.termo_simples
-                logger.info(f"[CACHE] '{proc_original}' -> '{cached.termo_simples}'")
-                cached.incrementar_uso()
-            else:
-                # Adicionar para normalizar em batch
-                procedimentos_para_normalizar.append(proc_original)
-
-        # Normalizar em BATCH (dividir em chunks de 20 procedimentos)
-        if procedimentos_para_normalizar:
-            BATCH_SIZE = 20
-            total = len(procedimentos_para_normalizar)
-            logger.info(f"Normalizando {total} procedimentos em lotes de {BATCH_SIZE}...")
-
-            # Dividir em chunks
-            for i in range(0, total, BATCH_SIZE):
-                chunk = procedimentos_para_normalizar[i:i+BATCH_SIZE]
-                chunk_num = (i // BATCH_SIZE) + 1
-                total_chunks = (total + BATCH_SIZE - 1) // BATCH_SIZE
-
-                # Atualizar progresso
-                progresso = 30 + int(((i + len(chunk)) / total) * 40)  # 30-70%
-                self.update_state(
-                    state='PROGRESS',
-                    meta={
-                        'current': i + len(chunk),
-                        'total': total,
-                        'percent': progresso,
-                        'status': f'Normalizando lote {chunk_num}/{total_chunks} ({len(chunk)} procedimentos)...'
-                    }
-                )
-
-                logger.info(f"[LOTE {chunk_num}/{total_chunks}] Processando {len(chunk)} procedimentos...")
-
-                try:
-                    resultados_batch = ai._chamar_api_batch(chunk)
-                    logger.info(f"[LOTE {chunk_num}/{total_chunks}] API retornou {len(resultados_batch)} resultados")
-
-                    for proc_original in chunk:
-                        resultado = resultados_batch.get(proc_original.upper())
-                        if resultado and resultado.get('termo_simples'):
-                            # Salvar no cache
-                            ProcedimentoNormalizado.salvar_normalizacao(
-                                termo_original=proc_original,
-                                termo_normalizado=resultado['termo_normalizado'],
-                                termo_simples=resultado['termo_simples'],
-                                explicacao=resultado.get('explicacao', ''),
-                                fonte='deepseek'
-                            )
-                            mapa_normalizacao[proc_original] = resultado['termo_simples']
-                            logger.info(f"[API] '{proc_original}' -> '{resultado['termo_simples']}'")
-                        else:
-                            # Fallback: usar o original
-                            mapa_normalizacao[proc_original] = proc_original.title()
-                            logger.warning(f"[FALLBACK] '{proc_original}' -> usando original")
-
-                except Exception as e:
-                    logger.error(f"[LOTE {chunk_num}/{total_chunks}] Erro ao processar batch: {e}")
-                    # Em caso de erro, usar original para este chunk
-                    for proc_original in chunk:
-                        if proc_original not in mapa_normalizacao:
-                            mapa_normalizacao[proc_original] = proc_original.title()
-                            logger.warning(f"[ERRO-FALLBACK] '{proc_original}' -> usando original")
-
-        logger.info(f"Normalização concluída. {len(mapa_normalizacao)} mapeamentos criados.")
-
-        # Salvar contatos no banco
-        self.update_state(
-            state='PROGRESS',
-            meta={
-                'current': 70,
-                'total': 100,
-                'percent': 70,
+                'percent': 50,
                 'status': 'Salvando contatos no banco de dados...'
             }
         )
@@ -844,7 +768,7 @@ def processar_planilha_task(self, arquivo_path, campanha_id):
 
             # Atualizar progresso
             if idx % 10 == 0:
-                progresso = 70 + int((idx / total_pessoas) * 25)  # 70-95%
+                progresso = 50 + int((idx / total_pessoas) * 45)  # 50-95%
                 self.update_state(
                     state='PROGRESS',
                     meta={
@@ -855,16 +779,15 @@ def processar_planilha_task(self, arquivo_path, campanha_id):
                     }
                 )
 
-            # Obter procedimento normalizado
+            # Salvar contato com procedimento ORIGINAL (normalização será JIT)
             proc_original = dados['procedimento']
-            proc_normalizado = mapa_normalizacao.get(proc_original, proc_original)
 
             c = Contato(
                 campanha_id=campanha_id,
                 nome=dados['nome'][:200],
                 data_nascimento=dados['nascimento'],
                 procedimento=proc_original[:500],
-                procedimento_normalizado=proc_normalizado[:300],
+                procedimento_normalizado=None,  # Será preenchido JIT no envio
                 status='pendente'
             )
             db.session.add(c)

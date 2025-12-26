@@ -187,6 +187,7 @@ class Campanha(db.Model):
 
     status = db.Column(db.String(50), default='pendente')
     status_msg = db.Column(db.String(255))
+    task_id = db.Column(db.String(100))  # ID da task Celery para polling de progresso
 
     # Estatisticas (Baseadas em PESSOAS/CONTATOS)
     total_contatos = db.Column(db.Integer, default=0)  # Total de pessoas
@@ -3138,23 +3139,93 @@ def criar_campanha():
         hora_fim=hora_fim,
         dias_duracao=dias_duracao,
         criador_id=current_user.id,
-        arquivo=arq.filename
+        arquivo=arq.filename,
+        status='processando',
+        status_msg='Aguardando processamento...'
     )
     db.session.add(camp)
     db.session.commit()
 
-    # Processar planilha de forma síncrona (diretamente na requisição)
-    ok, erro, qtd = processar_planilha(arq, camp.id)
+    # Salvar arquivo temporário para processamento assíncrono
+    import os
+    import tempfile
+    temp_dir = os.path.join(os.path.dirname(__file__), 'temp_uploads')
+    os.makedirs(temp_dir, exist_ok=True)
 
-    if ok:
-        flash(f'Campanha criada! {qtd} contatos importados.', 'success')
-    else:
-        flash(f'Erro: {erro}', 'danger')
-        db.session.delete(camp)
-        db.session.commit()
+    # Nome único para o arquivo temporário
+    temp_filename = f'upload_{camp.id}_{int(time.time() * 1000)}.xlsx'
+    temp_path = os.path.join(temp_dir, temp_filename)
+
+    # Salvar arquivo
+    arq.save(temp_path)
+    logger.info(f"Arquivo salvo em: {temp_path}")
+
+    # Processar planilha de forma ASSÍNCRONA com Celery
+    from tasks import processar_planilha_task
+    task = processar_planilha_task.delay(temp_path, camp.id)
+
+    # Salvar task_id na campanha para polling
+    camp.task_id = task.id
+    db.session.commit()
+
+    logger.info(f"Task {task.id} iniciada para campanha {camp.id}")
+
+    # Redirecionar para página de progresso
+    return redirect(url_for('progresso_campanha', id=camp.id, task_id=task.id))
+
+
+@app.route('/campanha/<int:id>/progresso')
+@login_required
+def progresso_campanha(id):
+    """Página de progresso do processamento da campanha"""
+    camp = verificar_acesso_campanha(id)
+    task_id = request.args.get('task_id') or camp.task_id
+
+    if not task_id:
+        flash('Task ID não encontrado', 'warning')
         return redirect(url_for('dashboard'))
 
-    return redirect(url_for('campanha_detalhe', id=camp.id))
+    return render_template('progresso_campanha.html', campanha=camp, task_id=task_id)
+
+
+@app.route('/api/campanha/status/<task_id>')
+@login_required
+def status_processamento(task_id):
+    """API para polling do status da task de processamento"""
+    from celery.result import AsyncResult
+
+    task = AsyncResult(task_id)
+
+    if task.state == 'PENDING':
+        response = {
+            'state': task.state,
+            'status': 'Aguardando processamento...',
+            'percent': 0
+        }
+    elif task.state == 'PROGRESS':
+        response = {
+            'state': task.state,
+            'status': task.info.get('status', ''),
+            'percent': task.info.get('percent', 0),
+            'current': task.info.get('current', 0),
+            'total': task.info.get('total', 100)
+        }
+    elif task.state == 'SUCCESS':
+        result = task.info
+        response = {
+            'state': task.state,
+            'status': 'Processamento concluído!',
+            'percent': 100,
+            'result': result
+        }
+    else:  # FAILURE ou outro estado
+        response = {
+            'state': task.state,
+            'status': str(task.info) if task.info else 'Erro desconhecido',
+            'percent': 0
+        }
+
+    return jsonify(response)
 
 
 @app.route('/campanha/<int:id>')

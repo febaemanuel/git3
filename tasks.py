@@ -848,6 +848,15 @@ def processar_planilha_task(self, arquivo_path, campanha_id):
 
         logger.info(f"Planilha processada com sucesso: {criados} contatos criados")
 
+        # Limpar arquivo temporário
+        import os
+        if os.path.exists(arquivo_path):
+            try:
+                os.remove(arquivo_path)
+                logger.info(f"Arquivo temporário removido: {arquivo_path}")
+            except Exception as e:
+                logger.warning(f"Erro ao remover arquivo temporário: {e}")
+
         return {
             'sucesso': True,
             'criados': criados,
@@ -862,4 +871,14 @@ def processar_planilha_task(self, arquivo_path, campanha_id):
             camp.status = 'erro'
             camp.status_msg = str(e)[:200]
             db.session.commit()
+
+        # Limpar arquivo temporário mesmo em caso de erro
+        import os
+        if os.path.exists(arquivo_path):
+            try:
+                os.remove(arquivo_path)
+                logger.info(f"Arquivo temporário removido após erro: {arquivo_path}")
+            except Exception as e2:
+                logger.warning(f"Erro ao remover arquivo temporário: {e2}")
+
         raise

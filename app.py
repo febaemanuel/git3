@@ -2965,17 +2965,23 @@ def criar_campanha():
     db.session.commit()
 
     # Salvar arquivo temporariamente para processamento assíncrono
-    import tempfile
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
-        arq.save(tmp_file.name)
-        arquivo_path = tmp_file.name
+    # Criar diretório de uploads temporários se não existir
+    temp_dir = os.path.join(os.path.dirname(__file__), 'temp_uploads')
+    os.makedirs(temp_dir, exist_ok=True)
+
+    # Salvar arquivo com nome único
+    arquivo_path = os.path.join(temp_dir, f'upload_{camp.id}_{int(time.time() * 1000)}.xlsx')
+    arq.save(arquivo_path)
+    logger.info(f"Arquivo salvo em: {arquivo_path}")
 
     # Disparar task assíncrona do Celery
     try:
         from tasks import processar_planilha_task
         task = processar_planilha_task.delay(arquivo_path, camp.id)
+        camp.status_msg = 'Aguardando processamento...'
+        db.session.commit()
         logger.info(f"Task de processamento iniciada: {task.id} para campanha {camp.id}")
-        flash(f'Campanha "{nome}" criada! Processamento iniciado em segundo plano. Acompanhe o progresso na página de detalhes.', 'success')
+        flash(f'Campanha "{nome}" criada! Processamento iniciado. Acompanhe o progresso abaixo.', 'info')
     except Exception as e:
         logger.error(f"Erro ao iniciar processamento assíncrono: {e}")
         # Fallback para processamento síncrono
@@ -2987,6 +2993,9 @@ def criar_campanha():
             db.session.delete(camp)
             db.session.commit()
             return redirect(url_for('dashboard'))
+        # Limpar arquivo se processamento foi síncrono
+        if os.path.exists(arquivo_path):
+            os.remove(arquivo_path)
 
     return redirect(url_for('campanha_detalhe', id=camp.id))
 
@@ -3188,9 +3197,44 @@ def api_dashboard_tickets():
 def api_status(id):
     camp = verificar_acesso_campanha(id)
     camp.atualizar_stats()
+
+    # Calcular progresso de processamento se status == 'processando'
+    progresso = 0
+    status_detalhe = ''
+
+    if camp.status == 'processando' and camp.status_msg:
+        import re
+        # Tentar extrair percentual do status_msg
+        # Exemplos: "Normalizando 3/5..." -> 60%, "Processando linha 30/100..." -> 30%
+        match_frac = re.search(r'(\d+)/(\d+)', camp.status_msg)
+        if match_frac:
+            atual = int(match_frac.group(1))
+            total = int(match_frac.group(2))
+            if total > 0:
+                # Estimar progresso baseado na fração
+                # Considerar que normalização é 30-70% do processo total
+                if 'Normalizando' in camp.status_msg:
+                    progresso = 30 + int((atual / total) * 40)
+                elif 'Processando linha' in camp.status_msg:
+                    progresso = 10 + int((atual / total) * 20)
+                elif 'Salvando contato' in camp.status_msg:
+                    progresso = 70 + int((atual / total) * 25)
+                else:
+                    progresso = int((atual / total) * 100)
+
+                status_detalhe = f'{atual} de {total}'
+
+        # Detectar etapas fixas
+        if 'Lendo' in camp.status_msg:
+            progresso = 5
+        elif 'Atualizando estatísticas' in camp.status_msg:
+            progresso = 95
+
     return jsonify({
         'status': camp.status,
         'status_msg': camp.status_msg,
+        'progresso': progresso,
+        'status_detalhe': status_detalhe,
         'total_contatos': camp.total_contatos,
         'total_validos': camp.total_validos,
         'total_invalidos': camp.total_invalidos,

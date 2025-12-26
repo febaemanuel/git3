@@ -21,7 +21,7 @@
                 {% endif %}
             </div>
             <div class="d-flex gap-2">
-                {% if campanha.status == 'pendente' or campanha.status == 'pausada' %}
+                {% if campanha.status in ['pendente', 'pausada', 'pronta', 'validada'] %}
                 <button class="btn btn-whatsapp" onclick="iniciarCampanha()">
                     <i class="bi bi-play-fill"></i> Iniciar Envio
                 </button>

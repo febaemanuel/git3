@@ -912,35 +912,41 @@ TAREFA: Simplifique o seguinte termo médico técnico para uma linguagem clara e
 
 TERMO MÉDICO: {procedimento}
 
-DIRETRIZES:
-- Use linguagem FORMAL mas ACESSÍVEL (não use gírias ou termos muito coloquiais)
-- Mantenha tom PROFISSIONAL apropriado para um hospital de referência
-- Prefira estruturas: "Cirurgia de/para/da...", "Tratamento de/para...", "Procedimento de/para..."
-- Evite termos infantilizados (ex: "tubinho", "machucado")
-- Use termos médicos simplificados quando apropriado (ex: "cateter" ao invés de "tubinho")
+DIRETRIZES OBRIGATÓRIAS:
+- Use linguagem FORMAL e PROFISSIONAL apropriada para hospital de referência
+- Prefira estruturas DIRETAS: "CIRURGIA NO/NA/NOS/NAS [ÓRGÃO]"
+- Mantenha SIMPLICIDADE sem perder o profissionalismo
+- Evite termos coloquiais ou infantilizados ("tubinho", "machucado", "ferida")
+- Use nomes anatômicos simples (rim, joelho, bexiga, coração)
 
 RETORNE UM JSON com:
 1. "termo_normalizado": Nome profissional simplificado (máximo 70 caracteres)
-2. "termo_simples": Versão mais curta e direta (máximo 50 caracteres)
+2. "termo_simples": Versão DIRETA e PROFISSIONAL (máximo 50 caracteres)
 3. "explicacao": Breve explicação em 1 linha do que é o procedimento
 
-EXEMPLOS CORRETOS:
+EXEMPLOS DE FORMATO CORRETO:
 {{
   "termo_normalizado": "Cirurgia para correção de hérnia inguinal",
-  "termo_simples": "Cirurgia de hérnia",
+  "termo_simples": "CIRURGIA DE HÉRNIA",
   "explicacao": "Procedimento cirúrgico para reparar hérnia na região da virilha"
 }}
 
 {{
-  "termo_normalizado": "Cirurgia para colocar cateter urinário duplo",
-  "termo_simples": "Cirurgia para cateter na bexiga",
+  "termo_normalizado": "Cirurgia para colocação de cateter urinário duplo",
+  "termo_simples": "CIRURGIA NA BEXIGA",
   "explicacao": "Procedimento para instalar cateter especial que drena a urina"
 }}
 
 {{
-  "termo_normalizado": "Cirurgia de remoção de pedra nos rins",
-  "termo_simples": "Cirurgia renal para pedras",
-  "explicacao": "Procedimento para retirar cálculos renais pela pele"
+  "termo_normalizado": "Cirurgia para remoção de cálculo renal",
+  "termo_simples": "CIRURGIA NO RIM",
+  "explicacao": "Procedimento para retirar pedras do rim"
+}}
+
+{{
+  "termo_normalizado": "Artroplastia total do joelho",
+  "termo_simples": "CIRURGIA NO JOELHO",
+  "explicacao": "Substituição cirúrgica da articulação do joelho"
 }}
 
 Responda APENAS com o JSON, sem texto adicional."""
@@ -1002,32 +1008,38 @@ TAREFA: Simplifique os seguintes termos médicos técnicos para uma linguagem cl
 TERMOS MÉDICOS:
 {procedimentos_numerados}
 
-DIRETRIZES:
-- Use linguagem FORMAL mas ACESSÍVEL (não use gírias ou termos muito coloquiais)
-- Mantenha tom PROFISSIONAL apropriado para um hospital de referência
-- Prefira estruturas: "Cirurgia de/para/da...", "Tratamento de/para...", "Procedimento de/para..."
-- Evite termos infantilizados (ex: "tubinho", "machucado")
-- Use termos médicos simplificados quando apropriado (ex: "cateter" ao invés de "tubinho")
+DIRETRIZES OBRIGATÓRIAS:
+- Use linguagem FORMAL e PROFISSIONAL apropriada para hospital de referência
+- Prefira estruturas DIRETAS: "CIRURGIA NO/NA/NOS/NAS [ÓRGÃO]"
+- Mantenha SIMPLICIDADE sem perder o profissionalismo
+- Evite termos coloquiais ou infantilizados ("tubinho", "machucado", "ferida")
+- Use nomes anatômicos simples (rim, joelho, bexiga, coração)
 
 RETORNE UM JSON ARRAY onde cada objeto contém:
-1. "termo_original": O termo médico original
+1. "termo_original": O termo médico original (EXATAMENTE como fornecido)
 2. "termo_normalizado": Nome profissional simplificado (máximo 70 caracteres)
-3. "termo_simples": Versão mais curta e direta (máximo 50 caracteres)
+3. "termo_simples": Versão DIRETA e PROFISSIONAL (máximo 50 caracteres)
 4. "explicacao": Breve explicação em 1 linha do que é o procedimento
 
-EXEMPLO DE FORMATO DE RESPOSTA:
+EXEMPLOS DE FORMATO CORRETO:
 [
   {{
     "termo_original": "INSTALACAO ENDOSCOPICA DE CATETER DUPLO J",
-    "termo_normalizado": "Cirurgia para colocar cateter urinário duplo",
-    "termo_simples": "Cirurgia para cateter na bexiga",
+    "termo_normalizado": "Cirurgia para colocação de cateter urinário duplo",
+    "termo_simples": "CIRURGIA NA BEXIGA",
     "explicacao": "Procedimento para instalar cateter especial que drena a urina"
   }},
   {{
     "termo_original": "NEFROLITOTOMIA PERCUTANEA",
-    "termo_normalizado": "Cirurgia de remoção de pedra nos rins",
-    "termo_simples": "Cirurgia renal para pedras",
-    "explicacao": "Procedimento para retirar cálculos renais pela pele"
+    "termo_normalizado": "Cirurgia para remoção de cálculo renal",
+    "termo_simples": "CIRURGIA NO RIM",
+    "explicacao": "Procedimento para retirar pedras do rim"
+  }},
+  {{
+    "termo_original": "ARTROPLASTIA TOTAL PRIMARIA DO JOELHO",
+    "termo_normalizado": "Artroplastia total do joelho",
+    "termo_simples": "CIRURGIA NO JOELHO",
+    "explicacao": "Substituição cirúrgica da articulação do joelho"
   }}
 ]
 

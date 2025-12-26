@@ -35,6 +35,9 @@ logs/
 uploads/*
 !uploads/.gitkeep
 
+# Temporary uploads for Celery processing
+temp_uploads/
+
 # IDE
 .vscode/
 .idea/

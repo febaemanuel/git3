@@ -149,8 +149,25 @@
                     </div>
                 </div>
                 {% if campanha.status_msg %}
-                <div class="alert alert-info mt-3 mb-0">
-                    <i class="bi bi-info-circle"></i> {{ campanha.status_msg }}
+                <div class="alert alert-info mt-3 mb-0" id="status-message">
+                    <i class="bi bi-info-circle"></i> <span id="status-text">{{ campanha.status_msg }}</span>
+                </div>
+                {% endif %}
+
+                {% if campanha.status == 'processando' %}
+                <div class="card mt-3" id="processando-card">
+                    <div class="card-body">
+                        <h6 class="card-title mb-3">
+                            <i class="bi bi-hourglass-split"></i> Processamento em Andamento
+                        </h6>
+                        <div class="progress" style="height: 25px;">
+                            <div id="processamento-progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-info"
+                                 role="progressbar" style="width: 0%" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                                <span id="processamento-progress-text">0%</span>
+                            </div>
+                        </div>
+                        <small class="text-muted mt-2 d-block" id="processamento-status-detail"></small>
+                    </div>
                 </div>
                 {% endif %}
             </div>
@@ -439,6 +456,54 @@ function reenviarContato(id) {
         })
         .catch(err => alert('Erro: ' + err));
 }
+
+// Auto-refresh se campanha está processando
+{% if campanha.status == 'processando' %}
+function atualizarProcessamento() {
+    fetch(`/api/campanha/${campanhaId}/status`)
+        .then(res => res.json())
+        .then(data => {
+            // Atualizar estatísticas
+            if (data.total_contatos !== undefined) {
+                document.getElementById('stat-total').textContent = data.total_contatos;
+            }
+
+            // Atualizar mensagem de status
+            const statusText = document.getElementById('status-text');
+            if (statusText && data.status_msg) {
+                statusText.textContent = data.status_msg;
+            }
+
+            // Atualizar barra de progresso se houver informação de progresso
+            const progressBar = document.getElementById('processamento-progress-bar');
+            const progressText = document.getElementById('processamento-progress-text');
+            const statusDetail = document.getElementById('processamento-status-detail');
+
+            if (progressBar && data.progresso !== undefined) {
+                const percent = Math.round(data.progresso);
+                progressBar.style.width = percent + '%';
+                progressBar.setAttribute('aria-valuenow', percent);
+                if (progressText) {
+                    progressText.textContent = percent + '%';
+                }
+            }
+
+            if (statusDetail && data.status_detalhe) {
+                statusDetail.textContent = data.status_detalhe;
+            }
+
+            // Se status mudou para pronta, recarregar página
+            if (data.status !== 'processando') {
+                location.reload();
+            }
+        })
+        .catch(err => console.error('Erro ao atualizar processamento:', err));
+}
+
+// Iniciar polling a cada 2 segundos (mais rápido que envio)
+setInterval(atualizarProcessamento, 2000);
+atualizarProcessamento(); // Chamar imediatamente
+{% endif %}
 
 // Auto-refresh se campanha em andamento
 {% if campanha.status == 'em_andamento' %}

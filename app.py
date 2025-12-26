@@ -1038,6 +1038,9 @@ Responda APENAS com o JSON ARRAY, sem texto adicional. Normalize TODOS os {len(p
         }
 
         try:
+            logger.info(f"[BATCH API] Enviando requisição para {len(procedimentos_list)} procedimentos...")
+            inicio = time.time()
+
             response = requests.post(
                 f'{self.base_url}/chat/completions',
                 headers=headers,
@@ -1045,9 +1048,13 @@ Responda APENAS com o JSON ARRAY, sem texto adicional. Normalize TODOS os {len(p
                 timeout=60  # Timeout maior para batch
             )
 
+            tempo_resposta = time.time() - inicio
+            logger.info(f"[BATCH API] Resposta recebida em {tempo_resposta:.2f}s - Status: {response.status_code}")
+
             if response.status_code == 200:
                 data = response.json()
                 content = data['choices'][0]['message']['content'].strip()
+                logger.info(f"[BATCH API] Tamanho da resposta: {len(content)} caracteres")
 
                 # Tentar extrair JSON da resposta
                 if '```json' in content:
@@ -1055,7 +1062,9 @@ Responda APENAS com o JSON ARRAY, sem texto adicional. Normalize TODOS os {len(p
                 elif '```' in content:
                     content = content.split('```')[1].split('```')[0].strip()
 
+                logger.info(f"[BATCH API] Fazendo parse do JSON...")
                 resultado_array = json.loads(content)
+                logger.info(f"[BATCH API] Parse OK - {len(resultado_array)} itens no array")
 
                 # Converter array para dict {termo_original: {resultado}}
                 resultado_dict = {}
@@ -1068,13 +1077,21 @@ Responda APENAS com o JSON ARRAY, sem texto adicional. Normalize TODOS os {len(p
                             'explicacao': item.get('explicacao', '')
                         }
 
+                logger.info(f"[BATCH API] Conversão concluída - {len(resultado_dict)} procedimentos normalizados")
                 return resultado_dict
             else:
-                logger.error(f"Erro na API DeepSeek (batch): {response.status_code} - {response.text}")
+                logger.error(f"[BATCH API] Erro HTTP {response.status_code}: {response.text[:500]}")
                 return {}
 
+        except requests.exceptions.Timeout:
+            logger.error(f"[BATCH API] TIMEOUT após 60 segundos para {len(procedimentos_list)} procedimentos")
+            return {}
+        except json.JSONDecodeError as e:
+            logger.error(f"[BATCH API] Erro ao fazer parse do JSON: {e}")
+            logger.error(f"[BATCH API] Conteúdo recebido (primeiros 500 chars): {content[:500] if 'content' in locals() else 'N/A'}")
+            return {}
         except Exception as e:
-            logger.error(f"Exceção ao chamar DeepSeek API (batch): {e}")
+            logger.error(f"[BATCH API] Exceção inesperada: {type(e).__name__}: {e}")
             return {}
 
 
@@ -1491,28 +1508,49 @@ def processar_planilha(arquivo, campanha_id):
                 # Adicionar para normalizar em batch
                 procedimentos_para_normalizar.append(proc_original)
 
-        # Normalizar em BATCH (uma única chamada para a API)
+        # Normalizar em BATCH (dividir em chunks de 20 procedimentos)
         if procedimentos_para_normalizar:
-            logger.info(f"Chamando API para normalizar {len(procedimentos_para_normalizar)} procedimentos em batch...")
-            resultados_batch = ai._chamar_api_batch(procedimentos_para_normalizar)
+            BATCH_SIZE = 20  # Processar 20 procedimentos por vez
+            total = len(procedimentos_para_normalizar)
+            logger.info(f"Normalizando {total} procedimentos em lotes de {BATCH_SIZE}...")
 
-            for proc_original in procedimentos_para_normalizar:
-                resultado = resultados_batch.get(proc_original.upper())
-                if resultado and resultado.get('termo_simples'):
-                    # Salvar no cache
-                    ProcedimentoNormalizado.salvar_normalizacao(
-                        termo_original=proc_original,
-                        termo_normalizado=resultado['termo_normalizado'],
-                        termo_simples=resultado['termo_simples'],
-                        explicacao=resultado.get('explicacao', ''),
-                        fonte='deepseek'
-                    )
-                    mapa_normalizacao[proc_original] = resultado['termo_simples']
-                    logger.info(f"[API] '{proc_original}' -> '{resultado['termo_simples']}'")
-                else:
-                    # Fallback: usar o original
-                    mapa_normalizacao[proc_original] = proc_original.title()
-                    logger.warning(f"[FALLBACK] '{proc_original}' -> usando original")
+            # Dividir em chunks
+            for i in range(0, total, BATCH_SIZE):
+                chunk = procedimentos_para_normalizar[i:i+BATCH_SIZE]
+                chunk_num = (i // BATCH_SIZE) + 1
+                total_chunks = (total + BATCH_SIZE - 1) // BATCH_SIZE
+
+                logger.info(f"[LOTE {chunk_num}/{total_chunks}] Processando {len(chunk)} procedimentos...")
+
+                try:
+                    resultados_batch = ai._chamar_api_batch(chunk)
+                    logger.info(f"[LOTE {chunk_num}/{total_chunks}] API retornou {len(resultados_batch)} resultados")
+
+                    for proc_original in chunk:
+                        resultado = resultados_batch.get(proc_original.upper())
+                        if resultado and resultado.get('termo_simples'):
+                            # Salvar no cache
+                            ProcedimentoNormalizado.salvar_normalizacao(
+                                termo_original=proc_original,
+                                termo_normalizado=resultado['termo_normalizado'],
+                                termo_simples=resultado['termo_simples'],
+                                explicacao=resultado.get('explicacao', ''),
+                                fonte='deepseek'
+                            )
+                            mapa_normalizacao[proc_original] = resultado['termo_simples']
+                            logger.info(f"[API] '{proc_original}' -> '{resultado['termo_simples']}'")
+                        else:
+                            # Fallback: usar o original
+                            mapa_normalizacao[proc_original] = proc_original.title()
+                            logger.warning(f"[FALLBACK] '{proc_original}' -> usando original")
+
+                except Exception as e:
+                    logger.error(f"[LOTE {chunk_num}/{total_chunks}] Erro ao processar batch: {e}")
+                    # Em caso de erro, usar original para este chunk
+                    for proc_original in chunk:
+                        if proc_original not in mapa_normalizacao:
+                            mapa_normalizacao[proc_original] = proc_original.title()
+                            logger.warning(f"[ERRO-FALLBACK] '{proc_original}' -> usando original")
 
         logger.info(f"Normalização concluída. {len(mapa_normalizacao)} mapeamentos criados.")
         # =========================================================================

@@ -1360,14 +1360,16 @@ def processar_planilha(arquivo, campanha_id):
 
         logger.info(f"Normalizando {len(procedimentos_unicos)} procedimentos únicos...")
 
-        for proc_original in procedimentos_unicos:
+        for idx, proc_original in enumerate(procedimentos_unicos, 1):
             resultado = ai.normalizar_procedimento(proc_original)
             if resultado:
-                mapa_normalizacao[proc_original] = resultado['normalizado']
-                logger.info(f"Normalizado: '{proc_original}' -> '{resultado['normalizado']}' (fonte: {resultado['fonte']})")
+                # Usar termo SIMPLES para melhor compreensão do paciente
+                mapa_normalizacao[proc_original] = resultado['simples']
+                logger.info(f"[{idx}/{len(procedimentos_unicos)}] Normalizado: '{proc_original}' -> '{resultado['simples']}' (fonte: {resultado['fonte']})")
             else:
                 # Fallback: usar o original
                 mapa_normalizacao[proc_original] = proc_original
+                logger.info(f"[{idx}/{len(procedimentos_unicos)}] Mantido original: '{proc_original}'")
 
         logger.info(f"Normalização concluída. {len(mapa_normalizacao)} mapeamentos criados.")
         # =========================================================================
@@ -2955,21 +2957,36 @@ def criar_campanha():
         hora_fim=hora_fim,
         dias_duracao=dias_duracao,
         criador_id=current_user.id,
-        arquivo=arq.filename
+        arquivo=arq.filename,
+        status='processando',
+        status_msg='Preparando processamento...'
     )
     db.session.add(camp)
     db.session.commit()
 
-    ok, erro, qtd = processar_planilha(arq, camp.id)
+    # Salvar arquivo temporariamente para processamento assíncrono
+    import tempfile
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp_file:
+        arq.save(tmp_file.name)
+        arquivo_path = tmp_file.name
 
-    if ok:
-        flash(f'Campanha criada! {qtd} contatos importados.', 'success')
-        # Validacao sera feita sob demanda durante o envio
-    else:
-        flash(f'Erro: {erro}', 'danger')
-        db.session.delete(camp)
-        db.session.commit()
-        return redirect(url_for('dashboard'))
+    # Disparar task assíncrona do Celery
+    try:
+        from tasks import processar_planilha_task
+        task = processar_planilha_task.delay(arquivo_path, camp.id)
+        logger.info(f"Task de processamento iniciada: {task.id} para campanha {camp.id}")
+        flash(f'Campanha "{nome}" criada! Processamento iniciado em segundo plano. Acompanhe o progresso na página de detalhes.', 'success')
+    except Exception as e:
+        logger.error(f"Erro ao iniciar processamento assíncrono: {e}")
+        # Fallback para processamento síncrono
+        ok, erro, qtd = processar_planilha(arq, camp.id)
+        if ok:
+            flash(f'Campanha criada! {qtd} contatos importados.', 'success')
+        else:
+            flash(f'Erro: {erro}', 'danger')
+            db.session.delete(camp)
+            db.session.commit()
+            return redirect(url_for('dashboard'))
 
     return redirect(url_for('campanha_detalhe', id=camp.id))
 
@@ -4426,6 +4443,7 @@ def api_relatorios(campanha_id):
             'nome': contato.nome,
             'telefone': telefone_str,
             'procedimento': contato.procedimento,
+            'procedimento_normalizado': contato.procedimento_normalizado,
             'status': contato.status,
             'confirmado': contato.confirmado,
             'rejeitado': contato.rejeitado,

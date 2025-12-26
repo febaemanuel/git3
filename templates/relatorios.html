@@ -706,11 +706,20 @@ function atualizarTabela(contatos) {
             statusText = 'Erro';
         }
 
+        // Formatar procedimento
+        let procedimentoHtml = contato.procedimento || '-';
+        if (contato.procedimento_normalizado && contato.procedimento_normalizado !== contato.procedimento) {
+            procedimentoHtml = `
+                <strong style="color: #198754;">${contato.procedimento_normalizado}</strong><br>
+                <small style="color: #6c757d;">Original: ${contato.procedimento}</small>
+            `;
+        }
+
         return `
             <tr>
                 <td><strong>${contato.nome}</strong></td>
                 <td>${contato.telefone || '-'}</td>
-                <td>${contato.procedimento || '-'}</td>
+                <td>${procedimentoHtml}</td>
                 <td class="text-center">
                     <span class="badge badge-custom ${badgeClass}">${statusText}</span>
                 </td>

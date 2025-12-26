@@ -239,7 +239,15 @@
                                 <td><strong>{{ contato.nome }}</strong></td>
                                 <td>{{ contato.formatar_telefone() }}</td>
                                 <td>
+                                    {% if contato.procedimento_normalizado and contato.procedimento_normalizado != contato.procedimento %}
+                                    <div>
+                                        <strong class="text-success">{{ contato.procedimento_normalizado[:50] }}{% if contato.procedimento_normalizado|length > 50 %}...{% endif %}</strong>
+                                        <br>
+                                        <small class="text-muted">Original: {{ contato.procedimento[:40] }}{% if contato.procedimento|length > 40 %}...{% endif %}</small>
+                                    </div>
+                                    {% else %}
                                     <small>{{ contato.procedimento[:40] }}{% if contato.procedimento|length > 40 %}...{% endif %}</small>
+                                    {% endif %}
                                 </td>
                                 <td class="text-center">
                                     <span class="badge {{ contato.status_badge() }}">

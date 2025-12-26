@@ -3147,9 +3147,9 @@ def criar_campanha():
     db.session.commit()
 
     # Salvar arquivo temporário para processamento assíncrono
+    # Usar /app/uploads/temp que é compartilhado entre web e worker via volume
     import os
-    import tempfile
-    temp_dir = os.path.join(os.path.dirname(__file__), 'temp_uploads')
+    temp_dir = '/app/uploads/temp'
     os.makedirs(temp_dir, exist_ok=True)
 
     # Nome único para o arquivo temporário
@@ -3157,8 +3157,24 @@ def criar_campanha():
     temp_path = os.path.join(temp_dir, temp_filename)
 
     # Salvar arquivo
-    arq.save(temp_path)
-    logger.info(f"Arquivo salvo em: {temp_path}")
+    try:
+        arq.save(temp_path)
+        logger.info(f"Arquivo salvo em: {temp_path}")
+
+        # Verificar se arquivo existe e tem conteúdo
+        if not os.path.exists(temp_path):
+            raise FileNotFoundError(f"Arquivo não foi salvo: {temp_path}")
+
+        file_size = os.path.getsize(temp_path)
+        logger.info(f"Arquivo salvo com sucesso: {file_size} bytes")
+
+    except Exception as e:
+        logger.error(f"Erro ao salvar arquivo: {e}")
+        camp.status = 'erro'
+        camp.status_msg = f'Erro ao salvar arquivo: {str(e)}'
+        db.session.commit()
+        flash(f'Erro ao salvar arquivo: {e}', 'danger')
+        return redirect(url_for('dashboard'))
 
     # Processar planilha de forma ASSÍNCRONA com Celery
     from tasks import processar_planilha_task

@@ -724,7 +724,9 @@ def processar_planilha_task(self, arquivo_path, campanha_id):
                         if fmt:
                             pessoas[chave]['telefones'].add((tel, fmt))
 
-        # Normalizar procedimentos
+        # Normalizar procedimentos COM BATCH PROCESSING
+        from app import ProcedimentoNormalizado
+
         procedimentos_unicos = set()
         for dados in pessoas.values():
             if dados['procedimento']:
@@ -746,27 +748,78 @@ def processar_planilha_task(self, arquivo_path, campanha_id):
         ai = DeepSeekAI()
         mapa_normalizacao = {}
 
-        for idx, proc_original in enumerate(procedimentos_unicos, 1):
-            # Atualizar progresso
-            progresso = 30 + int((idx / len(procedimentos_unicos)) * 40)  # 30-70%
-            self.update_state(
-                state='PROGRESS',
-                meta={
-                    'current': idx,
-                    'total': len(procedimentos_unicos),
-                    'percent': progresso,
-                    'status': f'Normalizando procedimento {idx}/{len(procedimentos_unicos)}: {proc_original[:50]}...'
-                }
-            )
+        logger.info(f"Normalizando {len(procedimentos_unicos)} procedimentos únicos...")
 
-            resultado = ai.normalizar_procedimento(proc_original)
-            if resultado:
-                # Usar termo SIMPLES para melhor compreensão do paciente
-                mapa_normalizacao[proc_original] = resultado['simples']
-                logger.info(f"[{idx}/{len(procedimentos_unicos)}] Normalizado: '{proc_original}' -> '{resultado['simples']}' (fonte: {resultado['fonte']})")
+        # Separar procedimentos que já estão no cache vs que precisam normalizar
+        procedimentos_para_normalizar = []
+        for proc_original in procedimentos_unicos:
+            cached = ProcedimentoNormalizado.obter_ou_criar(proc_original)
+            if cached and cached.aprovado:
+                # Usar do cache
+                mapa_normalizacao[proc_original] = cached.termo_simples
+                logger.info(f"[CACHE] '{proc_original}' -> '{cached.termo_simples}'")
+                cached.incrementar_uso()
             else:
-                mapa_normalizacao[proc_original] = proc_original
-                logger.info(f"[{idx}/{len(procedimentos_unicos)}] Mantido original: '{proc_original}'")
+                # Adicionar para normalizar em batch
+                procedimentos_para_normalizar.append(proc_original)
+
+        # Normalizar em BATCH (dividir em chunks de 20 procedimentos)
+        if procedimentos_para_normalizar:
+            BATCH_SIZE = 20
+            total = len(procedimentos_para_normalizar)
+            logger.info(f"Normalizando {total} procedimentos em lotes de {BATCH_SIZE}...")
+
+            # Dividir em chunks
+            for i in range(0, total, BATCH_SIZE):
+                chunk = procedimentos_para_normalizar[i:i+BATCH_SIZE]
+                chunk_num = (i // BATCH_SIZE) + 1
+                total_chunks = (total + BATCH_SIZE - 1) // BATCH_SIZE
+
+                # Atualizar progresso
+                progresso = 30 + int(((i + len(chunk)) / total) * 40)  # 30-70%
+                self.update_state(
+                    state='PROGRESS',
+                    meta={
+                        'current': i + len(chunk),
+                        'total': total,
+                        'percent': progresso,
+                        'status': f'Normalizando lote {chunk_num}/{total_chunks} ({len(chunk)} procedimentos)...'
+                    }
+                )
+
+                logger.info(f"[LOTE {chunk_num}/{total_chunks}] Processando {len(chunk)} procedimentos...")
+
+                try:
+                    resultados_batch = ai._chamar_api_batch(chunk)
+                    logger.info(f"[LOTE {chunk_num}/{total_chunks}] API retornou {len(resultados_batch)} resultados")
+
+                    for proc_original in chunk:
+                        resultado = resultados_batch.get(proc_original.upper())
+                        if resultado and resultado.get('termo_simples'):
+                            # Salvar no cache
+                            ProcedimentoNormalizado.salvar_normalizacao(
+                                termo_original=proc_original,
+                                termo_normalizado=resultado['termo_normalizado'],
+                                termo_simples=resultado['termo_simples'],
+                                explicacao=resultado.get('explicacao', ''),
+                                fonte='deepseek'
+                            )
+                            mapa_normalizacao[proc_original] = resultado['termo_simples']
+                            logger.info(f"[API] '{proc_original}' -> '{resultado['termo_simples']}'")
+                        else:
+                            # Fallback: usar o original
+                            mapa_normalizacao[proc_original] = proc_original.title()
+                            logger.warning(f"[FALLBACK] '{proc_original}' -> usando original")
+
+                except Exception as e:
+                    logger.error(f"[LOTE {chunk_num}/{total_chunks}] Erro ao processar batch: {e}")
+                    # Em caso de erro, usar original para este chunk
+                    for proc_original in chunk:
+                        if proc_original not in mapa_normalizacao:
+                            mapa_normalizacao[proc_original] = proc_original.title()
+                            logger.warning(f"[ERRO-FALLBACK] '{proc_original}' -> usando original")
+
+        logger.info(f"Normalização concluída. {len(mapa_normalizacao)} mapeamentos criados.")
 
         # Salvar contatos no banco
         self.update_state(

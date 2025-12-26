@@ -221,7 +221,7 @@
 <div class="modal fade" id="modalNovaCampanha" tabindex="-1">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
-            <form method="POST" action="{{ url_for('criar_campanha') }}" enctype="multipart/form-data" id="form-criar-campanha">
+            <form method="POST" action="{{ url_for('criar_campanha') }}" enctype="multipart/form-data">
                 <div class="modal-header">
                     <h5 class="modal-title">
                         <i class="bi bi-plus-circle"></i> Nova Campanha
@@ -229,22 +229,7 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
 
-                <!-- Barra de Progresso (aparece durante processamento) -->
-                <div id="upload-progress" style="display: none; padding: 20px; background-color: #f8f9fa; border-bottom: 1px solid #dee2e6;">
-                    <h6 class="text-center mb-3">
-                        <i class="bi bi-hourglass-split"></i> Processando Planilha...
-                    </h6>
-                    <div class="progress" style="height: 25px;">
-                        <div class="progress-bar progress-bar-striped progress-bar-animated bg-info" role="progressbar" style="width: 100%">
-                            <strong>Aguarde, normalizando procedimentos médicos...</strong>
-                        </div>
-                    </div>
-                    <p class="text-center text-muted mt-2 mb-0">
-                        <small>Este processo pode levar alguns segundos. Não feche esta janela.</small>
-                    </p>
-                </div>
-
-                <div class="modal-body" id="modal-body-form">
+                <div class="modal-body">
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">Nome da Campanha *</label>
@@ -400,17 +385,5 @@ setInterval(carregarTickets, 30000);
         {% endif %}
     {% endfor %}
 {% endif %}
-
-// Show progress bar when creating campaign
-document.getElementById('form-criar-campanha').addEventListener('submit', function(e) {
-    // Show progress bar
-    document.getElementById('upload-progress').style.display = 'block';
-    // Hide form
-    document.getElementById('modal-body-form').style.display = 'none';
-    // Disable close button to prevent closing during processing
-    const closeButtons = document.querySelectorAll('#modalNovaCampanha .btn-close, #modalNovaCampanha button[data-bs-dismiss="modal"]');
-    closeButtons.forEach(btn => btn.disabled = true);
-    // Form will submit normally (synchronous processing)
-});
 </script>
 {% endblock %}

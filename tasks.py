@@ -569,16 +569,297 @@ def limpar_tasks_antigas():
     bind=True,
     name='tasks.processar_planilha_task',
     max_retries=2,
-    default_retry_delay=30
+    default_retry_delay=30,
+    time_limit=1800,  # 30 minutos máximo
+    soft_time_limit=1700
 )
 def processar_planilha_task(self, arquivo_path, campanha_id):
     """
-    Processa planilha Excel de forma assíncrona
-    (Futura implementação - atualmente processamento é síncrono)
+    Processa planilha Excel de forma assíncrona com feedback de progresso
+
+    Args:
+        arquivo_path: Caminho do arquivo Excel
+        campanha_id: ID da campanha
+
+    Returns:
+        dict: Resultado do processamento
     """
+    from app import db, Campanha, Contato, Telefone, DeepSeekAI
+    from datetime import datetime
+    import pandas as pd
+
     logger.info(f"Processando planilha para campanha {campanha_id}")
 
-    # TODO: Migrar processar_planilha() do app.py para aqui
-    # Por enquanto, mantemos no app.py para não quebrar o fluxo existente
+    try:
+        # Atualizar status inicial
+        self.update_state(
+            state='PROGRESS',
+            meta={
+                'current': 0,
+                'total': 100,
+                'percent': 0,
+                'status': 'Lendo arquivo Excel...'
+            }
+        )
 
-    return {'sucesso': True, 'campanha_id': campanha_id}
+        # Carregar campanha
+        camp = db.session.get(Campanha, campanha_id)
+        if not camp:
+            return {'sucesso': False, 'erro': 'Campanha não encontrada'}
+
+        camp.status = 'processando'
+        camp.status_msg = 'Lendo planilha...'
+        db.session.commit()
+
+        # Ler Excel
+        df = pd.read_excel(arquivo_path)
+        if df.empty:
+            camp.status = 'erro'
+            camp.status_msg = 'Planilha vazia'
+            db.session.commit()
+            return {'sucesso': False, 'erro': 'Planilha vazia'}
+
+        self.update_state(
+            state='PROGRESS',
+            meta={
+                'current': 10,
+                'total': 100,
+                'percent': 10,
+                'status': f'Processando {len(df)} linhas...'
+            }
+        )
+
+        # Normalizar colunas
+        df.columns = [str(c).strip().lower() for c in df.columns]
+
+        # Identificar colunas
+        col_nome = col_tel = col_proc = col_nasc = None
+        for c in df.columns:
+            if c in ['nome', 'usuario', 'usuário', 'paciente']:
+                col_nome = c
+            elif c in ['telefone', 'celular', 'fone', 'tel', 'whatsapp', 'contato']:
+                col_tel = c
+            elif c in ['procedimento', 'cirurgia', 'procedimentos']:
+                col_proc = c
+            elif c in ['nascimento', 'data_nascimento', 'data nascimento', 'dt_nasc', 'dtnasc', 'dt nasc']:
+                col_nasc = c
+
+        if not col_nome or not col_tel:
+            camp.status = 'erro'
+            camp.status_msg = f"Colunas obrigatórias não encontradas"
+            db.session.commit()
+            return {'sucesso': False, 'erro': f"Colunas obrigatórias não encontradas. Disponíveis: {list(df.columns)}"}
+
+        # Agrupar por pessoa
+        pessoas = {}
+        total_linhas = len(df)
+
+        for idx, row in df.iterrows():
+            # Atualizar progresso
+            if idx % 10 == 0:
+                progresso = 10 + int((idx / total_linhas) * 20)  # 10-30%
+                self.update_state(
+                    state='PROGRESS',
+                    meta={
+                        'current': idx,
+                        'total': total_linhas,
+                        'percent': progresso,
+                        'status': f'Processando linha {idx+1}/{total_linhas}...'
+                    }
+                )
+
+            nome = str(row.get(col_nome, '')).strip()
+            if not nome or nome.lower() == 'nan':
+                continue
+
+            # Data nascimento
+            dt_nasc = None
+            dt_nasc_str = ''
+            if col_nasc:
+                val = row.get(col_nasc)
+                if pd.notna(val):
+                    try:
+                        if isinstance(val, datetime):
+                            dt_nasc = val.date()
+                        else:
+                            dt_nasc = pd.to_datetime(val, dayfirst=True).date()
+                        dt_nasc_str = dt_nasc.isoformat()
+                    except:
+                        pass
+
+            chave = (nome, dt_nasc_str)
+
+            if chave not in pessoas:
+                # Procedimento
+                proc = str(row.get(col_proc, 'o procedimento')).strip() if col_proc else 'o procedimento'
+                if proc.lower() == 'nan': proc = 'o procedimento'
+                if '-' in proc:
+                    partes = proc.split('-', 1)
+                    if partes[0].strip().isdigit():
+                        proc = partes[1].strip()
+
+                pessoas[chave] = {
+                    'nome': nome,
+                    'nascimento': dt_nasc,
+                    'procedimento': proc,
+                    'telefones': set()
+                }
+
+            # Telefones
+            tels = str(row.get(col_tel, '')).strip()
+            if tels and tels.lower() != 'nan':
+                for tel in tels.replace(',', ' ').replace(';', ' ').replace('/', ' ').split():
+                    tel = tel.strip()
+                    if not tel: continue
+                    # Formatar número
+                    num = ''.join(filter(str.isdigit, str(tel))).lstrip('0')
+                    if num:
+                        if num.startswith('55'):
+                            fmt = num if len(num) in [12, 13] else None
+                        elif len(num) in [10, 11]:
+                            fmt = '55' + num
+                        else:
+                            fmt = None
+
+                        if fmt:
+                            pessoas[chave]['telefones'].add((tel, fmt))
+
+        # Normalizar procedimentos
+        procedimentos_unicos = set()
+        for dados in pessoas.values():
+            if dados['procedimento']:
+                procedimentos_unicos.add(dados['procedimento'])
+
+        self.update_state(
+            state='PROGRESS',
+            meta={
+                'current': 30,
+                'total': 100,
+                'percent': 30,
+                'status': f'Normalizando {len(procedimentos_unicos)} procedimentos...'
+            }
+        )
+
+        camp.status_msg = f'Normalizando procedimentos...'
+        db.session.commit()
+
+        ai = DeepSeekAI()
+        mapa_normalizacao = {}
+
+        for idx, proc_original in enumerate(procedimentos_unicos, 1):
+            # Atualizar progresso
+            progresso = 30 + int((idx / len(procedimentos_unicos)) * 40)  # 30-70%
+            self.update_state(
+                state='PROGRESS',
+                meta={
+                    'current': idx,
+                    'total': len(procedimentos_unicos),
+                    'percent': progresso,
+                    'status': f'Normalizando procedimento {idx}/{len(procedimentos_unicos)}: {proc_original[:50]}...'
+                }
+            )
+
+            resultado = ai.normalizar_procedimento(proc_original)
+            if resultado:
+                # Usar termo SIMPLES para melhor compreensão do paciente
+                mapa_normalizacao[proc_original] = resultado['simples']
+                logger.info(f"[{idx}/{len(procedimentos_unicos)}] Normalizado: '{proc_original}' -> '{resultado['simples']}' (fonte: {resultado['fonte']})")
+            else:
+                mapa_normalizacao[proc_original] = proc_original
+                logger.info(f"[{idx}/{len(procedimentos_unicos)}] Mantido original: '{proc_original}'")
+
+        # Salvar contatos no banco
+        self.update_state(
+            state='PROGRESS',
+            meta={
+                'current': 70,
+                'total': 100,
+                'percent': 70,
+                'status': 'Salvando contatos no banco de dados...'
+            }
+        )
+
+        camp.status_msg = 'Salvando contatos...'
+        db.session.commit()
+
+        criados = 0
+        total_pessoas = len(pessoas)
+
+        for idx, (chave, dados) in enumerate(pessoas.items(), 1):
+            if not dados['telefones']:
+                continue
+
+            # Atualizar progresso
+            if idx % 10 == 0:
+                progresso = 70 + int((idx / total_pessoas) * 25)  # 70-95%
+                self.update_state(
+                    state='PROGRESS',
+                    meta={
+                        'current': idx,
+                        'total': total_pessoas,
+                        'percent': progresso,
+                        'status': f'Salvando contato {idx}/{total_pessoas}: {dados["nome"][:30]}...'
+                    }
+                )
+
+            # Obter procedimento normalizado
+            proc_original = dados['procedimento']
+            proc_normalizado = mapa_normalizacao.get(proc_original, proc_original)
+
+            c = Contato(
+                campanha_id=campanha_id,
+                nome=dados['nome'][:200],
+                data_nascimento=dados['nascimento'],
+                procedimento=proc_original[:500],
+                procedimento_normalizado=proc_normalizado[:300],
+                status='pendente'
+            )
+            db.session.add(c)
+            db.session.flush()
+
+            for i, (original, fmt) in enumerate(dados['telefones']):
+                t = Telefone(
+                    contato_id=c.id,
+                    numero=original[:20],
+                    numero_fmt=fmt,
+                    prioridade=i+1
+                )
+                db.session.add(t)
+
+            criados += 1
+
+        db.session.commit()
+
+        # Atualizar estatísticas
+        self.update_state(
+            state='PROGRESS',
+            meta={
+                'current': 95,
+                'total': 100,
+                'percent': 95,
+                'status': 'Atualizando estatísticas...'
+            }
+        )
+
+        camp.atualizar_stats()
+        camp.status = 'pronta'
+        camp.status_msg = f'{criados} contatos importados'
+        db.session.commit()
+
+        logger.info(f"Planilha processada com sucesso: {criados} contatos criados")
+
+        return {
+            'sucesso': True,
+            'criados': criados,
+            'campanha_id': campanha_id,
+            'procedimentos_normalizados': len(mapa_normalizacao)
+        }
+
+    except Exception as e:
+        logger.exception(f"Erro ao processar planilha: {e}")
+        camp = db.session.get(Campanha, campanha_id)
+        if camp:
+            camp.status = 'erro'
+            camp.status_msg = str(e)[:200]
+            db.session.commit()
+        raise

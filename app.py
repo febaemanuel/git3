@@ -978,6 +978,105 @@ Responda APENAS com o JSON, sem texto adicional."""
             logger.error(f"Exceção ao chamar DeepSeek API: {e}")
             return None
 
+    def _chamar_api_batch(self, procedimentos_list):
+        """Chama a API DeepSeek para normalizar múltiplos procedimentos de uma vez"""
+        if not procedimentos_list:
+            return {}
+
+        procedimentos_numerados = "\n".join([f"{i+1}. {proc}" for i, proc in enumerate(procedimentos_list)])
+
+        prompt = f"""Você é um assistente médico especializado em comunicação com pacientes de um hospital de referência.
+
+TAREFA: Simplifique os seguintes termos médicos técnicos para uma linguagem clara e profissional que pacientes possam entender.
+
+TERMOS MÉDICOS:
+{procedimentos_numerados}
+
+DIRETRIZES:
+- Use linguagem FORMAL mas ACESSÍVEL (não use gírias ou termos muito coloquiais)
+- Mantenha tom PROFISSIONAL apropriado para um hospital de referência
+- Prefira estruturas: "Cirurgia de/para/da...", "Tratamento de/para...", "Procedimento de/para..."
+- Evite termos infantilizados (ex: "tubinho", "machucado")
+- Use termos médicos simplificados quando apropriado (ex: "cateter" ao invés de "tubinho")
+
+RETORNE UM JSON ARRAY onde cada objeto contém:
+1. "termo_original": O termo médico original
+2. "termo_normalizado": Nome profissional simplificado (máximo 70 caracteres)
+3. "termo_simples": Versão mais curta e direta (máximo 50 caracteres)
+4. "explicacao": Breve explicação em 1 linha do que é o procedimento
+
+EXEMPLO DE FORMATO DE RESPOSTA:
+[
+  {{
+    "termo_original": "INSTALACAO ENDOSCOPICA DE CATETER DUPLO J",
+    "termo_normalizado": "Cirurgia para colocar cateter urinário duplo",
+    "termo_simples": "Cirurgia para cateter na bexiga",
+    "explicacao": "Procedimento para instalar cateter especial que drena a urina"
+  }},
+  {{
+    "termo_original": "NEFROLITOTOMIA PERCUTANEA",
+    "termo_normalizado": "Cirurgia de remoção de pedra nos rins",
+    "termo_simples": "Cirurgia renal para pedras",
+    "explicacao": "Procedimento para retirar cálculos renais pela pele"
+  }}
+]
+
+Responda APENAS com o JSON ARRAY, sem texto adicional. Normalize TODOS os {len(procedimentos_list)} procedimentos fornecidos."""
+
+        headers = {
+            'Authorization': f'Bearer {self.api_key}',
+            'Content-Type': 'application/json'
+        }
+
+        payload = {
+            'model': self.model,
+            'messages': [
+                {'role': 'user', 'content': prompt}
+            ],
+            'temperature': 0.3,
+            'max_tokens': 8000  # Aumentado para acomodar múltiplos procedimentos
+        }
+
+        try:
+            response = requests.post(
+                f'{self.base_url}/chat/completions',
+                headers=headers,
+                json=payload,
+                timeout=60  # Timeout maior para batch
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                content = data['choices'][0]['message']['content'].strip()
+
+                # Tentar extrair JSON da resposta
+                if '```json' in content:
+                    content = content.split('```json')[1].split('```')[0].strip()
+                elif '```' in content:
+                    content = content.split('```')[1].split('```')[0].strip()
+
+                resultado_array = json.loads(content)
+
+                # Converter array para dict {termo_original: {resultado}}
+                resultado_dict = {}
+                for item in resultado_array:
+                    termo_orig = item.get('termo_original', '').upper().strip()
+                    if termo_orig:
+                        resultado_dict[termo_orig] = {
+                            'termo_normalizado': item.get('termo_normalizado', ''),
+                            'termo_simples': item.get('termo_simples', ''),
+                            'explicacao': item.get('explicacao', '')
+                        }
+
+                return resultado_dict
+            else:
+                logger.error(f"Erro na API DeepSeek (batch): {response.status_code} - {response.text}")
+                return {}
+
+        except Exception as e:
+            logger.error(f"Exceção ao chamar DeepSeek API (batch): {e}")
+            return {}
+
 
 # =============================================================================
 # SERVICO WHATSAPP
@@ -1379,16 +1478,41 @@ def processar_planilha(arquivo, campanha_id):
 
         logger.info(f"Normalizando {len(procedimentos_unicos)} procedimentos únicos...")
 
-        for idx, proc_original in enumerate(procedimentos_unicos, 1):
-            resultado = ai.normalizar_procedimento(proc_original)
-            if resultado:
-                # Usar termo SIMPLES para melhor compreensão do paciente
-                mapa_normalizacao[proc_original] = resultado['simples']
-                logger.info(f"[{idx}/{len(procedimentos_unicos)}] Normalizado: '{proc_original}' -> '{resultado['simples']}' (fonte: {resultado['fonte']})")
+        # Separar procedimentos que já estão no cache vs que precisam normalizar
+        procedimentos_para_normalizar = []
+        for proc_original in procedimentos_unicos:
+            cached = ProcedimentoNormalizado.obter_ou_criar(proc_original)
+            if cached and cached.aprovado:
+                # Usar do cache
+                mapa_normalizacao[proc_original] = cached.termo_simples
+                logger.info(f"[CACHE] '{proc_original}' -> '{cached.termo_simples}'")
+                cached.incrementar_uso()
             else:
-                # Fallback: usar o original
-                mapa_normalizacao[proc_original] = proc_original
-                logger.info(f"[{idx}/{len(procedimentos_unicos)}] Mantido original: '{proc_original}'")
+                # Adicionar para normalizar em batch
+                procedimentos_para_normalizar.append(proc_original)
+
+        # Normalizar em BATCH (uma única chamada para a API)
+        if procedimentos_para_normalizar:
+            logger.info(f"Chamando API para normalizar {len(procedimentos_para_normalizar)} procedimentos em batch...")
+            resultados_batch = ai._chamar_api_batch(procedimentos_para_normalizar)
+
+            for proc_original in procedimentos_para_normalizar:
+                resultado = resultados_batch.get(proc_original.upper())
+                if resultado and resultado.get('termo_simples'):
+                    # Salvar no cache
+                    ProcedimentoNormalizado.salvar_normalizacao(
+                        termo_original=proc_original,
+                        termo_normalizado=resultado['termo_normalizado'],
+                        termo_simples=resultado['termo_simples'],
+                        explicacao=resultado.get('explicacao', ''),
+                        fonte='deepseek'
+                    )
+                    mapa_normalizacao[proc_original] = resultado['termo_simples']
+                    logger.info(f"[API] '{proc_original}' -> '{resultado['termo_simples']}'")
+                else:
+                    # Fallback: usar o original
+                    mapa_normalizacao[proc_original] = proc_original.title()
+                    logger.warning(f"[FALLBACK] '{proc_original}' -> usando original")
 
         logger.info(f"Normalização concluída. {len(mapa_normalizacao)} mapeamentos criados.")
         # =========================================================================

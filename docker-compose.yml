@@ -63,7 +63,7 @@ services:
         echo 'Inicializando banco de dados...' &&
         flask init-db || true &&
         echo 'Iniciando aplicação...' &&
-        gunicorn --bind 0.0.0.0:5000 --workers 4 --timeout 120 --log-level info app:app
+        gunicorn --bind 0.0.0.0:5000 --workers 4 --timeout 300 --log-level info app:app
       "
 
   # Celery Worker (Processa tarefas assíncronas)

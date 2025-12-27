@@ -425,6 +425,90 @@ class Contato(db.Model):
         if self.status == 'pronto_envio': return 'bg-primary'
         return 'bg-light text-dark'
 
+    def calcular_status_final(self):
+        """
+        Calcula o status final baseado em todas as respostas dos telefones.
+        Hierarquia: CONFIRMADO > REJEITADO > DESCONHEÇO > PENDENTE
+
+        Regra: Se QUALQUER número confirmou, status final é CONFIRMADO.
+        "Desconheço" não é considerado conflito.
+        """
+        telefones = list(self.telefones.all())
+
+        # Conta cada tipo de resposta
+        tem_confirmado = any(t.tipo_resposta == 'confirmado' for t in telefones)
+        tem_rejeitado = any(t.tipo_resposta == 'rejeitado' for t in telefones)
+        tem_desconheco = any(t.tipo_resposta == 'desconheco' for t in telefones)
+
+        # Se qualquer número confirmou, status final é CONFIRMADO
+        if tem_confirmado:
+            self.confirmado = True
+            self.rejeitado = False
+            if self.status not in ['erro']:
+                self.status = 'concluido'
+        # Se nenhum confirmou mas algum rejeitou, status é REJEITADO
+        elif tem_rejeitado:
+            self.confirmado = False
+            self.rejeitado = True
+            if self.status not in ['erro']:
+                self.status = 'concluido'
+        # Se só tem "desconheço", mantém como não confirmado/rejeitado
+        elif tem_desconheco:
+            self.confirmado = False
+            self.rejeitado = False
+            if self.status not in ['erro']:
+                self.status = 'concluido'
+        # Se nenhuma resposta, mantém pendente
+        else:
+            self.confirmado = False
+            self.rejeitado = False
+
+        # Atualiza os campos legados de resposta para compatibilidade
+        respostas_com_data = [t for t in telefones if t.data_resposta]
+        if respostas_com_data:
+            ultima = max(respostas_com_data, key=lambda t: t.data_resposta)
+            self.resposta = ultima.resposta
+            self.data_resposta = ultima.data_resposta
+
+    def obter_respostas_detalhadas(self):
+        """
+        Retorna informações detalhadas de todas as respostas recebidas.
+        """
+        resultado = []
+        for telefone in self.telefones.all():
+            info = {
+                'numero': telefone.numero,
+                'numero_fmt': telefone.numero_fmt,
+                'prioridade': telefone.prioridade,
+                'resposta': telefone.resposta,
+                'data_resposta': telefone.data_resposta,
+                'tipo_resposta': telefone.tipo_resposta,
+                'validacao_pendente': telefone.validacao_pendente
+            }
+            resultado.append(info)
+
+        # Ordena por prioridade (menor = mais importante)
+        resultado.sort(key=lambda x: x['prioridade'])
+        return resultado
+
+    def tem_respostas_multiplas(self):
+        """Verifica se há múltiplas respostas de telefones diferentes."""
+        respostas = [t for t in self.telefones.all() if t.tipo_resposta]
+        return len(respostas) > 1
+
+    def tem_conflito_real(self):
+        """
+        Verifica se há conflito REAL entre respostas.
+        "Desconheço" não é considerado conflito.
+        Conflito = ter CONFIRMADO e REJEITADO ao mesmo tempo.
+        """
+        telefones = list(self.telefones.all())
+        tem_confirmado = any(t.tipo_resposta == 'confirmado' for t in telefones)
+        tem_rejeitado = any(t.tipo_resposta == 'rejeitado' for t in telefones)
+
+        # Conflito real apenas se tem confirmado E rejeitado simultaneamente
+        return tem_confirmado and tem_rejeitado
+
 
 class Telefone(db.Model):
     __tablename__ = 'telefones'
@@ -441,7 +525,13 @@ class Telefone(db.Model):
     enviado = db.Column(db.Boolean, default=False)
     data_envio = db.Column(db.DateTime)
     msg_id = db.Column(db.String(100))
-    
+
+    # Response tracking per phone number
+    resposta = db.Column(db.Text)
+    data_resposta = db.Column(db.DateTime)
+    tipo_resposta = db.Column(db.String(20))  # 'confirmado', 'rejeitado', 'desconheco', null
+    validacao_pendente = db.Column(db.Boolean, default=False)  # waiting for birth date validation
+
     prioridade = db.Column(db.Integer, default=1) # 1 = principal
 
 
@@ -3735,6 +3825,137 @@ def api_revalidar(id):
     return jsonify({'sucesso': True, 'valido': tem_valido})
 
 
+@app.route('/api/contato/<int:id>/detalhes', methods=['GET'])
+@login_required
+def api_contato_detalhes(id):
+    """
+    Retorna informações detalhadas do contato incluindo:
+    - Todas as respostas de cada telefone
+    - Histórico de mensagens (enviadas e recebidas)
+    - Status de conflito
+    """
+    c = verificar_acesso_contato(id)
+
+    # Obter respostas detalhadas de todos os telefones
+    respostas_telefones = []
+    for telefone in c.telefones.all():
+        tel_info = {
+            'id': telefone.id,
+            'numero': telefone.numero,
+            'numero_formatado': telefone.numero_fmt,
+            'prioridade': telefone.prioridade,
+            'whatsapp_valido': telefone.whatsapp_valido,
+            'enviado': telefone.enviado,
+            'data_envio': telefone.data_envio.isoformat() if telefone.data_envio else None,
+            'resposta': telefone.resposta,
+            'data_resposta': telefone.data_resposta.isoformat() if telefone.data_resposta else None,
+            'tipo_resposta': telefone.tipo_resposta,
+            'tipo_resposta_texto': {
+                'confirmado': 'Confirmado',
+                'rejeitado': 'Rejeitado',
+                'desconheco': 'Não conhece a pessoa'
+            }.get(telefone.tipo_resposta, 'Sem resposta'),
+            'validacao_pendente': telefone.validacao_pendente
+        }
+        respostas_telefones.append(tel_info)
+
+    # Obter histórico de mensagens do log
+    logs = LogMsg.query.filter_by(contato_id=c.id).order_by(LogMsg.data).all()
+    historico = []
+    for log in logs:
+        log_info = {
+            'id': log.id,
+            'direcao': log.direcao,
+            'telefone': log.telefone,
+            'mensagem': log.mensagem,
+            'data': log.data.isoformat() if log.data else None,
+            'status': log.status,
+            'sentimento': log.sentimento,
+            'sentimento_score': log.sentimento_score
+        }
+        historico.append(log_info)
+
+    # Informações do contato
+    contato_info = {
+        'id': c.id,
+        'nome': c.nome,
+        'data_nascimento': c.data_nascimento.isoformat() if c.data_nascimento else None,
+        'procedimento': c.procedimento,
+        'status': c.status,
+        'status_texto': c.status_texto(),
+        'confirmado': c.confirmado,
+        'rejeitado': c.rejeitado,
+        'erro': c.erro,
+        'tem_respostas_multiplas': c.tem_respostas_multiplas(),
+        'tem_conflito_real': c.tem_conflito_real(),
+        'campanha_id': c.campanha_id
+    }
+
+    return jsonify({
+        'contato': contato_info,
+        'telefones': respostas_telefones,
+        'historico': historico
+    })
+
+
+@app.route('/api/contato/<int:id>/enviar_mensagem', methods=['POST'])
+@login_required
+def api_enviar_mensagem_contato(id):
+    """
+    Envia uma mensagem para um telefone específico do contato
+    """
+    c = verificar_acesso_contato(id)
+
+    data = request.get_json()
+    telefone_id = data.get('telefone_id')
+    mensagem = data.get('mensagem', '').strip()
+
+    if not mensagem:
+        return jsonify({'erro': 'Mensagem não pode estar vazia'}), 400
+
+    # Encontrar o telefone
+    telefone = None
+    for t in c.telefones.all():
+        if t.id == telefone_id:
+            telefone = t
+            break
+
+    if not telefone:
+        return jsonify({'erro': 'Telefone não encontrado'}), 404
+
+    if not telefone.whatsapp_valido:
+        return jsonify({'erro': 'Este número não possui WhatsApp válido'}), 400
+
+    # Enviar mensagem
+    ws = WhatsApp(c.campanha.criador_id)
+    if not ws.ok():
+        return jsonify({'erro': 'WhatsApp não configurado'}), 400
+
+    sucesso, resultado = ws.enviar(telefone.numero_fmt, mensagem)
+
+    if sucesso:
+        # Registrar no log
+        log = LogMsg(
+            campanha_id=c.campanha_id,
+            contato_id=c.id,
+            direcao='enviada',
+            telefone=telefone.numero_fmt,
+            mensagem=mensagem,
+            status='enviado'
+        )
+        db.session.add(log)
+        db.session.commit()
+
+        return jsonify({
+            'sucesso': True,
+            'mensagem': 'Mensagem enviada com sucesso'
+        })
+    else:
+        return jsonify({
+            'erro': f'Erro ao enviar mensagem: {resultado}'
+        }), 500
+
+
 @app.route('/contato/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
 def editar_contato(id):
@@ -4129,13 +4350,31 @@ def webhook():
                 db.session.commit()
                 logger.info(f"Status de {c.nome} atualizado de 'pendente' para 'enviado' após receber resposta válida")
 
+            # Encontrar o telefone específico que enviou esta resposta
+            telefone_respondente = None
+            for t in telefones:
+                if t.contato_id == c.id:
+                    telefone_respondente = t
+                    break
+
             if any(r in texto_up for r in RESPOSTAS_SIM) or any(r in texto_up for r in RESPOSTAS_NAO):
+                # Determinar tipo de resposta
+                tipo_resp = 'confirmado' if any(r in texto_up for r in RESPOSTAS_SIM) else 'rejeitado'
+
                 # Verificar se contato TEM data de nascimento cadastrada
                 if c.data_nascimento:
                     # Pedir Data de Nascimento para validação
                     c.status = 'aguardando_nascimento'
                     c.resposta = texto # Guarda a intencao original (1 ou 2)
                     c.data_resposta = datetime.utcnow()
+
+                    # Salvar resposta no telefone específico (aguardando validação)
+                    if telefone_respondente:
+                        telefone_respondente.resposta = texto
+                        telefone_respondente.data_resposta = datetime.utcnow()
+                        telefone_respondente.tipo_resposta = tipo_resp  # Guarda a intenção
+                        telefone_respondente.validacao_pendente = True
+
                     db.session.commit()
 
                     ws.enviar(numero, "🔒 Por segurança, por favor digite sua *Data de Nascimento* (ex: 03/09/1954).")
@@ -4144,8 +4383,6 @@ def webhook():
                     msg_final = "✅ Obrigado."
 
                     if any(r in texto_up for r in RESPOSTAS_SIM):
-                        c.confirmado = True
-                        c.rejeitado = False
                         msg_final = """✅ *Confirmação Registrada com Sucesso!*
 
 Obrigado por confirmar seu interesse no procedimento.
@@ -4160,8 +4397,6 @@ Digite sua pergunta a qualquer momento que responderemos!
 
 _Hospital Universitário Walter Cantídio_"""
                     elif any(r in texto_up for r in RESPOSTAS_NAO):
-                        c.confirmado = False
-                        c.rejeitado = True
                         msg_final = """✅ *Registro Atualizado*
 
 Obrigado por sua resposta.
@@ -4172,9 +4407,15 @@ Se mudar de ideia ou tiver alguma dúvida, pode entrar em contato conosco.
 
 _Hospital Universitário Walter Cantídio_"""
 
-                    c.status = 'concluido'
-                    c.resposta = texto
-                    c.data_resposta = datetime.utcnow()
+                    # Salvar resposta no telefone específico
+                    if telefone_respondente:
+                        telefone_respondente.resposta = texto
+                        telefone_respondente.data_resposta = datetime.utcnow()
+                        telefone_respondente.tipo_resposta = tipo_resp
+                        telefone_respondente.validacao_pendente = False
+
+                    # Recalcular status final do contato baseado em todas as respostas
+                    c.calcular_status_final()
                     db.session.commit()
                     c.campanha.atualizar_stats()
                     db.session.commit()
@@ -4182,12 +4423,21 @@ _Hospital Universitário Walter Cantídio_"""
                     ws.enviar(numero, msg_final)
                 
             elif any(r in texto_up for r in RESPOSTAS_DESCONHECO):
-                c.rejeitado = True
-                c.confirmado = False
-                c.erro = "Desconhecido pelo portador"
-                c.status = 'concluido'
-                c.resposta = texto
-                c.data_resposta = datetime.utcnow()
+                # Salvar resposta "desconheço" no telefone específico
+                if telefone_respondente:
+                    telefone_respondente.resposta = texto
+                    telefone_respondente.data_resposta = datetime.utcnow()
+                    telefone_respondente.tipo_resposta = 'desconheco'
+                    telefone_respondente.validacao_pendente = False
+
+                # Recalcular status final do contato baseado em todas as respostas
+                # "Desconheço" não é conflito - pode ter outro número confirmado
+                c.calcular_status_final()
+
+                # Se não tem nenhuma confirmação/rejeição de outros números, marca erro
+                if not c.confirmado and not c.rejeitado:
+                    c.erro = "Desconhecido pelo portador"
+
                 db.session.commit()
                 c.campanha.atualizar_stats()
                 db.session.commit()
@@ -4201,6 +4451,13 @@ Desculpe pelo transtorno.
 _Hospital Universitário Walter Cantídio_""")
                 
         elif c.status == 'aguardando_nascimento':
+            # Encontrar o telefone que está aguardando validação
+            telefone_validando = None
+            for t in telefones:
+                if t.contato_id == c.id and t.validacao_pendente:
+                    telefone_validando = t
+                    break
+
             # Verificar Data
             dt_input = None
             try:
@@ -4213,16 +4470,18 @@ _Hospital Universitário Walter Cantídio_""")
                         pass
             except:
                 pass
-            
+
             if dt_input:
                 if c.data_nascimento and dt_input == c.data_nascimento:
-                    # Data Correta - Verificar intencao original
+                    # Data Correta - Confirmar a resposta do telefone
+                    if telefone_validando:
+                        telefone_validando.validacao_pendente = False
+
+                    # Verificar intencao original
                     intent_up = (c.resposta or '').upper()
                     msg_final = "✅ Obrigado."
-                    
+
                     if any(r in intent_up for r in RESPOSTAS_SIM):
-                        c.confirmado = True
-                        c.rejeitado = False
                         msg_final = """✅ *Confirmação Registrada com Sucesso!*
 
 Obrigado por confirmar seu interesse no procedimento.
@@ -4237,8 +4496,6 @@ Digite sua pergunta a qualquer momento que responderemos!
 
 _Hospital Universitário Walter Cantídio_"""
                     elif any(r in intent_up for r in RESPOSTAS_NAO):
-                        c.confirmado = False
-                        c.rejeitado = True
                         msg_final = """✅ *Registro Atualizado*
 
 Obrigado por sua resposta.
@@ -4248,9 +4505,9 @@ Registramos que você não tem mais interesse no procedimento. Seus dados serão
 Se mudar de ideia ou tiver alguma dúvida, pode entrar em contato conosco.
 
 _Hospital Universitário Walter Cantídio_"""
-                    
-                    c.status = 'concluido'
-                    c.data_resposta = datetime.utcnow()
+
+                    # Recalcular status final do contato baseado em todas as respostas validadas
+                    c.calcular_status_final()
                     db.session.commit()
                     c.campanha.atualizar_stats()
                     db.session.commit()

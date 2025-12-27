@@ -4119,6 +4119,14 @@ def webhook():
             logger.info(f"Ticket criado para {c.nome} - Prioridade: {prioridade_ticket}")
             return jsonify({'status': 'ok'}), 200
 
+        # Proteção contra respostas conflitantes de múltiplos telefones
+        # Se contato já tem resposta conclusiva (confirmado OU rejeitado), detectar conflito
+        resposta_anterior = None
+        if c.confirmado:
+            resposta_anterior = "CONFIRMOU"
+        elif c.rejeitado:
+            resposta_anterior = "REJEITOU"
+
         # Maquina de Estados
         # Aceita 'pronto_envio' tambem pois pode haver race condition (usuario responde antes do loop de envio terminar)
         # Aceita 'pendente' se a resposta é válida (1, 2, 3) - útil para testes e recuperação de erros
@@ -4130,6 +4138,39 @@ def webhook():
                 logger.info(f"Status de {c.nome} atualizado de 'pendente' para 'enviado' após receber resposta válida")
 
             if any(r in texto_up for r in RESPOSTAS_SIM) or any(r in texto_up for r in RESPOSTAS_NAO):
+                # DETECTAR CONFLITO: Se já havia resposta anterior de outro telefone
+                if resposta_anterior:
+                    resposta_nova = "CONFIRMAR" if any(r in texto_up for r in RESPOSTAS_SIM) else "REJEITAR"
+                    logger.warning(f"⚠️ CONFLITO DETECTADO - {c.nome} (ID {c.id}): Telefone {numero} quer {resposta_nova} mas já havia {resposta_anterior}")
+
+                    # Registrar conflito no campo erro
+                    c.erro = f"CONFLITO: Tel {numero[-4:]} respondeu {texto}, mas já havia {resposta_anterior}"
+                    db.session.commit()
+
+                    # Notificar sobre o conflito
+                    ws.enviar(numero, f"""⚠️ *Atenção: Resposta Duplicada*
+
+Identificamos que este cadastro já recebeu uma resposta anterior: *{resposta_anterior}*
+
+Agora recebemos do número {numero[-4:]} a resposta: *{texto}*
+
+Por favor, entre em contato com nosso atendimento para esclarecer: (85) 3366-8000
+
+_Hospital Universitário Walter Cantídio_""")
+
+                    # Criar ticket urgente para revisão
+                    ticket = TicketAtendimento(
+                        contato_id=c.id,
+                        campanha_id=c.campanha_id,
+                        mensagem_usuario=f"CONFLITO: Tel {numero} respondeu '{texto}', mas já havia '{resposta_anterior}'",
+                        status='pendente',
+                        prioridade='urgente'
+                    )
+                    db.session.add(ticket)
+                    db.session.commit()
+
+                    return jsonify({'status': 'ok'}), 200
+
                 # Verificar se contato TEM data de nascimento cadastrada
                 if c.data_nascimento:
                     # Pedir Data de Nascimento para validação
@@ -4180,8 +4221,40 @@ _Hospital Universitário Walter Cantídio_"""
                     db.session.commit()
 
                     ws.enviar(numero, msg_final)
-                
+
             elif any(r in texto_up for r in RESPOSTAS_DESCONHECO):
+                # DETECTAR CONFLITO: Se já havia resposta anterior de outro telefone
+                if resposta_anterior:
+                    logger.warning(f"⚠️ CONFLITO DETECTADO - {c.nome} (ID {c.id}): Telefone {numero} respondeu DESCONHEÇO mas já havia {resposta_anterior}")
+
+                    # Registrar conflito
+                    c.erro = f"CONFLITO: Tel {numero[-4:]} respondeu DESCONHEÇO, mas já havia {resposta_anterior}"
+                    db.session.commit()
+
+                    # Notificar sobre o conflito
+                    ws.enviar(numero, f"""⚠️ *Atenção: Resposta Duplicada*
+
+Identificamos que este cadastro já recebeu uma resposta anterior: *{resposta_anterior}*
+
+Agora recebemos do número {numero[-4:]} a resposta: *DESCONHEÇO*
+
+Por favor, entre em contato com nosso atendimento para esclarecer: (85) 3366-8000
+
+_Hospital Universitário Walter Cantídio_""")
+
+                    # Criar ticket urgente
+                    ticket = TicketAtendimento(
+                        contato_id=c.id,
+                        campanha_id=c.campanha_id,
+                        mensagem_usuario=f"CONFLITO: Tel {numero} respondeu DESCONHEÇO, mas já havia '{resposta_anterior}'",
+                        status='pendente',
+                        prioridade='urgente'
+                    )
+                    db.session.add(ticket)
+                    db.session.commit()
+
+                    return jsonify({'status': 'ok'}), 200
+
                 c.rejeitado = True
                 c.confirmado = False
                 c.erro = "Desconhecido pelo portador"

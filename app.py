@@ -1209,6 +1209,15 @@ class WhatsApp:
 
         if ok and r.status_code in [200, 201]:
             logger.info(f"Instancia criada: {self.instance}")
+
+            # Configurar webhook automaticamente
+            time.sleep(1)  # Aguardar instância ser criada
+            webhook_ok, webhook_msg = self.configurar_webhook()
+            if webhook_ok:
+                logger.info(f"Webhook configurado automaticamente: {webhook_msg}")
+            else:
+                logger.warning(f"Falha ao configurar webhook: {webhook_msg}")
+
             return True, "Instancia criada"
         elif ok and r.status_code == 403:
             # Pode ser que ja existe
@@ -1218,6 +1227,70 @@ class WhatsApp:
             return True, "Instancia ja existe"
 
         return False, f"Erro ao criar: {r.status_code if ok else r}"
+
+    def configurar_webhook(self):
+        """Configura webhook para receber mensagens automaticamente"""
+        if not self.ok():
+            return False, "Nao configurado"
+
+        # Determinar URL do webhook baseado no request atual ou configuração
+        try:
+            from flask import request
+            if request:
+                # Usar o domínio da requisição atual
+                scheme = request.scheme
+                host = request.host
+                webhook_url = f"{scheme}://{host}/webhook/whatsapp"
+            else:
+                raise Exception("Request context not available")
+        except:
+            # Fallback: tentar obter do ambiente ou usar padrão
+            import os
+            base_url = os.environ.get('BASE_URL', 'https://chsistemas.cloud')
+            webhook_url = f"{base_url}/webhook/whatsapp"
+
+        payload = {
+            'enabled': True,
+            'url': webhook_url,
+            'webhookByEvents': False,
+            'webhookBase64': False,
+            'events': [
+                'APPLICATION_STARTUP',
+                'CALL',
+                'CHATS_DELETE',
+                'CHATS_SET',
+                'CHATS_UPDATE',
+                'CHATS_UPSERT',
+                'CONNECTION_UPDATE',
+                'CONTACTS_SET',
+                'CONTACTS_UPDATE',
+                'CONTACTS_UPSERT',
+                'GROUP_PARTICIPANTS_UPDATE',
+                'GROUP_UPDATE',
+                'GROUPS_UPSERT',
+                'LABELS_ASSOCIATION',
+                'LABELS_EDIT',
+                'LOGOUT_INSTANCE',
+                'MESSAGES_DELETE',
+                'MESSAGES_SET',
+                'MESSAGES_UPDATE',
+                'MESSAGES_UPSERT',
+                'PRESENCE_UPDATE',
+                'QRCODE_UPDATED',
+                'REMOVE_INSTANCE',
+                'SEND_MESSAGE',
+                'TYPEBOT_CHANGE_STATUS',
+                'TYPEBOT_START'
+            ]
+        }
+
+        ok, r = self._req('POST', f'/webhook/set/{self.instance}', payload)
+
+        if ok and r.status_code in [200, 201]:
+            logger.info(f"Webhook configurado para {self.instance}: {webhook_url}")
+            return True, f"Webhook ativado: {webhook_url}"
+
+        return False, f"Erro ao configurar webhook: {r.status_code if ok else r}"
 
     def qrcode(self):
         """
@@ -3755,6 +3828,29 @@ def api_conectar_whatsapp():
 
     except Exception as e:
         logger.error(f"Erro ao conectar WhatsApp: {str(e)}")
+        return jsonify({'erro': str(e)}), 500
+
+
+@app.route('/api/whatsapp/webhook/configurar', methods=['POST'])
+@login_required
+def configurar_webhook_whatsapp():
+    """Configura webhook para a instância do usuário"""
+    try:
+        ws = WhatsApp(current_user.id)
+        if not ws.ok():
+            return jsonify({'erro': 'WhatsApp não configurado'}), 400
+
+        ok, msg = ws.configurar_webhook()
+        if ok:
+            return jsonify({
+                'sucesso': True,
+                'mensagem': msg
+            })
+        else:
+            return jsonify({'erro': msg}), 400
+
+    except Exception as e:
+        logger.error(f"Erro ao configurar webhook: {str(e)}")
         return jsonify({'erro': str(e)}), 500
 
 

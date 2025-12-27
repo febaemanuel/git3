@@ -1228,6 +1228,21 @@ class WhatsApp:
 
         return False, f"Erro ao criar: {r.status_code if ok else r}"
 
+    def obter_webhook_config(self):
+        """Obtém configuração atual do webhook"""
+        if not self.ok():
+            return False, "Nao configurado"
+
+        ok, r = self._req('GET', f'/webhook/find/{self.instance}')
+        if ok and r.status_code == 200:
+            try:
+                data = r.json()
+                logger.info(f"Webhook atual: {data}")
+                return True, data
+            except:
+                return False, "Erro ao parsear resposta"
+        return False, f"Erro ao obter webhook: {r.status_code if ok else r}"
+
     def configurar_webhook(self):
         """Configura webhook para receber mensagens automaticamente"""
         if not self.ok():
@@ -1249,48 +1264,88 @@ class WhatsApp:
             base_url = os.environ.get('BASE_URL', 'https://chsistemas.cloud')
             webhook_url = f"{base_url}/webhook/whatsapp"
 
+        # Primeiro, tentar obter config atual para ver formato
+        logger.info("Verificando webhook atual...")
+        ok_get, current = self.obter_webhook_config()
+        if ok_get:
+            logger.info(f"Config webhook atual: {current}")
+
+        # Lista completa de eventos
+        all_events = [
+            'APPLICATION_STARTUP',
+            'CALL',
+            'CHATS_DELETE',
+            'CHATS_SET',
+            'CHATS_UPDATE',
+            'CHATS_UPSERT',
+            'CONNECTION_UPDATE',
+            'CONTACTS_SET',
+            'CONTACTS_UPDATE',
+            'CONTACTS_UPSERT',
+            'GROUP_PARTICIPANTS_UPDATE',
+            'GROUP_UPDATE',
+            'GROUPS_UPSERT',
+            'LABELS_ASSOCIATION',
+            'LABELS_EDIT',
+            'MESSAGES_DELETE',
+            'MESSAGES_SET',
+            'MESSAGES_UPDATE',
+            'MESSAGES_UPSERT',
+            'PRESENCE_UPDATE',
+            'QRCODE_UPDATED',
+            'SEND_MESSAGE'
+        ]
+
+        # Eventos essenciais para mensagens (fallback)
+        essential_events = [
+            'MESSAGES_UPSERT',
+            'MESSAGES_UPDATE',
+            'SEND_MESSAGE',
+            'CONNECTION_UPDATE'
+        ]
+
+        # Tentar primeiro com configuração simplificada
         payload = {
             'enabled': True,
             'url': webhook_url,
             'webhookByEvents': False,
             'webhookBase64': False,
-            'events': [
-                'APPLICATION_STARTUP',
-                'CALL',
-                'CHATS_DELETE',
-                'CHATS_SET',
-                'CHATS_UPDATE',
-                'CHATS_UPSERT',
-                'CONNECTION_UPDATE',
-                'CONTACTS_SET',
-                'CONTACTS_UPDATE',
-                'CONTACTS_UPSERT',
-                'GROUP_PARTICIPANTS_UPDATE',
-                'GROUP_UPDATE',
-                'GROUPS_UPSERT',
-                'LABELS_ASSOCIATION',
-                'LABELS_EDIT',
-                'LOGOUT_INSTANCE',
-                'MESSAGES_DELETE',
-                'MESSAGES_SET',
-                'MESSAGES_UPDATE',
-                'MESSAGES_UPSERT',
-                'PRESENCE_UPDATE',
-                'QRCODE_UPDATED',
-                'REMOVE_INSTANCE',
-                'SEND_MESSAGE',
-                'TYPEBOT_CHANGE_STATUS',
-                'TYPEBOT_START'
-            ]
+            'events': essential_events
         }
 
+        logger.info(f"Configurando webhook com eventos essenciais: {essential_events}")
         ok, r = self._req('POST', f'/webhook/set/{self.instance}', payload)
+
+        # Se funcionar com essenciais, tentar adicionar mais eventos
+        if ok and r.status_code in [200, 201]:
+            logger.info(f"Webhook configurado com eventos essenciais, tentando adicionar mais...")
+            payload['events'] = all_events
+            ok2, r2 = self._req('POST', f'/webhook/set/{self.instance}', payload)
+            if ok2 and r2.status_code in [200, 201]:
+                logger.info(f"Webhook atualizado com todos os eventos")
+                r = r2  # Use the successful response
+            else:
+                logger.warning(f"Não foi possível adicionar todos eventos, mantendo essenciais")
+                # Manter a configuração com eventos essenciais que funcionou
 
         if ok and r.status_code in [200, 201]:
             logger.info(f"Webhook configurado para {self.instance}: {webhook_url}")
             return True, f"Webhook ativado: {webhook_url}"
 
-        return False, f"Erro ao configurar webhook: {r.status_code if ok else r}"
+        # Log detalhado do erro
+        error_detail = ""
+        if ok:
+            try:
+                error_detail = r.json() if hasattr(r, 'json') else r.text
+                logger.error(f"Erro webhook {r.status_code}: {error_detail}")
+            except:
+                error_detail = r.text if hasattr(r, 'text') else str(r)
+                logger.error(f"Erro webhook {r.status_code}: {error_detail}")
+        else:
+            logger.error(f"Erro webhook: {r}")
+            error_detail = str(r)
+
+        return False, f"Erro ao configurar webhook: {r.status_code if ok else 'conexão falhou'} - {error_detail}"
 
     def qrcode(self):
         """

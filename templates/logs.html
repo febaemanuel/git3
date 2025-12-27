@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}Historico de Mensagens{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Cabecalho -->
+    <div class="col-12 mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2><i class="bi bi-chat-dots"></i> Historico de Mensagens</h2>
+                <p class="text-muted mb-0">Visualize todas as mensagens enviadas e recebidas</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-body">
+                <form method="GET" class="row g-3 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label">Campanha</label>
+                        <select class="form-select" name="campanha_id">
+                            <option value="">Todas as campanhas</option>
+                            {% for camp in campanhas %}
+                            <option value="{{ camp.id }}" {% if campanha_id == camp.id %}selected{% endif %}>
+                                {{ camp.nome }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Direcao</label>
+                        <select class="form-select" name="direcao">
+                            <option value="">Todas</option>
+                            <option value="out" {% if direcao == 'out' %}selected{% endif %}>Enviadas</option>
+                            <option value="in" {% if direcao == 'in' %}selected{% endif %}>Recebidas</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <button type="submit" class="btn btn-whatsapp">
+                            <i class="bi bi-filter"></i> Filtrar
+                        </button>
+                        <a href="{{ url_for('logs') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-x"></i> Limpar
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de Logs -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-list-ul"></i> Mensagens</span>
+                <span class="badge bg-secondary">{{ logs.total }} registros</span>
+            </div>
+            <div class="card-body p-0">
+                {% if logs.items %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Data/Hora</th>
+                                <th>Direcao</th>
+                                <th>Telefone</th>
+                                <th>Mensagem</th>
+                                <th>Status</th>
+                                <th>Campanha</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in logs.items %}
+                            <tr>
+                                <td>
+                                    <small>{{ log.data.strftime('%d/%m/%Y %H:%M:%S') }}</small>
+                                </td>
+                                <td>
+                                    {% if log.direcao == 'out' %}
+                                    <span class="badge bg-primary">
+                                        <i class="bi bi-arrow-up-right"></i> Enviada
+                                    </span>
+                                    {% else %}
+                                    <span class="badge bg-success">
+                                        <i class="bi bi-arrow-down-left"></i> Recebida
+                                    </span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ log.telefone }}</td>
+                                <td>
+                                    <small class="text-truncate d-inline-block" style="max-width: 300px;" title="{{ log.mensagem }}">
+                                        {{ log.mensagem[:80] }}{% if log.mensagem|length > 80 %}...{% endif %}
+                                    </small>
+                                </td>
+                                <td>
+                                    {% if log.status == 'enviado' %}
+                                    <span class="badge bg-success">Enviado</span>
+                                    {% elif log.status == 'recebido' %}
+                                    <span class="badge bg-info">Recebido</span>
+                                    {% elif log.status == 'erro' %}
+                                    <span class="badge bg-danger" title="{{ log.erro }}">Erro</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ log.status }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if log.campanha %}
+                                    <a href="{{ url_for('campanha_detalhes', id=log.campanha_id) }}">
+                                        {{ log.campanha.nome[:20] }}
+                                    </a>
+                                    {% else %}
+                                    <small class="text-muted">-</small>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Paginacao -->
+                {% if logs.pages > 1 %}
+                <nav class="p-3">
+                    <ul class="pagination justify-content-center mb-0">
+                        {% if logs.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('logs', page=logs.prev_num, campanha_id=campanha_id, direcao=direcao) }}">
+                                Anterior
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        {% for page in logs.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                            {% if page %}
+                            <li class="page-item {% if page == logs.page %}active{% endif %}">
+                                <a class="page-link" href="{{ url_for('logs', page=page, campanha_id=campanha_id, direcao=direcao) }}">
+                                    {{ page }}
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if logs.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('logs', page=logs.next_num, campanha_id=campanha_id, direcao=direcao) }}">
+                                Proximo
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                {% endif %}
+
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-inbox text-muted" style="font-size: 4rem;"></i>
+                    <h5 class="mt-3">Nenhuma mensagem encontrada</h5>
+                    <p class="text-muted">As mensagens aparecerao aqui quando forem enviadas ou recebidas</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

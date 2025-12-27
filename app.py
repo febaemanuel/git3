@@ -938,9 +938,9 @@ EXEMPLOS DE FORMATO CORRETO:
 }}
 
 {{
-  "termo_normalizado": "Cirurgia para remoção de cálculo renal",
-  "termo_simples": "CIRURGIA NO RIM",
-  "explicacao": "Procedimento para retirar pedras do rim"
+  "termo_normalizado": "Cirurgia para retirada de pedras do rim",
+  "termo_simples": "RETIRADA DE PEDRAS DO RIM",
+  "explicacao": "Procedimento para retirar pedras (cálculos) do rim"
 }}
 
 {{

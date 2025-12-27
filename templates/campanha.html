@@ -235,20 +235,8 @@
                         </thead>
                         <tbody>
                             {% for contato in contatos.items %}
-                            <tr style="cursor: pointer;" onclick="abrirDetalhesContato({{ contato.id }})">
-                                <td>
-                                    <strong>{{ contato.nome }}</strong>
-                                    {% if contato.tem_respostas_multiplas() %}
-                                        <span class="badge bg-info ms-1" title="Múltiplas respostas">
-                                            <i class="bi bi-phone-fill"></i> {{ contato.telefones.count() }}
-                                        </span>
-                                    {% endif %}
-                                    {% if contato.tem_conflito_real() %}
-                                        <span class="badge bg-danger ms-1" title="Respostas conflitantes">
-                                            <i class="bi bi-exclamation-triangle-fill"></i> Conflito
-                                        </span>
-                                    {% endif %}
-                                </td>
+                            <tr>
+                                <td><strong>{{ contato.nome }}</strong></td>
                                 <td>{{ contato.formatar_telefone() }}</td>
                                 <td>
                                     {% if contato.procedimento_normalizado and contato.procedimento_normalizado != contato.procedimento %}
@@ -281,8 +269,12 @@
                                     <small class="text-muted">-</small>
                                     {% endif %}
                                 </td>
-                                <td class="text-center" onclick="event.stopPropagation()">
+                                <td class="text-center">
                                     <div class="btn-group btn-group-sm">
+                                        <a href="{{ url_for('contato_detalhes_pagina', id=contato.id) }}"
+                                           class="btn btn-outline-info" title="Ver detalhes e histórico">
+                                            <i class="bi bi-info-circle"></i>
+                                        </a>
                                         {% if not contato.confirmado and not contato.rejeitado %}
                                         <button class="btn btn-outline-success" title="Marcar como confirmado"
                                                 onclick="confirmarContato({{ contato.id }})">
@@ -348,88 +340,6 @@
                     <p class="text-muted mt-2">Nenhum contato encontrado com este filtro</p>
                 </div>
                 {% endif %}
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Modal de Detalhes do Contato -->
-<div class="modal fade" id="modalDetalhesContato" tabindex="-1">
-    <div class="modal-dialog modal-xl modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">
-                    <i class="bi bi-person-circle"></i>
-                    <span id="modal-nome-contato"></span>
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div class="row">
-                    <!-- Informações do Contato -->
-                    <div class="col-md-4 mb-4">
-                        <div class="card">
-                            <div class="card-header">
-                                <h6 class="mb-0"><i class="bi bi-info-circle"></i> Informações</h6>
-                            </div>
-                            <div class="card-body">
-                                <p><strong>Procedimento:</strong><br><span id="modal-procedimento"></span></p>
-                                <p><strong>Data de Nascimento:</strong><br><span id="modal-data-nascimento"></span></p>
-                                <p><strong>Status:</strong><br><span id="modal-status-badge"></span></p>
-                                <div id="modal-alerta-conflito" class="alert alert-danger d-none" role="alert">
-                                    <i class="bi bi-exclamation-triangle-fill"></i>
-                                    <strong>Atenção!</strong> Este contato possui respostas conflitantes de diferentes números.
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Respostas dos Telefones -->
-                    <div class="col-md-8 mb-4">
-                        <div class="card">
-                            <div class="card-header">
-                                <h6 class="mb-0"><i class="bi bi-telephone-fill"></i> Respostas por Telefone</h6>
-                            </div>
-                            <div class="card-body">
-                                <div id="modal-telefones-lista"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <!-- Histórico de Mensagens -->
-                    <div class="col-12">
-                        <div class="card">
-                            <div class="card-header d-flex justify-content-between align-items-center">
-                                <h6 class="mb-0"><i class="bi bi-chat-dots-fill"></i> Histórico de Mensagens</h6>
-                            </div>
-                            <div class="card-body">
-                                <div id="modal-historico-mensagens" style="max-height: 400px; overflow-y: auto;">
-                                    <!-- Mensagens serão inseridas aqui -->
-                                </div>
-
-                                <!-- Formulário para enviar mensagem -->
-                                <div class="mt-3 border-top pt-3">
-                                    <h6><i class="bi bi-send"></i> Enviar Mensagem</h6>
-                                    <form id="form-enviar-mensagem" onsubmit="enviarMensagemModal(event)">
-                                        <div class="mb-2">
-                                            <label class="form-label">Selecionar Telefone:</label>
-                                            <select id="select-telefone-envio" class="form-select" required>
-                                                <option value="">Escolha um telefone...</option>
-                                            </select>
-                                        </div>
-                                        <div class="mb-2">
-                                            <label class="form-label">Mensagem:</label>
-                                            <textarea id="textarea-mensagem" class="form-control" rows="3" required placeholder="Digite sua mensagem..."></textarea>
-                                        </div>
-                                        <button type="submit" class="btn btn-primary">
-                                            <i class="bi bi-send-fill"></i> Enviar
-                                        </button>
-                                    </form>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
         </div>
     </div>
@@ -560,199 +470,6 @@ function atualizarStatus() {
 
 setInterval(atualizarStatus, 5000);
 {% endif %}
-
-// Variável global para armazenar o ID do contato atual no modal
-let contatoAtualId = null;
-
-// Função para abrir modal com detalhes do contato
-function abrirDetalhesContato(contatoId) {
-    contatoAtualId = contatoId;
-
-    // Buscar detalhes via API
-    fetch(`/api/contato/${contatoId}/detalhes`)
-        .then(res => res.json())
-        .then(data => {
-            // Preencher informações básicas
-            document.getElementById('modal-nome-contato').textContent = data.contato.nome;
-            document.getElementById('modal-procedimento').textContent = data.contato.procedimento || '-';
-            document.getElementById('modal-data-nascimento').textContent =
-                data.contato.data_nascimento ? new Date(data.contato.data_nascimento).toLocaleDateString('pt-BR') : '-';
-
-            // Status badge
-            let badgeClass = 'bg-secondary';
-            if (data.contato.confirmado) badgeClass = 'bg-success';
-            else if (data.contato.rejeitado) badgeClass = 'bg-warning';
-            else if (data.contato.erro) badgeClass = 'bg-danger';
-
-            document.getElementById('modal-status-badge').innerHTML =
-                `<span class="badge ${badgeClass}">${data.contato.status_texto}</span>`;
-
-            // Alerta de conflito
-            if (data.contato.tem_conflito_real) {
-                document.getElementById('modal-alerta-conflito').classList.remove('d-none');
-            } else {
-                document.getElementById('modal-alerta-conflito').classList.add('d-none');
-            }
-
-            // Preencher telefones e respostas
-            const telefonesLista = document.getElementById('modal-telefones-lista');
-            const selectTelefone = document.getElementById('select-telefone-envio');
-
-            telefonesLista.innerHTML = '';
-            selectTelefone.innerHTML = '<option value="">Escolha um telefone...</option>';
-
-            data.telefones.forEach((tel, index) => {
-                // Card de telefone
-                let respostaBadge = '';
-                if (tel.tipo_resposta === 'confirmado') {
-                    respostaBadge = '<span class="badge bg-success">✓ Confirmado</span>';
-                } else if (tel.tipo_resposta === 'rejeitado') {
-                    respostaBadge = '<span class="badge bg-warning">✗ Rejeitado</span>';
-                } else if (tel.tipo_resposta === 'desconheco') {
-                    respostaBadge = '<span class="badge bg-secondary">? Não conhece</span>';
-                } else {
-                    respostaBadge = '<span class="badge bg-light text-dark">Sem resposta</span>';
-                }
-
-                const telefoneCard = `
-                    <div class="card mb-2 ${tel.tipo_resposta === 'confirmado' ? 'border-success' :
-                                           tel.tipo_resposta === 'rejeitado' ? 'border-warning' :
-                                           tel.tipo_resposta === 'desconheco' ? 'border-secondary' : ''}">
-                        <div class="card-body py-2">
-                            <div class="d-flex justify-content-between align-items-center">
-                                <div>
-                                    <strong>${tel.numero}</strong>
-                                    ${tel.prioridade === 1 ? '<span class="badge bg-primary ms-2">Principal</span>' : ''}
-                                    ${tel.whatsapp_valido ? '<i class="bi bi-whatsapp text-success ms-1"></i>' : '<i class="bi bi-x-circle text-danger ms-1" title="WhatsApp inválido"></i>'}
-                                </div>
-                                <div>
-                                    ${respostaBadge}
-                                </div>
-                            </div>
-                            ${tel.resposta ? `
-                                <div class="mt-2 small">
-                                    <strong>Resposta:</strong> ${tel.resposta}
-                                    <br>
-                                    <strong>Data:</strong> ${tel.data_resposta ? new Date(tel.data_resposta).toLocaleString('pt-BR') : '-'}
-                                </div>
-                            ` : ''}
-                            ${tel.data_envio ? `
-                                <div class="mt-1 small text-muted">
-                                    <i class="bi bi-send"></i> Enviado em: ${new Date(tel.data_envio).toLocaleString('pt-BR')}
-                                </div>
-                            ` : ''}
-                        </div>
-                    </div>
-                `;
-
-                telefonesLista.innerHTML += telefoneCard;
-
-                // Adicionar ao select se WhatsApp válido
-                if (tel.whatsapp_valido) {
-                    const option = document.createElement('option');
-                    option.value = tel.id;
-                    option.textContent = `${tel.numero} ${tel.prioridade === 1 ? '(Principal)' : ''}`;
-                    selectTelefone.appendChild(option);
-                }
-            });
-
-            // Preencher histórico de mensagens
-            const historicoDiv = document.getElementById('modal-historico-mensagens');
-            historicoDiv.innerHTML = '';
-
-            if (data.historico.length === 0) {
-                historicoDiv.innerHTML = '<p class="text-muted text-center">Nenhuma mensagem ainda</p>';
-            } else {
-                data.historico.forEach(msg => {
-                    const msgClass = msg.direcao === 'enviada' ? 'bg-primary text-white' : 'bg-light';
-                    const align = msg.direcao === 'enviada' ? 'text-end' : 'text-start';
-                    const icon = msg.direcao === 'enviada' ? 'bi-send-fill' : 'bi-inbox-fill';
-
-                    const sentimentoBadge = msg.sentimento ?
-                        `<span class="badge bg-${msg.sentimento === 'positive' ? 'success' :
-                                                 msg.sentimento === 'negative' ? 'danger' : 'secondary'} ms-2">
-                            ${msg.sentimento}
-                        </span>` : '';
-
-                    const msgHtml = `
-                        <div class="${align} mb-2">
-                            <div class="d-inline-block ${msgClass} rounded p-2 shadow-sm" style="max-width: 70%;">
-                                <div class="small">
-                                    <i class="bi ${icon}"></i>
-                                    <strong>${msg.telefone}</strong>
-                                    ${sentimentoBadge}
-                                </div>
-                                <div class="mt-1">${msg.mensagem}</div>
-                                <div class="small mt-1 opacity-75">
-                                    ${msg.data ? new Date(msg.data).toLocaleString('pt-BR') : '-'}
-                                </div>
-                            </div>
-                        </div>
-                    `;
-
-                    historicoDiv.innerHTML += msgHtml;
-                });
-
-                // Scroll para o final
-                historicoDiv.scrollTop = historicoDiv.scrollHeight;
-            }
-
-            // Abrir modal
-            const modal = new bootstrap.Modal(document.getElementById('modalDetalhesContato'));
-            modal.show();
-        })
-        .catch(err => {
-            console.error('Erro ao buscar detalhes:', err);
-            alert('Erro ao carregar detalhes do contato');
-        });
-}
-
-// Função para enviar mensagem pelo modal
-function enviarMensagemModal(event) {
-    event.preventDefault();
-
-    const telefoneId = document.getElementById('select-telefone-envio').value;
-    const mensagem = document.getElementById('textarea-mensagem').value.trim();
-
-    if (!telefoneId || !mensagem) {
-        alert('Por favor, selecione um telefone e digite uma mensagem');
-        return;
-    }
-
-    const btn = event.target.querySelector('button[type="submit"]');
-    const btnText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Enviando...';
-
-    fetch(`/api/contato/${contatoAtualId}/enviar_mensagem`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            telefone_id: parseInt(telefoneId),
-            mensagem: mensagem
-        })
-    })
-    .then(res => res.json())
-    .then(data => {
-        if (data.sucesso) {
-            alert('Mensagem enviada com sucesso!');
-            document.getElementById('textarea-mensagem').value = '';
-
-            // Recarregar detalhes para mostrar a nova mensagem no histórico
-            abrirDetalhesContato(contatoAtualId);
-        } else {
-            alert('Erro: ' + data.erro);
-        }
-    })
-    .catch(err => {
-        console.error('Erro ao enviar mensagem:', err);
-        alert('Erro ao enviar mensagem');
-    })
-    .finally(() => {
-        btn.disabled = false;
-        btn.innerHTML = btnText;
-    });
-}
 
 </script>
 {% endblock %}

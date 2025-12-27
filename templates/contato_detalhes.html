@@ -1,0 +1,252 @@
+{% extends "base.html" %}
+
+{% block title %}{{ contato.nome }} - Detalhes{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Cabeçalho -->
+    <div class="col-12 mb-4">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('campanha_detalhe', id=contato.campanha_id) }}">Campanha</a></li>
+                <li class="breadcrumb-item active">{{ contato.nome }}</li>
+            </ol>
+        </nav>
+
+        <div class="d-flex justify-content-between align-items-center">
+            <h2><i class="bi bi-person-circle"></i> {{ contato.nome }}</h2>
+            <a href="{{ url_for('campanha_detalhe', id=contato.campanha_id) }}" class="btn btn-secondary">
+                <i class="bi bi-arrow-left"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="row">
+            <!-- Informações do Contato -->
+            <div class="col-md-4 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-info-circle"></i> Informações</h5>
+                    </div>
+                    <div class="card-body">
+                        <p><strong>Nome:</strong><br>{{ contato.nome }}</p>
+
+                        <p><strong>Procedimento:</strong><br>
+                            {% if contato.procedimento_normalizado and contato.procedimento_normalizado != contato.procedimento %}
+                                <span class="text-success">{{ contato.procedimento_normalizado }}</span>
+                                <br><small class="text-muted">Original: {{ contato.procedimento }}</small>
+                            {% else %}
+                                {{ contato.procedimento or '-' }}
+                            {% endif %}
+                        </p>
+
+                        <p><strong>Data de Nascimento:</strong><br>
+                            {{ contato.data_nascimento.strftime('%d/%m/%Y') if contato.data_nascimento else '-' }}
+                        </p>
+
+                        <p><strong>Status:</strong><br>
+                            <span class="badge {{ contato.status_badge() }}">{{ contato.status_texto() }}</span>
+                        </p>
+
+                        {% if contato.erro %}
+                        <div class="alert alert-danger" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                            <strong>Erro:</strong> {{ contato.erro }}
+                        </div>
+                        {% endif %}
+
+                        <hr>
+
+                        <div class="d-grid gap-2">
+                            <a href="{{ url_for('editar_contato', id=contato.id) }}" class="btn btn-outline-primary">
+                                <i class="bi bi-pencil"></i> Editar Contato
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Telefones e Respostas -->
+            <div class="col-md-8 mb-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-telephone-fill"></i> Telefones e Respostas</h5>
+                    </div>
+                    <div class="card-body">
+                        {% for telefone in telefones %}
+                        <div class="card mb-3
+                            {% if telefone.tipo_resposta == 'confirmado' %}border-success
+                            {% elif telefone.tipo_resposta == 'rejeitado' %}border-warning
+                            {% elif telefone.tipo_resposta == 'desconheco' %}border-secondary
+                            {% endif %}">
+                            <div class="card-body">
+                                <div class="d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <h6 class="mb-1">
+                                            <i class="bi bi-phone-fill"></i> {{ telefone.numero }}
+                                            {% if telefone.prioridade == 1 %}
+                                                <span class="badge bg-primary ms-2">Principal</span>
+                                            {% endif %}
+                                            {% if telefone.whatsapp_valido %}
+                                                <i class="bi bi-whatsapp text-success ms-1"></i>
+                                            {% else %}
+                                                <i class="bi bi-x-circle text-danger ms-1" title="WhatsApp inválido"></i>
+                                            {% endif %}
+                                        </h6>
+                                    </div>
+                                    <div>
+                                        {% if telefone.tipo_resposta == 'confirmado' %}
+                                            <span class="badge bg-success">✓ Confirmado</span>
+                                        {% elif telefone.tipo_resposta == 'rejeitado' %}
+                                            <span class="badge bg-warning">✗ Rejeitado</span>
+                                        {% elif telefone.tipo_resposta == 'desconheco' %}
+                                            <span class="badge bg-secondary">? Não conhece</span>
+                                        {% else %}
+                                            <span class="badge bg-light text-dark">Sem resposta</span>
+                                        {% endif %}
+                                    </div>
+                                </div>
+
+                                {% if telefone.resposta %}
+                                <div class="mt-2 small">
+                                    <strong>Resposta:</strong> {{ telefone.resposta }}<br>
+                                    <strong>Data:</strong> {{ telefone.data_resposta.strftime('%d/%m/%Y às %H:%M') if telefone.data_resposta else '-' }}
+                                    {% if telefone.validacao_pendente %}
+                                        <span class="badge bg-info ms-2">Aguardando validação</span>
+                                    {% endif %}
+                                </div>
+                                {% endif %}
+
+                                {% if telefone.data_envio %}
+                                <div class="mt-2 small text-muted">
+                                    <i class="bi bi-send"></i> Mensagem enviada em: {{ telefone.data_envio.strftime('%d/%m/%Y às %H:%M') }}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+
+                        {% if not telefones %}
+                        <p class="text-muted text-center">Nenhum telefone cadastrado</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Histórico de Mensagens -->
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-chat-dots-fill"></i> Histórico de Mensagens</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="timeline" style="max-height: 600px; overflow-y: auto;">
+                            {% if logs %}
+                                {% for log in logs %}
+                                <div class="{% if log.direcao == 'enviada' %}text-end{% else %}text-start{% endif %} mb-3">
+                                    <div class="d-inline-block
+                                        {% if log.direcao == 'enviada' %}bg-primary text-white{% else %}bg-light{% endif %}
+                                        rounded p-3 shadow-sm" style="max-width: 70%;">
+                                        <div class="small mb-1">
+                                            <i class="bi {% if log.direcao == 'enviada' %}bi-send-fill{% else %}bi-inbox-fill{% endif %}"></i>
+                                            <strong>{{ log.telefone }}</strong>
+                                            {% if log.sentimento %}
+                                                <span class="badge bg-{% if log.sentimento == 'positive' %}success{% elif log.sentimento == 'negative' %}danger{% else %}secondary{% endif %} ms-2">
+                                                    {{ log.sentimento }}
+                                                </span>
+                                            {% endif %}
+                                        </div>
+                                        <div>{{ log.mensagem }}</div>
+                                        <div class="small mt-2 {% if log.direcao == 'enviada' %}opacity-75{% else %}text-muted{% endif %}">
+                                            {{ log.data.strftime('%d/%m/%Y às %H:%M:%S') if log.data else '-' }}
+                                        </div>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            {% else %}
+                                <p class="text-muted text-center">Nenhuma mensagem ainda</p>
+                            {% endif %}
+                        </div>
+
+                        <!-- Formulário para enviar mensagem -->
+                        <div class="mt-4 border-top pt-3">
+                            <h6><i class="bi bi-send"></i> Enviar Nova Mensagem</h6>
+                            <form id="form-enviar-mensagem" onsubmit="enviarMensagem(event)">
+                                <div class="mb-3">
+                                    <label class="form-label">Selecionar Telefone:</label>
+                                    <select id="select-telefone-envio" class="form-select" required>
+                                        <option value="">Escolha um telefone...</option>
+                                        {% for telefone in telefones %}
+                                            {% if telefone.whatsapp_valido %}
+                                            <option value="{{ telefone.id }}">
+                                                {{ telefone.numero }} {% if telefone.prioridade == 1 %}(Principal){% endif %}
+                                            </option>
+                                            {% endif %}
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="mb-3">
+                                    <label class="form-label">Mensagem:</label>
+                                    <textarea id="textarea-mensagem" class="form-control" rows="3" required placeholder="Digite sua mensagem..."></textarea>
+                                </div>
+                                <button type="submit" class="btn btn-primary">
+                                    <i class="bi bi-send-fill"></i> Enviar Mensagem
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function enviarMensagem(event) {
+    event.preventDefault();
+
+    const telefoneId = document.getElementById('select-telefone-envio').value;
+    const mensagem = document.getElementById('textarea-mensagem').value.trim();
+
+    if (!telefoneId || !mensagem) {
+        alert('Por favor, selecione um telefone e digite uma mensagem');
+        return;
+    }
+
+    const btn = event.target.querySelector('button[type="submit"]');
+    const btnText = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Enviando...';
+
+    fetch(`/api/contato/{{ contato.id }}/enviar_mensagem`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            telefone_id: parseInt(telefoneId),
+            mensagem: mensagem
+        })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert('Mensagem enviada com sucesso!');
+            location.reload();
+        } else {
+            alert('Erro: ' + data.erro);
+        }
+    })
+    .catch(err => {
+        console.error('Erro ao enviar mensagem:', err);
+        alert('Erro ao enviar mensagem');
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = btnText;
+    });
+}
+</script>
+{% endblock %}

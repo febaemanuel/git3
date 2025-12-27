@@ -1305,7 +1305,8 @@ class WhatsApp:
         ]
 
         # Tentar primeiro com configuração simplificada
-        payload = {
+        # A Evolution API espera o objeto dentro de "webhook"
+        webhook_config = {
             'enabled': True,
             'url': webhook_url,
             'webhookByEvents': False,
@@ -1313,13 +1314,19 @@ class WhatsApp:
             'events': essential_events
         }
 
+        payload = {
+            'webhook': webhook_config
+        }
+
         logger.info(f"Configurando webhook com eventos essenciais: {essential_events}")
+        logger.info(f"Payload: {payload}")
         ok, r = self._req('POST', f'/webhook/set/{self.instance}', payload)
 
         # Se funcionar com essenciais, tentar adicionar mais eventos
         if ok and r.status_code in [200, 201]:
             logger.info(f"Webhook configurado com eventos essenciais, tentando adicionar mais...")
-            payload['events'] = all_events
+            webhook_config['events'] = all_events
+            payload['webhook'] = webhook_config
             ok2, r2 = self._req('POST', f'/webhook/set/{self.instance}', payload)
             if ok2 and r2.status_code in [200, 201]:
                 logger.info(f"Webhook atualizado com todos os eventos")

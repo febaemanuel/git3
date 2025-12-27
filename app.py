@@ -938,9 +938,9 @@ EXEMPLOS DE FORMATO CORRETO:
 }}
 
 {{
-  "termo_normalizado": "Cirurgia para remoção de cálculo renal",
-  "termo_simples": "CIRURGIA NO RIM",
-  "explicacao": "Procedimento para retirar pedras do rim"
+  "termo_normalizado": "Cirurgia para retirada de pedras do rim",
+  "termo_simples": "RETIRADA DE PEDRAS DO RIM",
+  "explicacao": "Procedimento para retirar pedras (cálculos) do rim"
 }}
 
 {{
@@ -3951,7 +3951,13 @@ def webhook():
         if not data:
             return jsonify({'status': 'ok'}), 200
 
-        if data.get('event') != 'messages.upsert':
+        # Log do evento recebido (útil para debug)
+        logger.debug(f"Webhook evento recebido: {data.get('event')}")
+
+        # Normalizar nome do evento (aceita MESSAGES_UPSERT ou messages.upsert)
+        event = data.get('event', '').upper().replace('.', '_')
+        if event != 'MESSAGES_UPSERT':
+            logger.debug(f"Evento ignorado: {event}")
             return jsonify({'status': 'ok'}), 200
 
         msg_data = data.get('data', {})

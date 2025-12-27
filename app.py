@@ -3735,6 +3735,118 @@ def api_revalidar(id):
     return jsonify({'sucesso': True, 'valido': tem_valido})
 
 
+@app.route('/api/contato/<int:id>/detalhes', methods=['GET'])
+@login_required
+def api_contato_detalhes(id):
+    """Retorna histórico completo de mensagens por telefone"""
+    c = verificar_acesso_contato(id)
+
+    # Buscar logs de mensagens do contato
+    logs = LogMsg.query.filter_by(contato_id=c.id).order_by(LogMsg.created_at.desc()).all()
+
+    # Agrupar por telefone
+    historico_por_telefone = {}
+    for log in logs:
+        tel = log.telefone
+        if tel not in historico_por_telefone:
+            historico_por_telefone[tel] = []
+
+        historico_por_telefone[tel].append({
+            'direcao': log.direcao,
+            'mensagem': log.mensagem,
+            'data': log.created_at.strftime('%d/%m/%Y %H:%M:%S'),
+            'status': log.status,
+            'sentimento': log.sentimento
+        })
+
+    # Dados dos telefones
+    telefones = []
+    for t in c.telefones.all():
+        telefones.append({
+            'numero': t.numero_fmt,
+            'whatsapp_valido': t.whatsapp_valido,
+            'enviado': t.enviado,
+            'data_envio': t.data_envio.strftime('%d/%m/%Y %H:%M:%S') if t.data_envio else None,
+            'historico': historico_por_telefone.get(t.numero_fmt, [])
+        })
+
+    return jsonify({
+        'contato': {
+            'id': c.id,
+            'nome': c.nome,
+            'procedimento': c.procedimento,
+            'procedimento_normalizado': c.procedimento_normalizado,
+            'status': c.status,
+            'confirmado': c.confirmado,
+            'rejeitado': c.rejeitado,
+            'resposta': c.resposta,
+            'data_resposta': c.data_resposta.strftime('%d/%m/%Y %H:%M:%S') if c.data_resposta else None,
+            'erro': c.erro
+        },
+        'telefones': telefones
+    })
+
+
+@app.route('/api/contato/<int:id>/responder', methods=['POST'])
+@login_required
+def api_contato_responder(id):
+    """Envia mensagem manual para o contato"""
+    c = verificar_acesso_contato(id)
+
+    data = request.get_json()
+    mensagem = data.get('mensagem', '').strip()
+    numero = data.get('numero')  # Opcional - se não informado, envia para todos
+
+    if not mensagem:
+        return jsonify({'erro': 'Mensagem vazia'}), 400
+
+    ws = WhatsApp(c.campanha.criador_id)
+    if not ws.ok():
+        return jsonify({'erro': 'WhatsApp não configurado'}), 400
+
+    # Se número específico foi informado
+    if numero:
+        ok, result = ws.enviar(numero, mensagem)
+        if ok:
+            # Registrar log
+            log = LogMsg(
+                campanha_id=c.campanha_id,
+                contato_id=c.id,
+                direcao='enviada',
+                telefone=numero,
+                mensagem=mensagem[:500],
+                status='ok'
+            )
+            db.session.add(log)
+            db.session.commit()
+            return jsonify({'sucesso': True, 'mensagem': 'Enviado com sucesso'})
+        else:
+            return jsonify({'erro': f'Falha ao enviar: {result}'}), 400
+    else:
+        # Enviar para todos os números válidos
+        tels = c.telefones.filter_by(whatsapp_valido=True).all()
+        if not tels:
+            return jsonify({'erro': 'Nenhum número válido'}), 400
+
+        enviados = 0
+        for t in tels:
+            ok, result = ws.enviar(t.numero_fmt, mensagem)
+            if ok:
+                enviados += 1
+                log = LogMsg(
+                    campanha_id=c.campanha_id,
+                    contato_id=c.id,
+                    direcao='enviada',
+                    telefone=t.numero_fmt,
+                    mensagem=mensagem[:500],
+                    status='ok'
+                )
+                db.session.add(log)
+
+        db.session.commit()
+        return jsonify({'sucesso': True, 'mensagem': f'Enviado para {enviados} número(s)'})
+
+
 @app.route('/contato/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
 def editar_contato(id):

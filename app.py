@@ -3968,6 +3968,26 @@ def api_enviar_mensagem_contato(id):
         }), 500
 
 
+@app.route('/contato/<int:id>/detalhes')
+@login_required
+def contato_detalhes_pagina(id):
+    """
+    Página completa com detalhes do contato
+    """
+    c = verificar_acesso_contato(id)
+
+    # Obter telefones com respostas
+    telefones = c.telefones.all()
+
+    # Obter histórico de mensagens
+    logs = LogMsg.query.filter_by(contato_id=c.id).order_by(LogMsg.data).all()
+
+    return render_template('contato_detalhes.html',
+                         contato=c,
+                         telefones=telefones,
+                         logs=logs)
+
+
 @app.route('/contato/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
 def editar_contato(id):

@@ -836,8 +836,7 @@ def processar_planilha_task(self, arquivo_path, campanha_id):
         return {
             'sucesso': True,
             'criados': criados,
-            'campanha_id': campanha_id,
-            'procedimentos_normalizados': len(mapa_normalizacao)
+            'campanha_id': campanha_id
         }
 
     except Exception as e:

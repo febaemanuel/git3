@@ -3951,7 +3951,13 @@ def webhook():
         if not data:
             return jsonify({'status': 'ok'}), 200
 
-        if data.get('event') != 'messages.upsert':
+        # Log do evento recebido (útil para debug)
+        logger.debug(f"Webhook evento recebido: {data.get('event')}")
+
+        # Normalizar nome do evento (aceita MESSAGES_UPSERT ou messages.upsert)
+        event = data.get('event', '').upper().replace('.', '_')
+        if event != 'MESSAGES_UPSERT':
+            logger.debug(f"Evento ignorado: {event}")
             return jsonify({'status': 'ok'}), 200
 
         msg_data = data.get('data', {})

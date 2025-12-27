@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+
+{% block title %}Ticket #{{ ticket.id }}{% endblock %}
+
+{% block content %}
+<div class="mb-3">
+    <a href="{{ url_for('painel_atendimento') }}" class="btn btn-outline-secondary btn-sm">
+        <i class="bi bi-arrow-left"></i> Voltar
+    </a>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <!-- Detalhes do Ticket -->
+        <div class="card mb-3">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">
+                    Ticket #{{ ticket.id }}
+                    {% if ticket.prioridade == 'urgente' %}
+                        <span class="badge bg-danger">URGENTE</span>
+                    {% elif ticket.prioridade == 'alta' %}
+                        <span class="badge bg-warning text-dark">Alta Prioridade</span>
+                    {% endif %}
+                    {% if tickets_relacionados and tickets_relacionados|length > 1 %}
+                        <span class="badge bg-info">{{ tickets_relacionados|length }} mensagens agrupadas</span>
+                    {% endif %}
+                </h5>
+                <div>
+                    {% if ticket.status == 'pendente' %}
+                        <span class="badge bg-warning">Pendente</span>
+                    {% elif ticket.status == 'em_atendimento' %}
+                        <span class="badge bg-primary">Em Atendimento</span>
+                    {% elif ticket.status == 'resolvido' %}
+                        <span class="badge bg-success">Resolvido</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="card-body">
+                {% if tickets_relacionados and tickets_relacionados|length > 1 %}
+                <h6>Mensagens do Paciente:</h6>
+                <div class="alert alert-light">
+                    {% for t in tickets_relacionados %}
+                    <div class="mb-2 pb-2 {% if not loop.last %}border-bottom{% endif %}">
+                        <small class="text-muted">{{ t.data_criacao.strftime('%d/%m/%Y %H:%M') }}</small>
+                        <p class="mb-0">{{ t.mensagem_usuario }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <h6>Mensagem do Paciente:</h6>
+                <div class="alert alert-light">
+                    {{ ticket.mensagem_usuario }}
+                </div>
+                {% endif %}
+
+                <div class="row">
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Paciente:</strong> {{ ticket.contato.nome if ticket.contato else 'N/A' }}</p>
+                        <p class="mb-1"><strong>Campanha:</strong> {{ ticket.campanha.nome if ticket.campanha else 'N/A' }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <p class="mb-1"><strong>Criado em:</strong> {{ ticket.data_criacao.strftime('%d/%m/%Y %H:%M') }}</p>
+                        {% if ticket.atendente %}
+                            <p class="mb-1"><strong>Atendente:</strong> {{ ticket.atendente.nome }}</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ações -->
+        {% if ticket.status == 'pendente' %}
+        <div class="card mb-3">
+            <div class="card-header">
+                <h6 class="mb-0">Assumir Atendimento</h6>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('assumir_ticket', id=ticket.id) }}">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-person-check"></i> Assumir este Ticket
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if ticket.status == 'em_atendimento' and ticket.atendente_id == current_user.id %}
+        <div class="card mb-3">
+            <div class="card-header">
+                <h6 class="mb-0">Responder ao Paciente</h6>
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('responder_ticket', id=ticket.id) }}">
+                    <div class="mb-3">
+                        <label class="form-label">Sua Resposta:</label>
+                        <textarea name="resposta" class="form-control" rows="5" required
+                                  placeholder="Digite sua resposta. Ela será enviada automaticamente via WhatsApp para o paciente."></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-send"></i> Enviar Resposta e Resolver
+                    </button>
+                    <button type="submit" formaction="{{ url_for('cancelar_ticket', id=ticket.id) }}" class="btn btn-outline-danger">
+                        Cancelar Ticket
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if ticket.status == 'resolvido' and ticket.resposta %}
+        <div class="card mb-3">
+            <div class="card-header bg-success text-white">
+                <h6 class="mb-0">Ticket Resolvido</h6>
+            </div>
+            <div class="card-body">
+                <p class="mb-1"><strong>Resposta Enviada:</strong></p>
+                <div class="alert alert-success">
+                    {{ ticket.resposta }}
+                </div>
+                <p class="mb-0"><small class="text-muted">
+                    Resolvido em: {{ ticket.data_resolucao.strftime('%d/%m/%Y %H:%M') if ticket.data_resolucao else 'N/A' }}
+                </small></p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-md-4">
+        <!-- Histórico de Conversas -->
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0">Histórico de Mensagens</h6>
+            </div>
+            <div class="card-body" style="max-height: 600px; overflow-y: auto;">
+                {% if logs %}
+                    {% for log in logs %}
+                    <div class="mb-3 {% if log.direcao == 'enviada' %}text-end{% endif %}">
+                        <div class="d-inline-block p-2 rounded {% if log.direcao == 'enviada' %}bg-primary text-white{% else %}bg-light{% endif %}"
+                             style="max-width: 90%;">
+                            <small>{{ log.mensagem }}</small>
+                        </div>
+                        <div>
+                            <small class="text-muted">
+                                {{ log.data.strftime('%d/%m %H:%M') }}
+                                {% if log.sentimento %}
+                                    {% if log.sentimento == 'urgente' %}🚨{% elif log.sentimento == 'insatisfeito' %}😠{% elif log.sentimento == 'positivo' %}😊{% endif %}
+                                {% endif %}
+                            </small>
+                        </div>
+                    </div>
+                    {% endfor %}
+                {% else %}
+                    <p class="text-muted">Sem histórico de mensagens.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

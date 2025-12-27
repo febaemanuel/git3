@@ -235,20 +235,8 @@
                         </thead>
                         <tbody>
                             {% for contato in contatos.items %}
-                            <tr style="cursor: pointer;" onclick="abrirDetalhesContato({{ contato.id }})">
-                                <td>
-                                    <strong>{{ contato.nome }}</strong>
-                                    {% if contato.tem_respostas_multiplas() %}
-                                        <span class="badge bg-info ms-1" title="Múltiplas respostas">
-                                            <i class="bi bi-phone-fill"></i> {{ contato.telefones.count() }}
-                                        </span>
-                                    {% endif %}
-                                    {% if contato.tem_conflito_real() %}
-                                        <span class="badge bg-danger ms-1" title="Respostas conflitantes">
-                                            <i class="bi bi-exclamation-triangle-fill"></i> Conflito
-                                        </span>
-                                    {% endif %}
-                                </td>
+                            <tr>
+                                <td><strong>{{ contato.nome }}</strong></td>
                                 <td>{{ contato.formatar_telefone() }}</td>
                                 <td>
                                     {% if contato.procedimento_normalizado and contato.procedimento_normalizado != contato.procedimento %}
@@ -281,8 +269,12 @@
                                     <small class="text-muted">-</small>
                                     {% endif %}
                                 </td>
-                                <td class="text-center" onclick="event.stopPropagation()">
+                                <td class="text-center">
                                     <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-info" title="Ver detalhes e histórico"
+                                                onclick="abrirDetalhesContato({{ contato.id }})">
+                                            <i class="bi bi-info-circle"></i>
+                                        </button>
                                         {% if not contato.confirmado and not contato.rejeitado %}
                                         <button class="btn btn-outline-success" title="Marcar como confirmado"
                                                 onclick="confirmarContato({{ contato.id }})">

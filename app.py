@@ -3834,68 +3834,80 @@ def api_contato_detalhes(id):
     - Histórico de mensagens (enviadas e recebidas)
     - Status de conflito
     """
-    c = verificar_acesso_contato(id)
+    try:
+        c = verificar_acesso_contato(id)
 
-    # Obter respostas detalhadas de todos os telefones
-    respostas_telefones = []
-    for telefone in c.telefones.all():
-        tel_info = {
-            'id': telefone.id,
-            'numero': telefone.numero,
-            'numero_formatado': telefone.numero_fmt,
-            'prioridade': telefone.prioridade,
-            'whatsapp_valido': telefone.whatsapp_valido,
-            'enviado': telefone.enviado,
-            'data_envio': telefone.data_envio.isoformat() if telefone.data_envio else None,
-            'resposta': telefone.resposta,
-            'data_resposta': telefone.data_resposta.isoformat() if telefone.data_resposta else None,
-            'tipo_resposta': telefone.tipo_resposta,
-            'tipo_resposta_texto': {
-                'confirmado': 'Confirmado',
-                'rejeitado': 'Rejeitado',
-                'desconheco': 'Não conhece a pessoa'
-            }.get(telefone.tipo_resposta, 'Sem resposta'),
-            'validacao_pendente': telefone.validacao_pendente
+        # Obter respostas detalhadas de todos os telefones
+        respostas_telefones = []
+        for telefone in c.telefones.all():
+            tel_info = {
+                'id': telefone.id,
+                'numero': telefone.numero,
+                'numero_formatado': telefone.numero_fmt,
+                'prioridade': telefone.prioridade,
+                'whatsapp_valido': telefone.whatsapp_valido,
+                'enviado': telefone.enviado,
+                'data_envio': telefone.data_envio.isoformat() if telefone.data_envio else None,
+                'resposta': getattr(telefone, 'resposta', None),
+                'data_resposta': getattr(telefone, 'data_resposta', None).isoformat() if getattr(telefone, 'data_resposta', None) else None,
+                'tipo_resposta': getattr(telefone, 'tipo_resposta', None),
+                'tipo_resposta_texto': {
+                    'confirmado': 'Confirmado',
+                    'rejeitado': 'Rejeitado',
+                    'desconheco': 'Não conhece a pessoa'
+                }.get(getattr(telefone, 'tipo_resposta', None), 'Sem resposta'),
+                'validacao_pendente': getattr(telefone, 'validacao_pendente', False)
+            }
+            respostas_telefones.append(tel_info)
+
+        # Obter histórico de mensagens do log
+        logs = LogMsg.query.filter_by(contato_id=c.id).order_by(LogMsg.data).all()
+        historico = []
+        for log in logs:
+            log_info = {
+                'id': log.id,
+                'direcao': log.direcao,
+                'telefone': log.telefone,
+                'mensagem': log.mensagem,
+                'data': log.data.isoformat() if log.data else None,
+                'status': log.status,
+                'sentimento': log.sentimento,
+                'sentimento_score': log.sentimento_score
+            }
+            historico.append(log_info)
+
+        # Informações do contato
+        # Usar try/except para métodos que podem não existir ainda
+        try:
+            tem_multiplas = c.tem_respostas_multiplas()
+            tem_conflito = c.tem_conflito_real()
+        except:
+            tem_multiplas = False
+            tem_conflito = False
+
+        contato_info = {
+            'id': c.id,
+            'nome': c.nome,
+            'data_nascimento': c.data_nascimento.isoformat() if c.data_nascimento else None,
+            'procedimento': c.procedimento,
+            'status': c.status,
+            'status_texto': c.status_texto(),
+            'confirmado': c.confirmado,
+            'rejeitado': c.rejeitado,
+            'erro': c.erro,
+            'tem_respostas_multiplas': tem_multiplas,
+            'tem_conflito_real': tem_conflito,
+            'campanha_id': c.campanha_id
         }
-        respostas_telefones.append(tel_info)
 
-    # Obter histórico de mensagens do log
-    logs = LogMsg.query.filter_by(contato_id=c.id).order_by(LogMsg.data).all()
-    historico = []
-    for log in logs:
-        log_info = {
-            'id': log.id,
-            'direcao': log.direcao,
-            'telefone': log.telefone,
-            'mensagem': log.mensagem,
-            'data': log.data.isoformat() if log.data else None,
-            'status': log.status,
-            'sentimento': log.sentimento,
-            'sentimento_score': log.sentimento_score
-        }
-        historico.append(log_info)
-
-    # Informações do contato
-    contato_info = {
-        'id': c.id,
-        'nome': c.nome,
-        'data_nascimento': c.data_nascimento.isoformat() if c.data_nascimento else None,
-        'procedimento': c.procedimento,
-        'status': c.status,
-        'status_texto': c.status_texto(),
-        'confirmado': c.confirmado,
-        'rejeitado': c.rejeitado,
-        'erro': c.erro,
-        'tem_respostas_multiplas': c.tem_respostas_multiplas(),
-        'tem_conflito_real': c.tem_conflito_real(),
-        'campanha_id': c.campanha_id
-    }
-
-    return jsonify({
-        'contato': contato_info,
-        'telefones': respostas_telefones,
-        'historico': historico
-    })
+        return jsonify({
+            'contato': contato_info,
+            'telefones': respostas_telefones,
+            'historico': historico
+        })
+    except Exception as e:
+        logger.error(f"Erro ao buscar detalhes do contato {id}: {str(e)}")
+        return jsonify({'erro': 'Erro ao carregar detalhes. Banco de dados precisa ser atualizado.'}), 500
 
 
 @app.route('/api/contato/<int:id>/enviar_mensagem', methods=['POST'])
@@ -4361,66 +4373,21 @@ def webhook():
                 # Determinar tipo de resposta
                 tipo_resp = 'confirmado' if any(r in texto_up for r in RESPOSTAS_SIM) else 'rejeitado'
 
-                # Verificar se contato TEM data de nascimento cadastrada
-                if c.data_nascimento:
-                    # Pedir Data de Nascimento para validação
-                    c.status = 'aguardando_nascimento'
-                    c.resposta = texto # Guarda a intencao original (1 ou 2)
-                    c.data_resposta = datetime.utcnow()
+                # SEMPRE pedir Data de Nascimento para validação
+                c.status = 'aguardando_nascimento'
+                c.resposta = texto # Guarda a intencao original (1 ou 2)
+                c.data_resposta = datetime.utcnow()
 
-                    # Salvar resposta no telefone específico (aguardando validação)
-                    if telefone_respondente:
-                        telefone_respondente.resposta = texto
-                        telefone_respondente.data_resposta = datetime.utcnow()
-                        telefone_respondente.tipo_resposta = tipo_resp  # Guarda a intenção
-                        telefone_respondente.validacao_pendente = True
+                # Salvar resposta no telefone específico (aguardando validação)
+                if telefone_respondente:
+                    telefone_respondente.resposta = texto
+                    telefone_respondente.data_resposta = datetime.utcnow()
+                    telefone_respondente.tipo_resposta = tipo_resp  # Guarda a intenção
+                    telefone_respondente.validacao_pendente = True
 
-                    db.session.commit()
+                db.session.commit()
 
-                    ws.enviar(numero, "🔒 Por segurança, por favor digite sua *Data de Nascimento* (ex: 03/09/1954).")
-                else:
-                    # NÃO tem data de nascimento - confirma/rejeita imediatamente
-                    msg_final = "✅ Obrigado."
-
-                    if any(r in texto_up for r in RESPOSTAS_SIM):
-                        msg_final = """✅ *Confirmação Registrada com Sucesso!*
-
-Obrigado por confirmar seu interesse no procedimento.
-
-📞 *Próximos Passos:*
-• Nossa equipe entrará em contato em breve
-• Mantenha seu telefone com notificações ativas
-• Fique atento às ligações do hospital
-
-❓ *Tem dúvidas?*
-Digite sua pergunta a qualquer momento que responderemos!
-
-_Hospital Universitário Walter Cantídio_"""
-                    elif any(r in texto_up for r in RESPOSTAS_NAO):
-                        msg_final = """✅ *Registro Atualizado*
-
-Obrigado por sua resposta.
-
-Registramos que você não tem mais interesse no procedimento. Seus dados serão atualizados em nosso sistema.
-
-Se mudar de ideia ou tiver alguma dúvida, pode entrar em contato conosco.
-
-_Hospital Universitário Walter Cantídio_"""
-
-                    # Salvar resposta no telefone específico
-                    if telefone_respondente:
-                        telefone_respondente.resposta = texto
-                        telefone_respondente.data_resposta = datetime.utcnow()
-                        telefone_respondente.tipo_resposta = tipo_resp
-                        telefone_respondente.validacao_pendente = False
-
-                    # Recalcular status final do contato baseado em todas as respostas
-                    c.calcular_status_final()
-                    db.session.commit()
-                    c.campanha.atualizar_stats()
-                    db.session.commit()
-
-                    ws.enviar(numero, msg_final)
+                ws.enviar(numero, "🔒 Por segurança, por favor digite sua *Data de Nascimento* (ex: 03/09/1954).")
                 
             elif any(r in texto_up for r in RESPOSTAS_DESCONHECO):
                 # Salvar resposta "desconheço" no telefone específico

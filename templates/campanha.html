@@ -271,6 +271,10 @@
                                 </td>
                                 <td class="text-center">
                                     <div class="btn-group btn-group-sm">
+                                        <button class="btn btn-outline-info" title="Ver histórico de mensagens"
+                                                onclick="verDetalhes({{ contato.id }})">
+                                            <i class="bi bi-chat-dots"></i>
+                                        </button>
                                         {% if not contato.confirmado and not contato.rejeitado %}
                                         <button class="btn btn-outline-success" title="Marcar como confirmado"
                                                 onclick="confirmarContato({{ contato.id }})">
@@ -340,6 +344,44 @@
         </div>
     </div>
 </div>
+
+<!-- Modal de Detalhes do Contato -->
+<div class="modal fade" id="modalDetalhes" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Histórico de Mensagens</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="conteudoDetalhes">
+                    <div class="text-center py-4">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Carregando...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Formulário para enviar mensagem -->
+                <div id="formResposta" class="mt-4" style="display:none;">
+                    <hr>
+                    <h6>Enviar Mensagem</h6>
+                    <div class="mb-3">
+                        <label class="form-label">Selecione o telefone:</label>
+                        <select id="telefoneResposta" class="form-select"></select>
+                    </div>
+                    <div class="mb-3">
+                        <textarea id="mensagemResposta" class="form-control" rows="3" placeholder="Digite a mensagem..."></textarea>
+                    </div>
+                    <button type="button" class="btn btn-primary" onclick="enviarResposta()">
+                        <i class="bi bi-send"></i> Enviar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -438,6 +480,130 @@ function reenviarContato(id) {
             }
         })
         .catch(err => alert('Erro: ' + err));
+}
+
+// Funções de detalhes e resposta
+let contatoAtual = null;
+
+function verDetalhes(contatoId) {
+    contatoAtual = contatoId;
+    const modal = new bootstrap.Modal(document.getElementById('modalDetalhes'));
+    modal.show();
+
+    // Reset
+    document.getElementById('conteudoDetalhes').innerHTML = `
+        <div class="text-center py-4">
+            <div class="spinner-border text-primary" role="status"></div>
+        </div>
+    `;
+    document.getElementById('formResposta').style.display = 'none';
+
+    // Buscar detalhes
+    fetch(`/api/contato/${contatoId}/detalhes`)
+        .then(res => res.json())
+        .then(data => {
+            let html = `
+                <div class="card mb-3">
+                    <div class="card-body">
+                        <h6><i class="bi bi-person"></i> ${data.contato.nome}</h6>
+                        <p class="mb-1"><strong>Procedimento:</strong> ${data.contato.procedimento_normalizado || data.contato.procedimento}</p>
+                        <p class="mb-1">
+                            <strong>Status:</strong>
+                            <span class="badge bg-${data.contato.confirmado ? 'success' : (data.contato.rejeitado ? 'danger' : 'secondary')}">
+                                ${data.contato.confirmado ? 'CONFIRMADO' : (data.contato.rejeitado ? 'REJEITADO' : data.contato.status)}
+                            </span>
+                        </p>
+                        ${data.contato.erro ? `<p class="mb-0 text-warning"><small><i class="bi bi-exclamation-triangle"></i> ${data.contato.erro}</small></p>` : ''}
+                    </div>
+                </div>
+            `;
+
+            // Telefones e histórico
+            data.telefones.forEach(tel => {
+                const temHistorico = tel.historico && tel.historico.length > 0;
+                const validoBadge = tel.whatsapp_valido ? '<span class="badge bg-success">WhatsApp Válido</span>' : '<span class="badge bg-danger">Sem WhatsApp</span>';
+
+                html += `
+                    <div class="card mb-2">
+                        <div class="card-header">
+                            <i class="bi bi-phone"></i> ${tel.numero} ${validoBadge}
+                        </div>
+                        ${temHistorico ? `
+                            <div class="card-body p-2">
+                                <div style="max-height: 200px; overflow-y: auto;">
+                `;
+
+                if (temHistorico) {
+                    tel.historico.forEach(msg => {
+                        const isEnviada = msg.direcao === 'enviada';
+                        const bgColor = isEnviada ? 'bg-light' : 'bg-primary bg-opacity-10';
+                        const icon = isEnviada ? 'bi-box-arrow-right' : 'bi-box-arrow-in-left';
+                        const sentimento = msg.sentimento ? `<span class="badge bg-${msg.sentimento === 'positivo' ? 'success' : (msg.sentimento === 'negativo' ? 'danger' : 'secondary')}">${msg.sentimento}</span>` : '';
+
+                        html += `
+                            <div class="p-2 mb-1 rounded ${bgColor}">
+                                <small class="text-muted">
+                                    <i class="bi ${icon}"></i> ${msg.data} ${sentimento}
+                                </small>
+                                <div>${msg.mensagem}</div>
+                            </div>
+                        `;
+                    });
+                }
+
+                html += `
+                                </div>
+                            </div>
+                        ` : '<div class="card-body p-2"><small class="text-muted">Sem histórico</small></div>'}
+                    </div>
+                `;
+            });
+
+            document.getElementById('conteudoDetalhes').innerHTML = html;
+
+            // Preencher select de telefones
+            const select = document.getElementById('telefoneResposta');
+            select.innerHTML = '<option value="">Todos os números válidos</option>';
+            data.telefones.forEach(tel => {
+                if (tel.whatsapp_valido) {
+                    select.innerHTML += `<option value="${tel.numero}">${tel.numero}</option>`;
+                }
+            });
+
+            document.getElementById('formResposta').style.display = 'block';
+        })
+        .catch(err => {
+            document.getElementById('conteudoDetalhes').innerHTML = `
+                <div class="alert alert-danger">Erro ao carregar detalhes: ${err.message}</div>
+            `;
+        });
+}
+
+function enviarResposta() {
+    const mensagem = document.getElementById('mensagemResposta').value.trim();
+    const numero = document.getElementById('telefoneResposta').value;
+
+    if (!mensagem) {
+        alert('Digite uma mensagem');
+        return;
+    }
+
+    fetch(`/api/contato/${contatoAtual}/responder`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensagem, numero: numero || null })
+    })
+    .then(res => res.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert(data.mensagem);
+            document.getElementById('mensagemResposta').value = '';
+            verDetalhes(contatoAtual); // Recarregar histórico
+        } else {
+            alert('Erro: ' + data.erro);
+        }
+    })
+    .catch(err => alert('Erro: ' + err));
 }
 
 // Auto-refresh se campanha em andamento

@@ -1,0 +1,119 @@
+services:
+  # Banco de dados PostgreSQL
+  db:
+    image: postgres:15-alpine
+    container_name: busca-ativa-db
+    restart: always
+    environment:
+      POSTGRES_USER: buscaativa
+      POSTGRES_PASSWORD: buscaativa2024
+      POSTGRES_DB: buscaativa_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - busca-ativa-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U buscaativa -d buscaativa_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis (Message Broker para Celery)
+  redis:
+    image: redis:7-alpine
+    container_name: busca-ativa-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    networks:
+      - busca-ativa-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Aplicação Flask
+  web:
+    build: .
+    container_name: busca-ativa-web
+    restart: always
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - TZ=America/Fortaleza
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - busca-ativa-network
+    command: >
+      sh -c "
+        echo 'Aguardando banco de dados...' &&
+        sleep 5 &&
+        echo 'Inicializando banco de dados...' &&
+        flask init-db || true &&
+        echo 'Iniciando aplicação...' &&
+        gunicorn --bind 0.0.0.0:5000 --workers 4 --timeout 300 --log-level info app:app
+      "
+
+  # Celery Worker (Processa tarefas assíncronas)
+  celery_worker:
+    build: .
+    container_name: busca-ativa-celery-worker
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/app
+      - TZ=America/Fortaleza
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - busca-ativa-network
+    command: celery -A celery_app.celery worker --loglevel=info --concurrency=4
+
+  # Celery Beat (Agendador de tarefas periódicas)
+  celery_beat:
+    build: .
+    container_name: busca-ativa-celery-beat
+    restart: always
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/app
+      - TZ=America/Fortaleza
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - busca-ativa-network
+    command: celery -A celery_app.celery beat --loglevel=info
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  busca-ativa-network:
+    driver: bridge

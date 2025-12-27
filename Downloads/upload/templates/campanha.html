@@ -1,0 +1,469 @@
+{% extends "base.html" %}
+
+{% block title %}{{ campanha.nome }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Cabecalho -->
+    <div class="col-12 mb-4">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                <li class="breadcrumb-item active">{{ campanha.nome }}</li>
+            </ol>
+        </nav>
+
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2>{{ campanha.nome }}</h2>
+                {% if campanha.descricao %}
+                <p class="text-muted mb-0">{{ campanha.descricao }}</p>
+                {% endif %}
+            </div>
+            <div class="d-flex gap-2">
+                {% if campanha.status in ['pendente', 'pausada', 'pronta', 'validada'] %}
+                <button class="btn btn-whatsapp" onclick="iniciarCampanha()">
+                    <i class="bi bi-play-fill"></i> Iniciar Envio
+                </button>
+                {% elif campanha.status == 'em_andamento' %}
+                <button class="btn btn-warning" onclick="pausarCampanha()">
+                    <i class="bi bi-pause-fill"></i> Pausar
+                </button>
+                {% endif %}
+
+                <a href="{{ url_for('exportar_campanha', id=campanha.id) }}" class="btn btn-success">
+                    <i class="bi bi-download"></i> Exportar Excel
+                </a>
+
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                        <i class="bi bi-three-dots-vertical"></i>
+                    </button>
+                    <ul class="dropdown-menu">
+                        {% if campanha.status != 'em_andamento' %}
+                        <li>
+                            <form method="POST" action="{{ url_for('excluir_campanha', id=campanha.id) }}"
+                                  onsubmit="return confirm('Tem certeza que deseja excluir esta campanha?');">
+                                <button type="submit" class="dropdown-item text-danger">
+                                    <i class="bi bi-trash"></i> Excluir Campanha
+                                </button>
+                            </form>
+                        </li>
+                        {% endif %}
+                        {% if campanha.status == 'em_andamento' %}
+                        <li>
+                            <button class="dropdown-item text-danger" onclick="cancelarCampanha()">
+                                <i class="bi bi-x-circle"></i> Cancelar Campanha
+                            </button>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cards de Estatisticas -->
+    <div class="col-12 mb-4">
+        <div class="row g-3">
+            <div class="col-md">
+                <div class="card stat-card total">
+                    <div class="card-body text-center">
+                        <h3 id="stat-total">{{ campanha.total_contatos }}</h3>
+                        <small class="text-muted">Total de Contatos</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md">
+                <div class="card stat-card enviados">
+                    <div class="card-body text-center">
+                        <h3 class="text-info" id="stat-enviados">{{ campanha.total_enviados }}</h3>
+                        <small class="text-muted">Enviados</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md">
+                <div class="card stat-card confirmados">
+                    <div class="card-body text-center">
+                        <h3 class="text-success" id="stat-confirmados">{{ campanha.total_confirmados }}</h3>
+                        <small class="text-muted">Confirmados</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md">
+                <div class="card stat-card rejeitados">
+                    <div class="card-body text-center">
+                        <h3 class="text-warning" id="stat-rejeitados">{{ campanha.total_rejeitados }}</h3>
+                        <small class="text-muted">Rejeitados</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md">
+                <div class="card stat-card erros">
+                    <div class="card-body text-center">
+                        <h3 class="text-danger" id="stat-erros">{{ campanha.total_erros }}</h3>
+                        <small class="text-muted">Erros</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Informações de Agendamento -->
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-calendar-check"></i> Agendamento e Controle
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <small class="text-muted">Meta Diária</small>
+                        <h5>{{ campanha.meta_diaria }} pessoas/dia</h5>
+                    </div>
+                    <div class="col-md-3">
+                        <small class="text-muted">Enviados Hoje</small>
+                        <h5>
+                            <span id="enviados-hoje">{{ campanha.enviados_hoje }}</span> / {{ campanha.meta_diaria }}
+                        </h5>
+                        <div class="progress" style="height: 5px;">
+                            <div class="progress-bar bg-info" style="width: {{ (campanha.enviados_hoje / campanha.meta_diaria * 100) if campanha.meta_diaria > 0 else 0 }}%"></div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <small class="text-muted">Horário de Funcionamento</small>
+                        <h5>{{ '%02d' % campanha.hora_inicio }}:00 - {{ '%02d' % campanha.hora_fim }}:00</h5>
+                    </div>
+                    <div class="col-md-3">
+                        <small class="text-muted">Duração</small>
+                        <h5>
+                            {% if campanha.dias_duracao == 0 %}
+                                Até acabar
+                            {% else %}
+                                {{ campanha.dias_duracao }} dia(s)
+                                {% if campanha.data_inicio %}
+                                    <br><small class="text-muted">({{ (now() - campanha.data_inicio).days }} decorridos)</small>
+                                {% endif %}
+                            {% endif %}
+                        </h5>
+                    </div>
+                </div>
+                {% if campanha.status_msg %}
+                <div class="alert alert-info mt-3 mb-0">
+                    <i class="bi bi-info-circle"></i> {{ campanha.status_msg }}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Barra de Progresso -->
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Progresso do Envio</span>
+                    <span id="progresso-texto">{{ campanha.percentual_conclusao() }}%</span>
+                </div>
+                <div class="progress">
+                    <div class="progress-bar" role="progressbar" id="progresso-bar"
+                         style="width: {{ campanha.percentual_conclusao() }}%">
+                    </div>
+                </div>
+                <div class="d-flex justify-content-between mt-2">
+                    <small class="text-muted">
+                        Status: <strong id="status-campanha">{{ campanha.status.replace('_', ' ').title() }}</strong>
+                    </small>
+                    <small class="text-muted">
+                        Taxa de confirmacao: <strong id="taxa-confirmacao">{{ campanha.percentual_confirmacao() }}%</strong>
+                    </small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de Contatos -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-people"></i> Contatos</span>
+
+                    <!-- Filtros -->
+                    <div class="btn-group btn-group-sm">
+                        <a href="{{ url_for('campanha_detalhe', id=campanha.id, filtro='todos') }}"
+                           class="btn btn-outline-secondary {% if filtro == 'todos' %}active{% endif %}">
+                            Todos
+                        </a>
+                        <a href="{{ url_for('campanha_detalhe', id=campanha.id, filtro='confirmados') }}"
+                           class="btn btn-outline-success {% if filtro == 'confirmados' %}active{% endif %}">
+                            Confirmados
+                        </a>
+                        <a href="{{ url_for('campanha_detalhe', id=campanha.id, filtro='rejeitados') }}"
+                           class="btn btn-outline-warning {% if filtro == 'rejeitados' %}active{% endif %}">
+                            Rejeitados
+                        </a>
+                        <a href="{{ url_for('campanha_detalhe', id=campanha.id, filtro='aguardando') }}"
+                           class="btn btn-outline-info {% if filtro == 'aguardando' %}active{% endif %}">
+                            Aguardando
+                        </a>
+                        <a href="{{ url_for('campanha_detalhe', id=campanha.id, filtro='pendentes') }}"
+                           class="btn btn-outline-secondary {% if filtro == 'pendentes' %}active{% endif %}">
+                            Pendentes
+                        </a>
+                        <a href="{{ url_for('campanha_detalhe', id=campanha.id, filtro='erros') }}"
+                           class="btn btn-outline-danger {% if filtro == 'erros' %}active{% endif %}">
+                            Erros
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body p-0">
+                {% if contatos.items %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Nome</th>
+                                <th>Telefone</th>
+                                <th>Procedimento</th>
+                                <th class="text-center">Status</th>
+                                <th>Resposta</th>
+                                <th>Data Envio</th>
+                                <th class="text-center">Acoes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for contato in contatos.items %}
+                            <tr>
+                                <td><strong>{{ contato.nome }}</strong></td>
+                                <td>{{ contato.formatar_telefone() }}</td>
+                                <td>
+                                    {% if contato.procedimento_normalizado and contato.procedimento_normalizado != contato.procedimento %}
+                                    <div>
+                                        <strong class="text-success">{{ contato.procedimento_normalizado[:50] }}{% if contato.procedimento_normalizado|length > 50 %}...{% endif %}</strong>
+                                        <br>
+                                        <small class="text-muted">Original: {{ contato.procedimento[:40] }}{% if contato.procedimento|length > 40 %}...{% endif %}</small>
+                                    </div>
+                                    {% else %}
+                                    <small>{{ contato.procedimento[:40] }}{% if contato.procedimento|length > 40 %}...{% endif %}</small>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <span class="badge {{ contato.status_badge() }}">
+                                        {{ contato.status_texto() }}
+                                    </span>
+                                </td>
+                                <td>
+                                    {% if contato.resposta_texto %}
+                                    <small>{{ contato.resposta_texto[:30] }}...</small>
+                                    {% else %}
+                                    <small class="text-muted">-</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% set tel_enviado = contato.telefones.filter_by(enviado=True).first() %}
+                                    {% if tel_enviado and tel_enviado.data_envio %}
+                                    <small>{{ tel_enviado.data_envio.strftime('%d/%m %H:%M') }}</small>
+                                    {% else %}
+                                    <small class="text-muted">-</small>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    <div class="btn-group btn-group-sm">
+                                        {% if not contato.confirmado and not contato.rejeitado %}
+                                        <button class="btn btn-outline-success" title="Marcar como confirmado"
+                                                onclick="confirmarContato({{ contato.id }})">
+                                            <i class="bi bi-check-lg"></i>
+                                        </button>
+                                        <button class="btn btn-outline-warning" title="Marcar como rejeitado"
+                                                onclick="rejeitarContato({{ contato.id }})">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                        {% endif %}
+                                        {% if contato.status in ['enviado', 'aguardando_nascimento', 'concluido'] or contato.erro %}
+                                        <button class="btn btn-outline-primary" title="Reenviar mensagem"
+                                                onclick="reenviarContato({{ contato.id }})">
+                                            <i class="bi bi-arrow-clockwise"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Paginacao -->
+                {% if contatos.pages > 1 %}
+                <nav class="p-3">
+                    <ul class="pagination justify-content-center mb-0">
+                        {% if contatos.has_prev %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('campanha_detalhe', id=campanha.id, page=contatos.prev_num, filtro=filtro) }}">
+                                Anterior
+                            </a>
+                        </li>
+                        {% endif %}
+
+                        {% for page in contatos.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+                            {% if page %}
+                            <li class="page-item {% if page == contatos.page %}active{% endif %}">
+                                <a class="page-link" href="{{ url_for('campanha_detalhe', id=campanha.id, page=page, filtro=filtro) }}">
+                                    {{ page }}
+                                </a>
+                            </li>
+                            {% else %}
+                            <li class="page-item disabled"><span class="page-link">...</span></li>
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if contatos.has_next %}
+                        <li class="page-item">
+                            <a class="page-link" href="{{ url_for('campanha_detalhe', id=campanha.id, page=contatos.next_num, filtro=filtro) }}">
+                                Proximo
+                            </a>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </nav>
+                {% endif %}
+
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
+                    <p class="text-muted mt-2">Nenhum contato encontrado com este filtro</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const campanhaId = {{ campanha.id }};
+
+// Funcao para iniciar campanha
+function iniciarCampanha() {
+    if (!confirm('Iniciar envio de mensagens?')) return;
+
+    fetch(`/campanha/${campanhaId}/iniciar`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.sucesso) {
+                alert('Envio iniciado!');
+                location.reload();
+            } else {
+                alert('Erro: ' + data.erro);
+            }
+        })
+        .catch(err => alert('Erro: ' + err));
+}
+
+// Funcao para pausar campanha
+function pausarCampanha() {
+    if (!confirm('Pausar envio de mensagens?')) return;
+
+    fetch(`/campanha/${campanhaId}/pausar`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.sucesso) {
+                location.reload();
+            } else {
+                alert('Erro: ' + data.erro);
+            }
+        })
+        .catch(err => alert('Erro: ' + err));
+}
+
+// Funcao para cancelar campanha
+function cancelarCampanha() {
+    if (!confirm('Tem certeza que deseja cancelar esta campanha?')) return;
+
+    fetch(`/campanha/${campanhaId}/cancelar`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.sucesso) {
+                location.reload();
+            } else {
+                alert('Erro: ' + data.erro);
+            }
+        })
+        .catch(err => alert('Erro: ' + err));
+}
+
+// Funcao para confirmar contato
+function confirmarContato(id) {
+    fetch(`/api/contato/${id}/confirmar`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.sucesso) {
+                location.reload();
+            } else {
+                alert('Erro: ' + data.erro);
+            }
+        })
+        .catch(err => alert('Erro: ' + err));
+}
+
+// Funcao para rejeitar contato
+function rejeitarContato(id) {
+    fetch(`/api/contato/${id}/rejeitar`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.sucesso) {
+                location.reload();
+            } else {
+                alert('Erro: ' + data.erro);
+            }
+        })
+        .catch(err => alert('Erro: ' + err));
+}
+
+// Funcao para reenviar mensagem
+function reenviarContato(id) {
+    if (!confirm('Reenviar mensagem para este contato?')) return;
+
+    fetch(`/api/contato/${id}/reenviar`, { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.sucesso) {
+                alert('Mensagem reenviada!');
+                location.reload();
+            } else {
+                alert('Erro: ' + data.erro);
+            }
+        })
+        .catch(err => alert('Erro: ' + err));
+}
+
+// Auto-refresh se campanha em andamento
+{% if campanha.status == 'em_andamento' %}
+function atualizarStatus() {
+    fetch(`/api/campanha/${campanhaId}/status`)
+        .then(res => res.json())
+        .then(data => {
+            document.getElementById('stat-total').textContent = data.total_contatos;
+            document.getElementById('stat-enviados').textContent = data.total_enviados;
+            document.getElementById('stat-confirmados').textContent = data.total_confirmados;
+            document.getElementById('stat-rejeitados').textContent = data.total_rejeitados;
+            document.getElementById('stat-erros').textContent = data.total_erros;
+            document.getElementById('progresso-texto').textContent = data.percentual_conclusao + '%';
+            document.getElementById('progresso-bar').style.width = data.percentual_conclusao + '%';
+            document.getElementById('status-campanha').textContent = data.status.replace('_', ' ');
+            document.getElementById('taxa-confirmacao').textContent = data.percentual_confirmacao + '%';
+
+            if (data.status !== 'em_andamento') {
+                location.reload();
+            }
+        })
+        .catch(err => console.error('Erro ao atualizar:', err));
+}
+
+setInterval(atualizarStatus, 5000);
+{% endif %}
+</script>
+{% endblock %}

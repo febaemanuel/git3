@@ -1,0 +1,127 @@
+{% extends 'base.html' %}
+
+{% block title %}Processando Campanha{% endblock %}
+
+{% block content %}
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header text-center">
+                    <h4><i class="bi bi-hourglass-split"></i> Processando Campanha</h4>
+                    <p class="mb-0 text-muted">{{ campanha.nome }}</p>
+                </div>
+                <div class="card-body">
+                    <!-- Status -->
+                    <div class="text-center mb-4">
+                        <h5 id="status-text">Aguardando processamento...</h5>
+                        <small class="text-muted" id="details-text"></small>
+                    </div>
+
+                    <!-- Barra de Progresso -->
+                    <div class="progress" style="height: 30px;">
+                        <div id="progress-bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success"
+                             role="progressbar"
+                             style="width: 0%"
+                             aria-valuenow="0"
+                             aria-valuemin="0"
+                             aria-valuemax="100">
+                            <strong id="percent-text">0%</strong>
+                        </div>
+                    </div>
+
+                    <!-- Informações Adicionais -->
+                    <div class="mt-4 text-center">
+                        <p class="text-muted mb-0">
+                            <i class="bi bi-info-circle"></i>
+                            Este processo pode levar alguns minutos. Não feche esta página.
+                        </p>
+                    </div>
+
+                    <!-- Logs (opcional) -->
+                    <div id="log-container" class="mt-4 d-none">
+                        <h6>Progresso Detalhado:</h6>
+                        <div id="log-messages" class="bg-light p-3 rounded" style="max-height: 200px; overflow-y: auto;">
+                            <small class="text-muted">Iniciando processamento...</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Botão para voltar (aparece apenas em caso de erro) -->
+            <div id="error-actions" class="text-center mt-3 d-none">
+                <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">
+                    <i class="bi bi-arrow-left"></i> Voltar ao Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const taskId = "{{ task_id }}";
+const campanhaId = {{ campanha.id }};
+let pollInterval;
+
+function updateProgress() {
+    fetch(`/api/campanha/status/${taskId}`)
+        .then(response => response.json())
+        .then(data => {
+            console.log('Status:', data);
+
+            const statusText = document.getElementById('status-text');
+            const detailsText = document.getElementById('details-text');
+            const progressBar = document.getElementById('progress-bar');
+            const percentText = document.getElementById('percent-text');
+
+            // Atualizar textos
+            statusText.textContent = data.status || 'Processando...';
+
+            if (data.current && data.total) {
+                detailsText.textContent = `${data.current} de ${data.total}`;
+            }
+
+            // Atualizar barra de progresso
+            const percent = data.percent || 0;
+            progressBar.style.width = percent + '%';
+            progressBar.setAttribute('aria-valuenow', percent);
+            percentText.textContent = Math.round(percent) + '%';
+
+            // Verificar estado
+            if (data.state === 'SUCCESS') {
+                clearInterval(pollInterval);
+                progressBar.classList.remove('progress-bar-animated');
+                progressBar.classList.add('bg-success');
+                statusText.textContent = '✓ Processamento concluído!';
+                statusText.classList.add('text-success');
+
+                // Redirecionar após 2 segundos
+                setTimeout(() => {
+                    window.location.href = `/campanha/${campanhaId}`;
+                }, 2000);
+            } else if (data.state === 'FAILURE' || data.state === 'REVOKED') {
+                clearInterval(pollInterval);
+                progressBar.classList.remove('progress-bar-animated');
+                progressBar.classList.remove('bg-success');
+                progressBar.classList.add('bg-danger');
+                statusText.textContent = '✗ Erro no processamento';
+                statusText.classList.add('text-danger');
+                detailsText.textContent = data.status;
+
+                // Mostrar botão de voltar
+                document.getElementById('error-actions').classList.remove('d-none');
+            } else if (data.state === 'PROGRESS') {
+                // Continuar polling
+                progressBar.classList.add('bg-info');
+            }
+        })
+        .catch(error => {
+            console.error('Erro ao buscar status:', error);
+        });
+}
+
+// Iniciar polling a cada 2 segundos
+updateProgress(); // Primeira chamada imediata
+pollInterval = setInterval(updateProgress, 2000);
+</script>
+{% endblock %}

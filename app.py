@@ -3735,118 +3735,6 @@ def api_revalidar(id):
     return jsonify({'sucesso': True, 'valido': tem_valido})
 
 
-@app.route('/api/contato/<int:id>/detalhes', methods=['GET'])
-@login_required
-def api_contato_detalhes(id):
-    """Retorna histórico completo de mensagens por telefone"""
-    c = verificar_acesso_contato(id)
-
-    # Buscar logs de mensagens do contato
-    logs = LogMsg.query.filter_by(contato_id=c.id).order_by(LogMsg.created_at.desc()).all()
-
-    # Agrupar por telefone
-    historico_por_telefone = {}
-    for log in logs:
-        tel = log.telefone
-        if tel not in historico_por_telefone:
-            historico_por_telefone[tel] = []
-
-        historico_por_telefone[tel].append({
-            'direcao': log.direcao,
-            'mensagem': log.mensagem,
-            'data': log.created_at.strftime('%d/%m/%Y %H:%M:%S'),
-            'status': log.status,
-            'sentimento': log.sentimento
-        })
-
-    # Dados dos telefones
-    telefones = []
-    for t in c.telefones.all():
-        telefones.append({
-            'numero': t.numero_fmt,
-            'whatsapp_valido': t.whatsapp_valido,
-            'enviado': t.enviado,
-            'data_envio': t.data_envio.strftime('%d/%m/%Y %H:%M:%S') if t.data_envio else None,
-            'historico': historico_por_telefone.get(t.numero_fmt, [])
-        })
-
-    return jsonify({
-        'contato': {
-            'id': c.id,
-            'nome': c.nome,
-            'procedimento': c.procedimento,
-            'procedimento_normalizado': c.procedimento_normalizado,
-            'status': c.status,
-            'confirmado': c.confirmado,
-            'rejeitado': c.rejeitado,
-            'resposta': c.resposta,
-            'data_resposta': c.data_resposta.strftime('%d/%m/%Y %H:%M:%S') if c.data_resposta else None,
-            'erro': c.erro
-        },
-        'telefones': telefones
-    })
-
-
-@app.route('/api/contato/<int:id>/responder', methods=['POST'])
-@login_required
-def api_contato_responder(id):
-    """Envia mensagem manual para o contato"""
-    c = verificar_acesso_contato(id)
-
-    data = request.get_json()
-    mensagem = data.get('mensagem', '').strip()
-    numero = data.get('numero')  # Opcional - se não informado, envia para todos
-
-    if not mensagem:
-        return jsonify({'erro': 'Mensagem vazia'}), 400
-
-    ws = WhatsApp(c.campanha.criador_id)
-    if not ws.ok():
-        return jsonify({'erro': 'WhatsApp não configurado'}), 400
-
-    # Se número específico foi informado
-    if numero:
-        ok, result = ws.enviar(numero, mensagem)
-        if ok:
-            # Registrar log
-            log = LogMsg(
-                campanha_id=c.campanha_id,
-                contato_id=c.id,
-                direcao='enviada',
-                telefone=numero,
-                mensagem=mensagem[:500],
-                status='ok'
-            )
-            db.session.add(log)
-            db.session.commit()
-            return jsonify({'sucesso': True, 'mensagem': 'Enviado com sucesso'})
-        else:
-            return jsonify({'erro': f'Falha ao enviar: {result}'}), 400
-    else:
-        # Enviar para todos os números válidos
-        tels = c.telefones.filter_by(whatsapp_valido=True).all()
-        if not tels:
-            return jsonify({'erro': 'Nenhum número válido'}), 400
-
-        enviados = 0
-        for t in tels:
-            ok, result = ws.enviar(t.numero_fmt, mensagem)
-            if ok:
-                enviados += 1
-                log = LogMsg(
-                    campanha_id=c.campanha_id,
-                    contato_id=c.id,
-                    direcao='enviada',
-                    telefone=t.numero_fmt,
-                    mensagem=mensagem[:500],
-                    status='ok'
-                )
-                db.session.add(log)
-
-        db.session.commit()
-        return jsonify({'sucesso': True, 'mensagem': f'Enviado para {enviados} número(s)'})
-
-
 @app.route('/contato/<int:id>/editar', methods=['GET', 'POST'])
 @login_required
 def editar_contato(id):
@@ -4231,14 +4119,6 @@ def webhook():
             logger.info(f"Ticket criado para {c.nome} - Prioridade: {prioridade_ticket}")
             return jsonify({'status': 'ok'}), 200
 
-        # Proteção contra respostas conflitantes de múltiplos telefones
-        # REGRA: "DESCONHEÇO" (opção 3) NÃO é conflito - pode ser número desatualizado
-        # CONFLITO REAL: CONFIRMOU vs REJEITOU
-        # PRIORIDADE: Se qualquer telefone CONFIRMOU → status = CONFIRMADO
-
-        ja_confirmou = c.confirmado == True
-        ja_rejeitou = c.rejeitado == True and c.confirmado == False
-
         # Maquina de Estados
         # Aceita 'pronto_envio' tambem pois pode haver race condition (usuario responde antes do loop de envio terminar)
         # Aceita 'pendente' se a resposta é válida (1, 2, 3) - útil para testes e recuperação de erros
@@ -4250,52 +4130,6 @@ def webhook():
                 logger.info(f"Status de {c.nome} atualizado de 'pendente' para 'enviado' após receber resposta válida")
 
             if any(r in texto_up for r in RESPOSTAS_SIM) or any(r in texto_up for r in RESPOSTAS_NAO):
-                responde_sim = any(r in texto_up for r in RESPOSTAS_SIM)
-                responde_nao = any(r in texto_up for r in RESPOSTAS_NAO)
-
-                # DETECTAR apenas quando REJEITAR após já ter CONFIRMADO (alerta, mas não bloqueia)
-                if responde_nao and ja_confirmou:
-                    logger.warning(f"⚠️ ALERTA - {c.nome}: Tel {numero} quer REJEITAR mas outro já CONFIRMOU")
-                    # Registrar alerta
-                    c.erro = f"ALERTA: Tel {numero[-4:]} rejeitou, mas outro já CONFIRMOU"
-                    db.session.commit()
-
-                    # Notificar que já está confirmado
-                    ws.enviar(numero, """⚠️ *Este cadastro já foi confirmado*
-
-Identificamos que outro número de contato já confirmou interesse neste procedimento.
-
-Se você não é o titular, desconsidere esta mensagem.
-
-Caso contrário, sua confirmação anterior permanece válida.
-
-_Hospital Universitário Walter Cantídio_""")
-
-                    # Criar ticket para revisão (não urgente, apenas informativo)
-                    ticket = TicketAtendimento(
-                        contato_id=c.id,
-                        campanha_id=c.campanha_id,
-                        mensagem_usuario=f"ALERTA: Tel {numero} rejeitou, mas outro telefone já CONFIRMOU",
-                        status='pendente',
-                        prioridade='normal'
-                    )
-                    db.session.add(ticket)
-                    db.session.commit()
-
-                    # NÃO alterar status - mantém CONFIRMADO
-                    return jsonify({'status': 'ok'}), 200
-
-                # SE JÁ CONFIRMOU de outro telefone, ignorar novas confirmações (evitar duplicação)
-                if responde_sim and ja_confirmou:
-                    ws.enviar(numero, "✅ Você já confirmou interesse anteriormente. Obrigado!")
-                    return jsonify({'status': 'ok'}), 200
-
-                # PRIORIDADE: CONFIRMAÇÃO sempre sobrescreve REJEIÇÃO ou DESCONHEÇO
-                # Exemplo: Tel 1111 rejeitou/desconheceu, mas Tel 2222 (atual) confirma → Status = CONFIRMADO
-                if responde_sim and (ja_rejeitou or c.erro == "Desconhecido pelo portador"):
-                    logger.info(f"✅ CONFIRMAÇÃO PRIORITÁRIA - {c.nome}: Tel {numero} CONFIRMOU (sobrescreve resposta anterior)")
-                    c.erro = None  # Limpa erro/desconheço anterior
-
                 # Verificar se contato TEM data de nascimento cadastrada
                 if c.data_nascimento:
                     # Pedir Data de Nascimento para validação
@@ -4346,25 +4180,8 @@ _Hospital Universitário Walter Cantídio_"""
                     db.session.commit()
 
                     ws.enviar(numero, msg_final)
-
+                
             elif any(r in texto_up for r in RESPOSTAS_DESCONHECO):
-                # "DESCONHEÇO" NÃO gera conflito - pode ser número desatualizado
-                # Simplesmente registra e NÃO bloqueia confirmações futuras de outros telefones
-
-                logger.info(f"📱 Tel {numero} respondeu DESCONHEÇO para {c.nome}")
-
-                # Se JÁ CONFIRMOU de outro telefone, apenas informar
-                if ja_confirmou:
-                    ws.enviar(numero, """✅ *Obrigado pela informação!*
-
-Este cadastro já foi confirmado por outro número de contato.
-
-Se você não é o titular deste cadastro, desconsidere esta mensagem.
-
-_Hospital Universitário Walter Cantídio_""")
-                    return jsonify({'status': 'ok'}), 200
-
-                # Caso contrário, marca como desconhecido (mas pode ser sobrescrito por confirmação futura)
                 c.rejeitado = True
                 c.confirmado = False
                 c.erro = "Desconhecido pelo portador"

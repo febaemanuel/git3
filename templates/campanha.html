@@ -236,7 +236,35 @@
                         <tbody>
                             {% for contato in contatos.items %}
                             <tr>
-                                <td><strong>{{ contato.nome }}</strong></td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <strong>{{ contato.nome }}</strong>
+                                        {% if contato.tem_ticket_urgente() %}
+                                        <span class="badge bg-danger" title="Ticket URGENTE pendente">
+                                            <i class="bi bi-exclamation-triangle-fill"></i> URGENTE
+                                        </span>
+                                        {% elif contato.tem_ticket_pendente() %}
+                                        <span class="badge bg-warning text-dark" title="Ticket pendente">
+                                            <i class="bi bi-ticket-perforated"></i> {{ contato.count_tickets_pendentes() }}
+                                        </span>
+                                        {% endif %}
+                                        {% if contato.tem_mensagens_recentes() %}
+                                        <span class="badge bg-primary" title="Mensagem recente (últimas 24h)">
+                                            <i class="bi bi-chat-fill"></i>
+                                        </span>
+                                        {% endif %}
+                                        {% set sentimento = contato.sentimento_recente() %}
+                                        {% if sentimento == 'urgente' %}
+                                        <span class="badge bg-danger" title="Sentimento: Urgente">
+                                            <i class="bi bi-emoji-frown"></i>
+                                        </span>
+                                        {% elif sentimento == 'insatisfeito' %}
+                                        <span class="badge bg-warning text-dark" title="Sentimento: Insatisfeito">
+                                            <i class="bi bi-emoji-neutral"></i>
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                </td>
                                 <td>{{ contato.formatar_telefone() }}</td>
                                 <td>
                                     {% if contato.procedimento_normalizado and contato.procedimento_normalizado != contato.procedimento %}

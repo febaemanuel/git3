@@ -509,6 +509,55 @@ class Contato(db.Model):
         # Conflito real apenas se tem confirmado E rejeitado simultaneamente
         return tem_confirmado and tem_rejeitado
 
+    # Métodos para badges/alertas na lista
+    def tem_ticket_pendente(self):
+        """Verifica se tem ticket pendente ou em atendimento"""
+        return TicketAtendimento.query.filter_by(
+            contato_id=self.id,
+            status='pendente'
+        ).first() is not None
+
+    def tem_ticket_urgente(self):
+        """Verifica se tem ticket urgente pendente"""
+        return TicketAtendimento.query.filter_by(
+            contato_id=self.id,
+            status='pendente',
+            prioridade='urgente'
+        ).first() is not None
+
+    def tem_mensagens_recentes(self):
+        """Verifica se tem mensagens recebidas nas últimas 24h"""
+        limite = datetime.utcnow() - timedelta(hours=24)
+        return LogMsg.query.filter(
+            LogMsg.contato_id == self.id,
+            LogMsg.direcao == 'recebida',
+            LogMsg.data >= limite
+        ).first() is not None
+
+    def sentimento_recente(self):
+        """Retorna sentimento da mensagem mais recente (se houver)"""
+        msg = LogMsg.query.filter_by(
+            contato_id=self.id,
+            direcao='recebida'
+        ).order_by(LogMsg.data.desc()).first()
+
+        if msg and msg.sentimento:
+            return msg.sentimento
+        return None
+
+    def count_tickets_pendentes(self):
+        """Conta quantos tickets pendentes este contato tem"""
+        return TicketAtendimento.query.filter_by(
+            contato_id=self.id,
+            status='pendente'
+        ).count()
+
+    def get_tickets(self):
+        """Retorna todos os tickets deste contato"""
+        return TicketAtendimento.query.filter_by(
+            contato_id=self.id
+        ).order_by(TicketAtendimento.data_criacao.desc()).all()
+
 
 class Telefone(db.Model):
     __tablename__ = 'telefones'

@@ -2280,24 +2280,6 @@ def criar_faqs_padrao():
 
         faqs_padrao = [
             {
-                'categoria': 'ajuda',
-                'gatilhos': ['ajuda', 'help', 'menu', 'opções', 'opcoes', 'comandos', 'dúvidas', 'duvidas'],
-                'resposta': '''🤖 *Menu de Ajuda - HUWC*
-
-Você pode perguntar sobre:
-
-📍 *Endereço* - Localização do hospital
-⏰ *Horário* - Horários de atendimento
-📄 *Documentos* - O que preciso levar
-📞 *Contato* - Telefones do hospital
-🚌 *Transporte* - Como chegar
-🏥 *Preparo* - Orientações pré-cirurgia
-👥 *Acompanhante* - Regras de acompanhamento
-
-💬 Digite sua dúvida e responderemos automaticamente!''',
-                'prioridade': 10
-            },
-            {
                 'categoria': 'horario',
                 'gatilhos': ['horário', 'horario', 'que horas', 'hora', 'quando'],
                 'resposta': '📋 O agendamento será feito após sua confirmação. A equipe entrará em contato para definir data e horário.',
@@ -4272,6 +4254,23 @@ def webhook():
             logger.debug(f"Evento ignorado: {event}")
             return jsonify({'status': 'ok'}), 200
 
+        # CRÍTICO: Extrair nome da instância para filtrar por usuário
+        # Isso evita que respostas sejam processadas no contexto errado quando
+        # múltiplos usuários (com WhatsApps diferentes) contactam o mesmo paciente
+        instance_name = data.get('instance')
+        if not instance_name:
+            logger.warning("Webhook sem informação de instância - ignorando por segurança")
+            return jsonify({'status': 'ok'}), 200
+
+        # Buscar usuário dono desta instância
+        config_usuario = ConfigWhatsApp.query.filter_by(instance_name=instance_name).first()
+        if not config_usuario:
+            logger.warning(f"Instância {instance_name} não encontrada no sistema")
+            return jsonify({'status': 'ok'}), 200
+
+        usuario_id = config_usuario.usuario_id
+        logger.debug(f"Webhook da instância {instance_name} (usuário ID: {usuario_id})")
+
         msg_data = data.get('data', {})
         key = msg_data.get('key', {})
         if key.get('fromMe'):
@@ -4332,13 +4331,21 @@ def webhook():
         
         # Priorizar o contato mais apropriado para responder
         # PRIORIDADE:
+        # 0. FILTRAR apenas campanhas do usuário dono da instância (CRÍTICO para multi-usuário)
         # 1. Se a mensagem NÃO é uma resposta válida (1, 2, 3), priorizar campanha concluída recentemente
         # 2. Contatos em fluxo ativo (enviado, aguardando_nascimento) da campanha mais recente
         # 3. Contatos com data_envio mais recente (último a receber mensagem)
         # 4. Contatos com data_resposta mais recente (última interação)
         # 5. Contato mais recente por ID
         c = None
-        contatos_validos = [t.contato for t in telefones if t.contato]
+
+        # CRÍTICO: Filtrar apenas contatos de campanhas do usuário correto
+        # Isso evita processar respostas no contexto de outro usuário quando
+        # dois usuários diferentes contactam o mesmo paciente
+        contatos_validos = [
+            t.contato for t in telefones
+            if t.contato and t.contato.campanha and t.contato.campanha.criador_id == usuario_id
+        ]
 
         if contatos_validos:
             # Verificar se é uma resposta válida da campanha (1, 2, 3)
@@ -4369,10 +4376,18 @@ def webhook():
                     c = max(contatos_validos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
 
         if not c:
-            logger.warning(f"Webhook: Contato nao encontrado")
+            # Verificar se existem contatos de outros usuários (para debug)
+            todos_contatos = [t.contato for t in telefones if t.contato]
+            if todos_contatos:
+                outros_usuarios = set(ct.campanha.criador_id for ct in todos_contatos if ct.campanha)
+                logger.warning(f"Webhook: Telefone {numero} não tem campanhas do usuário {usuario_id}. "
+                             f"Campanhas existem para usuários: {outros_usuarios}")
+            else:
+                logger.warning(f"Webhook: Telefone {numero} não encontrado em nenhuma campanha")
             return jsonify({'status': 'ok'}), 200
 
-        logger.info(f"Webhook: Mensagem de {c.nome} ({numero}). Campanha: {c.campanha_id}. Status atual: {c.status}. Texto: {texto}")
+        logger.info(f"Webhook: [{instance_name}] Mensagem de {c.nome} ({numero}). "
+                   f"Campanha: {c.campanha_id} (User {usuario_id}). Status: {c.status}. Texto: {texto}")
 
         # Análise de sentimento
         analise = AnaliseSentimento.analisar(texto)

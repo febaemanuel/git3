@@ -4313,20 +4313,16 @@ def webhook():
             return jsonify({'status': 'ok'}), 200
         
         # Priorizar o contato com interação mais recente
-        # Isso evita loops infinitos quando há múltiplos contatos para o mesmo telefone
+        # SEMPRE usar o contato que respondeu por último (conversa ativa)
+        # Isso evita pegar contatos antigos quando há múltiplos contatos para o mesmo telefone
         c = None
         contatos_validos = [t.contato for t in telefones if t.contato]
 
         if contatos_validos:
-            # Priorizar contatos não concluídos, mas pegar o MAIS RECENTE entre eles
-            contatos_nao_concluidos = [ct for ct in contatos_validos if ct.status != 'concluido']
-
-            if contatos_nao_concluidos:
-                # Ordenar por data_resposta (mais recente primeiro), depois por id (mais novo primeiro)
-                c = max(contatos_nao_concluidos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
-            else:
-                # Se todos concluídos, pegar o mais recente
-                c = max(contatos_validos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
+            # SEMPRE pegar o contato com data_resposta mais recente, independente do status
+            # Se a pessoa acabou de confirmar (concluido) e manda outra mensagem,
+            # deve usar esse mesmo contato, não um antigo que está aguardando
+            c = max(contatos_validos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
             
         if not c:
             logger.warning(f"Webhook: Contato nao encontrado")

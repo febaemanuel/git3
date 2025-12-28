@@ -2280,6 +2280,24 @@ def criar_faqs_padrao():
 
         faqs_padrao = [
             {
+                'categoria': 'ajuda',
+                'gatilhos': ['ajuda', 'help', 'menu', 'opções', 'opcoes', 'comandos', 'dúvidas', 'duvidas'],
+                'resposta': '''🤖 *Menu de Ajuda - HUWC*
+
+Você pode perguntar sobre:
+
+📍 *Endereço* - Localização do hospital
+⏰ *Horário* - Horários de atendimento
+📄 *Documentos* - O que preciso levar
+📞 *Contato* - Telefones do hospital
+🚌 *Transporte* - Como chegar
+🏥 *Preparo* - Orientações pré-cirurgia
+👥 *Acompanhante* - Regras de acompanhamento
+
+💬 Digite sua dúvida e responderemos automaticamente!''',
+                'prioridade': 10
+            },
+            {
                 'categoria': 'horario',
                 'gatilhos': ['horário', 'horario', 'que horas', 'hora', 'quando'],
                 'resposta': '📋 O agendamento será feito após sua confirmação. A equipe entrará em contato para definir data e horário.',
@@ -4314,27 +4332,41 @@ def webhook():
         
         # Priorizar o contato mais apropriado para responder
         # PRIORIDADE:
-        # 1. Contatos em fluxo ativo (enviado, aguardando_nascimento) da campanha mais recente
-        # 2. Contatos com data_envio mais recente (último a receber mensagem)
-        # 3. Contatos com data_resposta mais recente (última interação)
-        # 4. Contato mais recente por ID
+        # 1. Se a mensagem NÃO é uma resposta válida (1, 2, 3), priorizar campanha concluída recentemente
+        # 2. Contatos em fluxo ativo (enviado, aguardando_nascimento) da campanha mais recente
+        # 3. Contatos com data_envio mais recente (último a receber mensagem)
+        # 4. Contatos com data_resposta mais recente (última interação)
+        # 5. Contato mais recente por ID
         c = None
         contatos_validos = [t.contato for t in telefones if t.contato]
 
         if contatos_validos:
-            # Tentar encontrar contato em fluxo ativo primeiro
-            contatos_em_fluxo = [ct for ct in contatos_validos if ct.status in ['enviado', 'aguardando_nascimento', 'pronto_envio']]
+            # Verificar se é uma resposta válida da campanha (1, 2, 3)
+            eh_resposta_valida = (verificar_resposta_em_lista(texto_up, RESPOSTAS_SIM) or
+                                 verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO) or
+                                 verificar_resposta_em_lista(texto_up, RESPOSTAS_DESCONHECO))
 
-            if contatos_em_fluxo:
-                # Pegar o mais recente por data de envio do telefone (última mensagem enviada)
-                def get_ultima_data_envio(contato):
-                    datas = [t.data_envio for t in contato.telefones if t.data_envio]
-                    return max(datas) if datas else datetime.min
+            # Se NÃO é resposta válida E há campanha concluída recentemente, priorizar ela (para FAQ)
+            if not eh_resposta_valida:
+                contatos_concluidos = [ct for ct in contatos_validos if ct.status == 'concluido' and ct.data_resposta]
+                if contatos_concluidos:
+                    # Pegar campanha concluída mais recente
+                    c = max(contatos_concluidos, key=lambda ct: (ct.data_resposta, ct.id))
 
-                c = max(contatos_em_fluxo, key=lambda ct: (get_ultima_data_envio(ct), ct.id))
-            else:
-                # Se não há contatos em fluxo, pegar por data_resposta (comportamento anterior)
-                c = max(contatos_validos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
+            # Se não encontrou campanha concluída OU é resposta válida, buscar em fluxo ativo
+            if not c:
+                contatos_em_fluxo = [ct for ct in contatos_validos if ct.status in ['enviado', 'aguardando_nascimento', 'pronto_envio']]
+
+                if contatos_em_fluxo:
+                    # Pegar o mais recente por data de envio do telefone (última mensagem enviada)
+                    def get_ultima_data_envio(contato):
+                        datas = [t.data_envio for t in contato.telefones if t.data_envio]
+                        return max(datas) if datas else datetime.min
+
+                    c = max(contatos_em_fluxo, key=lambda ct: (get_ultima_data_envio(ct), ct.id))
+                else:
+                    # Se não há contatos em fluxo, pegar por data_resposta (comportamento anterior)
+                    c = max(contatos_validos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
 
         if not c:
             logger.warning(f"Webhook: Contato nao encontrado")

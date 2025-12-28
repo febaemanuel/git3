@@ -4254,6 +4254,23 @@ def webhook():
             logger.debug(f"Evento ignorado: {event}")
             return jsonify({'status': 'ok'}), 200
 
+        # CRÍTICO: Extrair nome da instância para filtrar por usuário
+        # Isso evita que respostas sejam processadas no contexto errado quando
+        # múltiplos usuários (com WhatsApps diferentes) contactam o mesmo paciente
+        instance_name = data.get('instance')
+        if not instance_name:
+            logger.warning("Webhook sem informação de instância - ignorando por segurança")
+            return jsonify({'status': 'ok'}), 200
+
+        # Buscar usuário dono desta instância
+        config_usuario = ConfigWhatsApp.query.filter_by(instance_name=instance_name).first()
+        if not config_usuario:
+            logger.warning(f"Instância {instance_name} não encontrada no sistema")
+            return jsonify({'status': 'ok'}), 200
+
+        usuario_id = config_usuario.usuario_id
+        logger.debug(f"Webhook da instância {instance_name} (usuário ID: {usuario_id})")
+
         msg_data = data.get('data', {})
         key = msg_data.get('key', {})
         if key.get('fromMe'):
@@ -4314,33 +4331,63 @@ def webhook():
         
         # Priorizar o contato mais apropriado para responder
         # PRIORIDADE:
-        # 1. Contatos em fluxo ativo (enviado, aguardando_nascimento) da campanha mais recente
-        # 2. Contatos com data_envio mais recente (último a receber mensagem)
-        # 3. Contatos com data_resposta mais recente (última interação)
-        # 4. Contato mais recente por ID
+        # 0. FILTRAR apenas campanhas do usuário dono da instância (CRÍTICO para multi-usuário)
+        # 1. Se a mensagem NÃO é uma resposta válida (1, 2, 3), priorizar campanha concluída recentemente
+        # 2. Contatos em fluxo ativo (enviado, aguardando_nascimento) da campanha mais recente
+        # 3. Contatos com data_envio mais recente (último a receber mensagem)
+        # 4. Contatos com data_resposta mais recente (última interação)
+        # 5. Contato mais recente por ID
         c = None
-        contatos_validos = [t.contato for t in telefones if t.contato]
+
+        # CRÍTICO: Filtrar apenas contatos de campanhas do usuário correto
+        # Isso evita processar respostas no contexto de outro usuário quando
+        # dois usuários diferentes contactam o mesmo paciente
+        contatos_validos = [
+            t.contato for t in telefones
+            if t.contato and t.contato.campanha and t.contato.campanha.criador_id == usuario_id
+        ]
 
         if contatos_validos:
-            # Tentar encontrar contato em fluxo ativo primeiro
-            contatos_em_fluxo = [ct for ct in contatos_validos if ct.status in ['enviado', 'aguardando_nascimento', 'pronto_envio']]
+            # Verificar se é uma resposta válida da campanha (1, 2, 3)
+            eh_resposta_valida = (verificar_resposta_em_lista(texto_up, RESPOSTAS_SIM) or
+                                 verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO) or
+                                 verificar_resposta_em_lista(texto_up, RESPOSTAS_DESCONHECO))
 
-            if contatos_em_fluxo:
-                # Pegar o mais recente por data de envio do telefone (última mensagem enviada)
-                def get_ultima_data_envio(contato):
-                    datas = [t.data_envio for t in contato.telefones if t.data_envio]
-                    return max(datas) if datas else datetime.min
+            # Se NÃO é resposta válida E há campanha concluída recentemente, priorizar ela (para FAQ)
+            if not eh_resposta_valida:
+                contatos_concluidos = [ct for ct in contatos_validos if ct.status == 'concluido' and ct.data_resposta]
+                if contatos_concluidos:
+                    # Pegar campanha concluída mais recente
+                    c = max(contatos_concluidos, key=lambda ct: (ct.data_resposta, ct.id))
 
-                c = max(contatos_em_fluxo, key=lambda ct: (get_ultima_data_envio(ct), ct.id))
-            else:
-                # Se não há contatos em fluxo, pegar por data_resposta (comportamento anterior)
-                c = max(contatos_validos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
+            # Se não encontrou campanha concluída OU é resposta válida, buscar em fluxo ativo
+            if not c:
+                contatos_em_fluxo = [ct for ct in contatos_validos if ct.status in ['enviado', 'aguardando_nascimento', 'pronto_envio']]
+
+                if contatos_em_fluxo:
+                    # Pegar o mais recente por data de envio do telefone (última mensagem enviada)
+                    def get_ultima_data_envio(contato):
+                        datas = [t.data_envio for t in contato.telefones if t.data_envio]
+                        return max(datas) if datas else datetime.min
+
+                    c = max(contatos_em_fluxo, key=lambda ct: (get_ultima_data_envio(ct), ct.id))
+                else:
+                    # Se não há contatos em fluxo, pegar por data_resposta (comportamento anterior)
+                    c = max(contatos_validos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
 
         if not c:
-            logger.warning(f"Webhook: Contato nao encontrado")
+            # Verificar se existem contatos de outros usuários (para debug)
+            todos_contatos = [t.contato for t in telefones if t.contato]
+            if todos_contatos:
+                outros_usuarios = set(ct.campanha.criador_id for ct in todos_contatos if ct.campanha)
+                logger.warning(f"Webhook: Telefone {numero} não tem campanhas do usuário {usuario_id}. "
+                             f"Campanhas existem para usuários: {outros_usuarios}")
+            else:
+                logger.warning(f"Webhook: Telefone {numero} não encontrado em nenhuma campanha")
             return jsonify({'status': 'ok'}), 200
 
-        logger.info(f"Webhook: Mensagem de {c.nome} ({numero}). Campanha: {c.campanha_id}. Status atual: {c.status}. Texto: {texto}")
+        logger.info(f"Webhook: [{instance_name}] Mensagem de {c.nome} ({numero}). "
+                   f"Campanha: {c.campanha_id} (User {usuario_id}). Status: {c.status}. Texto: {texto}")
 
         # Análise de sentimento
         analise = AnaliseSentimento.analisar(texto)

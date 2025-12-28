@@ -2,201 +2,380 @@
 
 {% block title %}{{ contato.nome }} - Detalhes{% endblock %}
 
-{% block content %}
-<div class="row">
-    <!-- Cabeçalho -->
-    <div class="col-12 mb-4">
-        <nav aria-label="breadcrumb">
-            <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
-                <li class="breadcrumb-item"><a href="{{ url_for('campanha_detalhe', id=contato.campanha_id) }}">Campanha</a></li>
-                <li class="breadcrumb-item active">{{ contato.nome }}</li>
-            </ol>
-        </nav>
+{% block extra_css %}
+<style>
+/* Chat Container */
+.chat-container {
+    height: 600px;
+    display: flex;
+    flex-direction: column;
+    background: #f5f5f5;
+    border-radius: 8px;
+    overflow: hidden;
+}
 
-        <div class="d-flex justify-content-between align-items-center">
-            <h2><i class="bi bi-person-circle"></i> {{ contato.nome }}</h2>
-            <a href="{{ url_for('campanha_detalhe', id=contato.campanha_id) }}" class="btn btn-secondary">
-                <i class="bi bi-arrow-left"></i> Voltar
-            </a>
+.chat-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px;
+    background: #e5ddd5;
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23d4c9bf' fill-opacity='0.1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E");
+}
+
+.message {
+    margin-bottom: 16px;
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.message-sent {
+    text-align: right;
+}
+
+.message-bubble {
+    display: inline-block;
+    max-width: 70%;
+    padding: 12px 16px;
+    border-radius: 8px;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    position: relative;
+}
+
+.message-sent .message-bubble {
+    background: #dcf8c6;
+    border-top-right-radius: 2px;
+}
+
+.message-received .message-bubble {
+    background: white;
+    border-top-left-radius: 2px;
+}
+
+.message-meta {
+    font-size: 11px;
+    opacity: 0.7;
+    margin-top: 4px;
+}
+
+.message-time {
+    font-size: 11px;
+    color: #667;
+}
+
+.typing-indicator {
+    display: none;
+    padding: 10px;
+    background: white;
+    border-radius: 20px;
+    width: 60px;
+    text-align: center;
+}
+
+.typing-indicator span {
+    height: 8px;
+    width: 8px;
+    background: #999;
+    border-radius: 50%;
+    display: inline-block;
+    margin: 0 2px;
+    animation: bounce 1.4s infinite ease-in-out both;
+}
+
+.typing-indicator span:nth-child(1) { animation-delay: -0.32s; }
+.typing-indicator span:nth-child(2) { animation-delay: -0.16s; }
+
+@keyframes bounce {
+    0%, 80%, 100% { transform: scale(0); }
+    40% { transform: scale(1); }
+}
+
+.chat-input-area {
+    background: #f0f0f0;
+    padding: 16px;
+    border-top: 1px solid #ddd;
+}
+
+.status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.status-dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
+}
+
+.phone-card {
+    transition: all 0.3s ease;
+    border-left: 4px solid transparent;
+}
+
+.phone-card:hover {
+    transform: translateX(5px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.phone-card.confirmed { border-left-color: #28a745; }
+.phone-card.rejected { border-left-color: #ffc107; }
+.phone-card.unknown { border-left-color: #6c757d; }
+
+.info-card {
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    transition: transform 0.2s;
+}
+
+.info-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+
+.badge-custom {
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-weight: 500;
+    font-size: 14px;
+}
+
+.online-indicator {
+    width: 12px;
+    height: 12px;
+    background: #25d366;
+    border-radius: 50%;
+    border: 2px solid white;
+    position: absolute;
+    bottom: 0;
+    right: 0;
+    animation: pulse 2s infinite;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}"><i class="bi bi-house-door"></i> Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('campanha_detalhe', id=contato.campanha_id) }}"><i class="bi bi-megaphone"></i> Campanha</a></li>
+                    <li class="breadcrumb-item active">{{ contato.nome }}</li>
+                </ol>
+            </nav>
         </div>
     </div>
 
-    <div class="col-12">
-        <div class="row">
-            <!-- Informações do Contato -->
-            <div class="col-md-4 mb-4">
-                <div class="card h-100">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="bi bi-info-circle"></i> Informações</h5>
-                    </div>
-                    <div class="card-body">
-                        <p><strong>Nome:</strong><br>{{ contato.nome }}</p>
-
-                        <p><strong>Procedimento:</strong><br>
-                            {% if contato.procedimento_normalizado and contato.procedimento_normalizado != contato.procedimento %}
-                                <span class="text-success">{{ contato.procedimento_normalizado }}</span>
-                                <br><small class="text-muted">Original: {{ contato.procedimento }}</small>
-                            {% else %}
-                                {{ contato.procedimento or '-' }}
+    <!-- Main Content -->
+    <div class="row">
+        <!-- Left Column: Info Cards -->
+        <div class="col-lg-4 mb-4">
+            <!-- Contact Info -->
+            <div class="card info-card mb-3">
+                <div class="card-body">
+                    <div class="d-flex align-items-center mb-3">
+                        <div class="position-relative">
+                            <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center"
+                                 style="width: 60px; height: 60px; font-size: 24px;">
+                                <i class="bi bi-person-fill"></i>
+                            </div>
+                            {% if contato.confirmado %}
+                            <div class="online-indicator"></div>
                             {% endif %}
-                        </p>
-
-                        <p><strong>Data de Nascimento:</strong><br>
-                            {{ contato.data_nascimento.strftime('%d/%m/%Y') if contato.data_nascimento else '-' }}
-                        </p>
-
-                        <p><strong>Status:</strong><br>
-                            <span class="badge {{ contato.status_badge() }}">{{ contato.status_texto() }}</span>
-                        </p>
-
-                        {% if contato.erro %}
-                        <div class="alert alert-danger" role="alert">
-                            <i class="bi bi-exclamation-triangle-fill"></i>
-                            <strong>Erro:</strong> {{ contato.erro }}
                         </div>
-                        {% endif %}
-
-                        <hr>
-
-                        <div class="d-grid gap-2">
-                            <a href="{{ url_for('editar_contato', id=contato.id) }}" class="btn btn-outline-primary">
-                                <i class="bi bi-pencil"></i> Editar Contato
-                            </a>
+                        <div class="ms-3 flex-grow-1">
+                            <h5 class="mb-1">{{ contato.nome }}</h5>
+                            <span class="badge-custom {{ contato.status_badge() }}">
+                                {{ contato.status_texto() }}
+                            </span>
                         </div>
                     </div>
+
+                    <hr>
+
+                    <div class="mb-2">
+                        <small class="text-muted d-block">Procedimento</small>
+                        {% if contato.procedimento_normalizado and contato.procedimento_normalizado != contato.procedimento %}
+                            <strong class="text-success">{{ contato.procedimento_normalizado }}</strong>
+                            <br><small class="text-muted">{{ contato.procedimento }}</small>
+                        {% else %}
+                            <strong>{{ contato.procedimento or '-' }}</strong>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-2">
+                        <small class="text-muted d-block">Data de Nascimento</small>
+                        <strong>{{ contato.data_nascimento.strftime('%d/%m/%Y') if contato.data_nascimento else '-' }}</strong>
+                    </div>
+
+                    {% if contato.erro %}
+                    <div class="alert alert-danger py-2 px-3 mt-3 mb-0">
+                        <small><i class="bi bi-exclamation-triangle-fill me-1"></i> {{ contato.erro }}</small>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
 
-            <!-- Telefones e Respostas -->
-            <div class="col-md-8 mb-4">
-                <div class="card h-100">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="bi bi-telephone-fill"></i> Telefones e Respostas</h5>
-                    </div>
-                    <div class="card-body">
-                        {% for telefone in telefones %}
-                        <div class="card mb-3
-                            {% if telefone.tipo_resposta == 'confirmado' %}border-success
-                            {% elif telefone.tipo_resposta == 'rejeitado' %}border-warning
-                            {% elif telefone.tipo_resposta == 'desconheco' %}border-secondary
-                            {% endif %}">
-                            <div class="card-body">
-                                <div class="d-flex justify-content-between align-items-start">
-                                    <div>
-                                        <h6 class="mb-1">
-                                            <i class="bi bi-phone-fill"></i> {{ telefone.numero }}
-                                            {% if telefone.prioridade == 1 %}
-                                                <span class="badge bg-primary ms-2">Principal</span>
-                                            {% endif %}
-                                            {% if telefone.whatsapp_valido %}
-                                                <i class="bi bi-whatsapp text-success ms-1"></i>
-                                            {% else %}
-                                                <i class="bi bi-x-circle text-danger ms-1" title="WhatsApp inválido"></i>
-                                            {% endif %}
-                                        </h6>
-                                    </div>
-                                    <div>
-                                        {% if telefone.tipo_resposta == 'confirmado' %}
-                                            <span class="badge bg-success">✓ Confirmado</span>
-                                        {% elif telefone.tipo_resposta == 'rejeitado' %}
-                                            <span class="badge bg-warning">✗ Rejeitado</span>
-                                        {% elif telefone.tipo_resposta == 'desconheco' %}
-                                            <span class="badge bg-secondary">? Não conhece</span>
+            <!-- Phone Numbers -->
+            <div class="card info-card">
+                <div class="card-header bg-transparent">
+                    <h6 class="mb-0"><i class="bi bi-telephone-fill me-2"></i>Telefones</h6>
+                </div>
+                <div class="card-body p-2">
+                    {% for telefone in telefones %}
+                    <div class="phone-card card mb-2 {% if telefone.tipo_resposta == 'confirmado' %}confirmed{% elif telefone.tipo_resposta == 'rejeitado' %}rejected{% elif telefone.tipo_resposta == 'desconheco' %}unknown{% endif %}">
+                        <div class="card-body py-2 px-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div>
+                                    <strong>{{ telefone.numero }}</strong>
+                                    {% if telefone.prioridade == 1 %}
+                                        <span class="badge bg-primary ms-1" style="font-size: 10px;">Principal</span>
+                                    {% endif %}
+                                    <br>
+                                    <small class="text-muted">
+                                        {% if telefone.whatsapp_valido %}
+                                            <i class="bi bi-whatsapp text-success"></i> WhatsApp
                                         {% else %}
-                                            <span class="badge bg-light text-dark">Sem resposta</span>
+                                            <i class="bi bi-x-circle text-danger"></i> Inválido
                                         {% endif %}
-                                    </div>
+                                    </small>
                                 </div>
-
-                                {% if telefone.resposta %}
-                                <div class="mt-2 small">
-                                    <strong>Resposta:</strong> {{ telefone.resposta }}<br>
-                                    <strong>Data:</strong> {{ telefone.data_resposta.strftime('%d/%m/%Y às %H:%M') if telefone.data_resposta else '-' }}
-                                    {% if telefone.validacao_pendente %}
-                                        <span class="badge bg-info ms-2">Aguardando validação</span>
+                                <div>
+                                    {% if telefone.tipo_resposta == 'confirmado' %}
+                                        <span class="badge bg-success">✓</span>
+                                    {% elif telefone.tipo_resposta == 'rejeitado' %}
+                                        <span class="badge bg-warning">✗</span>
+                                    {% elif telefone.tipo_resposta == 'desconheco' %}
+                                        <span class="badge bg-secondary">?</span>
                                     {% endif %}
                                 </div>
-                                {% endif %}
+                            </div>
 
-                                {% if telefone.data_envio %}
-                                <div class="mt-2 small text-muted">
-                                    <i class="bi bi-send"></i> Mensagem enviada em: {{ telefone.data_envio.strftime('%d/%m/%Y às %H:%M') }}
+                            {% if telefone.resposta %}
+                            <small class="d-block mt-2 text-muted">
+                                <i class="bi bi-chat-quote"></i> {{ telefone.resposta }}<br>
+                                <i class="bi bi-clock"></i> {{ telefone.data_resposta.strftime('%d/%m às %H:%M') if telefone.data_resposta else '-' }}
+                            </small>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- Quick Actions -->
+            <div class="card info-card mt-3">
+                <div class="card-body">
+                    <div class="d-grid gap-2">
+                        <a href="{{ url_for('editar_contato', id=contato.id) }}" class="btn btn-outline-primary">
+                            <i class="bi bi-pencil-square me-1"></i> Editar Contato
+                        </a>
+                        <button class="btn btn-outline-secondary" onclick="window.print()">
+                            <i class="bi bi-printer me-1"></i> Imprimir
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Column: Chat -->
+        <div class="col-lg-8">
+            <div class="chat-container shadow-lg">
+                <!-- Chat Header -->
+                <div class="chat-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <h5 class="mb-0"><i class="bi bi-chat-dots-fill me-2"></i>Conversa</h5>
+                            <small class="opacity-75">Histórico de mensagens</small>
+                        </div>
+                        <div>
+                            <span class="badge bg-light text-dark" id="message-count">
+                                {{ logs|length }} mensagens
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Messages -->
+                <div class="chat-messages" id="chat-messages">
+                    {% if logs %}
+                        {% for log in logs %}
+                        <div class="message {% if log.direcao == 'enviada' %}message-sent{% else %}message-received{% endif %}">
+                            <div class="message-bubble">
+                                <div class="message-content">{{ log.mensagem }}</div>
+                                <div class="message-meta">
+                                    <small class="message-time">
+                                        <i class="bi bi-clock"></i> {{ log.data.strftime('%d/%m/%Y %H:%M:%S') if log.data else '-' }}
+                                    </small>
+                                    {% if log.sentimento %}
+                                    <span class="badge bg-{% if log.sentimento == 'positive' %}success{% elif log.sentimento == 'negative' %}danger{% else %}secondary{% endif %} ms-1" style="font-size: 10px;">
+                                        {{ log.sentimento }}
+                                    </span>
+                                    {% endif %}
                                 </div>
-                                {% endif %}
                             </div>
                         </div>
                         {% endfor %}
+                    {% else %}
+                        <div class="text-center text-muted mt-5">
+                            <i class="bi bi-chat-text" style="font-size: 48px;"></i>
+                            <p class="mt-3">Nenhuma mensagem ainda</p>
+                        </div>
+                    {% endif %}
 
-                        {% if not telefones %}
-                        <p class="text-muted text-center">Nenhum telefone cadastrado</p>
-                        {% endif %}
+                    <!-- Typing Indicator -->
+                    <div class="typing-indicator" id="typing-indicator">
+                        <span></span>
+                        <span></span>
+                        <span></span>
                     </div>
                 </div>
-            </div>
 
-            <!-- Histórico de Mensagens -->
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0"><i class="bi bi-chat-dots-fill"></i> Histórico de Mensagens</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="timeline" style="max-height: 600px; overflow-y: auto;">
-                            {% if logs %}
-                                {% for log in logs %}
-                                <div class="{% if log.direcao == 'enviada' %}text-end{% else %}text-start{% endif %} mb-3">
-                                    <div class="d-inline-block
-                                        {% if log.direcao == 'enviada' %}bg-primary text-white{% else %}bg-light{% endif %}
-                                        rounded p-3 shadow-sm" style="max-width: 70%;">
-                                        <div class="small mb-1">
-                                            <i class="bi {% if log.direcao == 'enviada' %}bi-send-fill{% else %}bi-inbox-fill{% endif %}"></i>
-                                            <strong>{{ log.telefone }}</strong>
-                                            {% if log.sentimento %}
-                                                <span class="badge bg-{% if log.sentimento == 'positive' %}success{% elif log.sentimento == 'negative' %}danger{% else %}secondary{% endif %} ms-2">
-                                                    {{ log.sentimento }}
-                                                </span>
-                                            {% endif %}
-                                        </div>
-                                        <div>{{ log.mensagem }}</div>
-                                        <div class="small mt-2 {% if log.direcao == 'enviada' %}opacity-75{% else %}text-muted{% endif %}">
-                                            {{ log.data.strftime('%d/%m/%Y às %H:%M:%S') if log.data else '-' }}
-                                        </div>
-                                    </div>
-                                </div>
-                                {% endfor %}
-                            {% else %}
-                                <p class="text-muted text-center">Nenhuma mensagem ainda</p>
-                            {% endif %}
-                        </div>
-
-                        <!-- Formulário para enviar mensagem -->
-                        <div class="mt-4 border-top pt-3">
-                            <h6><i class="bi bi-send"></i> Enviar Nova Mensagem</h6>
-                            <form id="form-enviar-mensagem" onsubmit="enviarMensagem(event)">
-                                <div class="mb-3">
-                                    <label class="form-label">Selecionar Telefone:</label>
-                                    <select id="select-telefone-envio" class="form-select" required>
-                                        <option value="">Escolha um telefone...</option>
-                                        {% for telefone in telefones %}
-                                            {% if telefone.whatsapp_valido %}
-                                            <option value="{{ telefone.id }}">
-                                                {{ telefone.numero }} {% if telefone.prioridade == 1 %}(Principal){% endif %}
-                                            </option>
-                                            {% endif %}
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                                <div class="mb-3">
-                                    <label class="form-label">Mensagem:</label>
-                                    <textarea id="textarea-mensagem" class="form-control" rows="3" required placeholder="Digite sua mensagem..."></textarea>
-                                </div>
-                                <button type="submit" class="btn btn-primary">
-                                    <i class="bi bi-send-fill"></i> Enviar Mensagem
-                                </button>
-                            </form>
-                        </div>
-                    </div>
+                <!-- Chat Input -->
+                <div class="chat-input-area">
+                    <form id="chat-form" onsubmit="enviarMensagem(event)" class="d-flex gap-2">
+                        <select id="select-telefone" class="form-select" style="max-width: 200px;" required>
+                            <option value="">Telefone...</option>
+                            {% for telefone in telefones %}
+                                {% if telefone.whatsapp_valido %}
+                                <option value="{{ telefone.id }}">
+                                    {{ telefone.numero }}{% if telefone.prioridade == 1 %} ★{% endif %}
+                                </option>
+                                {% endif %}
+                            {% endfor %}
+                        </select>
+                        <input type="text"
+                               id="message-input"
+                               class="form-control"
+                               placeholder="Digite sua mensagem..."
+                               required>
+                        <button type="submit" class="btn btn-primary px-4">
+                            <i class="bi bi-send-fill"></i>
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>
@@ -206,23 +385,44 @@
 
 {% block extra_js %}
 <script>
+const contatoId = {{ contato.id }};
+let lastMessageCount = {{ logs|length }};
+
+// Auto-scroll chat to bottom
+function scrollToBottom() {
+    const chatMessages = document.getElementById('chat-messages');
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+}
+
+// Auto-refresh messages (polling)
+function refreshMessages() {
+    fetch(`/api/contato/${contatoId}/detalhes`)
+        .then(res => res.json())
+        .then(data => {
+            if (data.historico.length > lastMessageCount) {
+                // New messages received - reload to show them
+                location.reload();
+            }
+        })
+        .catch(err => console.error('Erro ao verificar novas mensagens:', err));
+}
+
+// Send message
 function enviarMensagem(event) {
     event.preventDefault();
 
-    const telefoneId = document.getElementById('select-telefone-envio').value;
-    const mensagem = document.getElementById('textarea-mensagem').value.trim();
+    const telefoneId = document.getElementById('select-telefone').value;
+    const mensagem = document.getElementById('message-input').value.trim();
 
     if (!telefoneId || !mensagem) {
-        alert('Por favor, selecione um telefone e digite uma mensagem');
+        alert('Selecione um telefone e digite uma mensagem');
         return;
     }
 
-    const btn = event.target.querySelector('button[type="submit"]');
-    const btnText = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Enviando...';
+    // Show typing indicator
+    document.getElementById('typing-indicator').style.display = 'inline-block';
 
-    fetch(`/api/contato/{{ contato.id }}/enviar_mensagem`, {
+    fetch(`/api/contato/${contatoId}/enviar_mensagem`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -233,20 +433,28 @@ function enviarMensagem(event) {
     .then(res => res.json())
     .then(data => {
         if (data.sucesso) {
-            alert('Mensagem enviada com sucesso!');
-            location.reload();
+            document.getElementById('message-input').value = '';
+            setTimeout(() => location.reload(), 500);
         } else {
             alert('Erro: ' + data.erro);
         }
     })
     .catch(err => {
-        console.error('Erro ao enviar mensagem:', err);
+        console.error('Erro:', err);
         alert('Erro ao enviar mensagem');
     })
     .finally(() => {
-        btn.disabled = false;
-        btn.innerHTML = btnText;
+        document.getElementById('typing-indicator').style.display = 'none';
     });
 }
+
+// Initialize
+scrollToBottom();
+
+// Auto-refresh every 5 seconds
+setInterval(refreshMessages, 5000);
+
+// Focus input on load
+document.getElementById('message-input').focus();
 </script>
 {% endblock %}

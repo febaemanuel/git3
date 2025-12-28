@@ -653,6 +653,10 @@ def processar_planilha_task(self, arquivo_path, campanha_id):
         # Normalizar colunas
         df.columns = [str(c).strip().lower() for c in df.columns]
 
+        # Normalizar: substituir múltiplos espaços por um único
+        import re
+        df.columns = [re.sub(r'\s+', ' ', c) for c in df.columns]
+
         # Identificar colunas
         col_nome = col_tel = col_proc = col_nasc = None
         for c in df.columns:
@@ -701,11 +705,27 @@ def processar_planilha_task(self, arquivo_path, campanha_id):
                 if pd.notna(val):
                     try:
                         if isinstance(val, datetime):
+                            # Já é datetime do Excel
                             dt_nasc = val.date()
                         else:
-                            dt_nasc = pd.to_datetime(val, dayfirst=True).date()
+                            # Converter para string e limpar
+                            val_str = str(val).strip()
+
+                            # Extrair apenas a parte da data com regex (DD/MM/YYYY ou DD-MM-YYYY ou DD.MM.YYYY)
+                            import re
+                            match = re.search(r'(\d{1,2})[/\-\.](\d{1,2})[/\-\.](\d{4})', val_str)
+                            if match:
+                                dia, mes, ano = match.groups()
+                                # Criar data manualmente para garantir formato correto
+                                dt_nasc = datetime(int(ano), int(mes), int(dia)).date()
+                            else:
+                                # Fallback: tentar parsear com pandas
+                                dt_nasc = pd.to_datetime(val_str, dayfirst=True).date()
+
                         dt_nasc_str = dt_nasc.isoformat()
-                    except:
+                        logger.info(f"Data importada: {val} -> {dt_nasc}")
+                    except Exception as e:
+                        logger.warning(f"Erro ao parsear data '{val}': {e}")
                         pass
 
             chave = (nome, dt_nasc_str)

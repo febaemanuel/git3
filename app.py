@@ -1659,6 +1659,10 @@ def processar_planilha(arquivo, campanha_id):
 
         df.columns = [str(c).strip().lower() for c in df.columns]
 
+        # Normalizar colunas: substituir múltiplos espaços por um único
+        import re
+        df.columns = [re.sub(r'\s+', ' ', c) for c in df.columns]
+
         col_nome = col_tel = col_proc = col_nasc = None
         for c in df.columns:
             if c in ['nome', 'usuario', 'usuário', 'paciente']:

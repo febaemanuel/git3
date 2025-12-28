@@ -66,42 +66,9 @@
     </div>
 </div>
 
-<!-- Tickets por Prioridade -->
+<!-- FAQs Mais Utilizadas -->
 <div class="row mb-4">
-    <div class="col-md-6">
-        <div class="card">
-            <div class="card-header">
-                <h6 class="mb-0">Tickets Pendentes por Prioridade</h6>
-            </div>
-            <div class="card-body">
-                <div class="list-group">
-                    <div class="list-group-item d-flex justify-content-between align-items-center">
-                        🚨 Urgente
-                        <span class="badge bg-danger">{{ stats_tickets.get('urgente', 0) }}</span>
-                    </div>
-                    <div class="list-group-item d-flex justify-content-between align-items-center">
-                        ⚠️ Alta
-                        <span class="badge bg-warning text-dark">{{ stats_tickets.get('alta', 0) }}</span>
-                    </div>
-                    <div class="list-group-item d-flex justify-content-between align-items-center">
-                        💬 Média
-                        <span class="badge bg-info">{{ stats_tickets.get('media', 0) }}</span>
-                    </div>
-                    <div class="list-group-item d-flex justify-content-between align-items-center">
-                        📝 Baixa
-                        <span class="badge bg-secondary">{{ stats_tickets.get('baixa', 0) }}</span>
-                    </div>
-                </div>
-                <div class="mt-3">
-                    <a href="{{ url_for('painel_atendimento') }}" class="btn btn-primary btn-sm w-100">
-                        Ver Todos os Tickets
-                    </a>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="col-md-6">
+    <div class="col-md-12">
         <div class="card">
             <div class="card-header">
                 <h6 class="mb-0">Top 10 - FAQs Mais Utilizadas</h6>
@@ -137,9 +104,10 @@
 <div class="alert alert-info">
     <h6><i class="bi bi-lightbulb"></i> Dicas:</h6>
     <ul class="mb-0">
-        <li>Mensagens com sentimento <strong>urgente</strong> criam automaticamente tickets com prioridade alta</li>
+        <li>Mensagens com sentimento <strong>urgente</strong> exibem badge vermelho 🚨 na lista de contatos</li>
+        <li>Mensagens <strong>insatisfeitas</strong> exibem badge amarelo 😟 para atenção</li>
         <li>FAQs bem configuradas reduzem a necessidade de atendimento manual</li>
-        <li>Monitore mensagens com sentimento <strong>insatisfeito</strong> para melhorar o atendimento</li>
+        <li>Monitore sentimentos negativos para melhorar a satisfação dos pacientes</li>
     </ul>
 </div>
 {% endblock %}

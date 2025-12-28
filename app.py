@@ -5155,29 +5155,34 @@ def processar_followup_manual():
 @app.route('/sentimentos')
 @login_required
 def dashboard_sentimentos():
-    # Estatísticas gerais
-    stats_sentimento = db.session.query(
+    # Filtrar apenas logs das campanhas do usuario atual
+    user_campanhas_ids = [c.id for c in Campanha.query.filter_by(criador_id=current_user.id).all()]
+
+    # Estatísticas de sentimento
+    query_sentimento = db.session.query(
         LogMsg.sentimento,
         db.func.count(LogMsg.id)
     ).filter(
         LogMsg.direcao == 'recebida',
         LogMsg.sentimento.isnot(None)
-    ).group_by(LogMsg.sentimento).all()
+    )
 
-    # Tickets por prioridade
-    stats_tickets = db.session.query(
-        TicketAtendimento.prioridade,
-        db.func.count(TicketAtendimento.id)
-    ).filter_by(status='pendente').group_by(TicketAtendimento.prioridade).all()
+    if user_campanhas_ids:
+        query_sentimento = query_sentimento.filter(LogMsg.campanha_id.in_(user_campanhas_ids))
 
-    # FAQs mais usadas
+    stats_sentimento = query_sentimento.group_by(LogMsg.sentimento).all()
+
+    # FAQs mais usadas (filtrar por criador ou globais)
     faqs_top = RespostaAutomatica.query.filter(
-        RespostaAutomatica.contador_uso > 0
+        RespostaAutomatica.contador_uso > 0,
+        db.or_(
+            RespostaAutomatica.global_faq == True,
+            RespostaAutomatica.criador_id == current_user.id
+        )
     ).order_by(RespostaAutomatica.contador_uso.desc()).limit(10).all()
 
     return render_template('sentimentos.html',
                          stats_sentimento=dict(stats_sentimento),
-                         stats_tickets=dict(stats_tickets),
                          faqs_top=faqs_top)
 
 

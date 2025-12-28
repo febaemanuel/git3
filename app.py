@@ -4312,18 +4312,30 @@ def webhook():
             logger.warning(f"Webhook: Telefone nao encontrado para {numero}")
             return jsonify({'status': 'ok'}), 200
         
-        # Priorizar o contato com interação mais recente
-        # SEMPRE usar o contato que respondeu por último (conversa ativa)
-        # Isso evita pegar contatos antigos quando há múltiplos contatos para o mesmo telefone
+        # Priorizar o contato mais apropriado para responder
+        # PRIORIDADE:
+        # 1. Contatos em fluxo ativo (enviado, aguardando_nascimento) da campanha mais recente
+        # 2. Contatos com data_envio mais recente (último a receber mensagem)
+        # 3. Contatos com data_resposta mais recente (última interação)
+        # 4. Contato mais recente por ID
         c = None
         contatos_validos = [t.contato for t in telefones if t.contato]
 
         if contatos_validos:
-            # SEMPRE pegar o contato com data_resposta mais recente, independente do status
-            # Se a pessoa acabou de confirmar (concluido) e manda outra mensagem,
-            # deve usar esse mesmo contato, não um antigo que está aguardando
-            c = max(contatos_validos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
-            
+            # Tentar encontrar contato em fluxo ativo primeiro
+            contatos_em_fluxo = [ct for ct in contatos_validos if ct.status in ['enviado', 'aguardando_nascimento', 'pronto_envio']]
+
+            if contatos_em_fluxo:
+                # Pegar o mais recente por data de envio do telefone (última mensagem enviada)
+                def get_ultima_data_envio(contato):
+                    datas = [t.data_envio for t in contato.telefones if t.data_envio]
+                    return max(datas) if datas else datetime.min
+
+                c = max(contatos_em_fluxo, key=lambda ct: (get_ultima_data_envio(ct), ct.id))
+            else:
+                # Se não há contatos em fluxo, pegar por data_resposta (comportamento anterior)
+                c = max(contatos_validos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
+
         if not c:
             logger.warning(f"Webhook: Contato nao encontrado")
             return jsonify({'status': 'ok'}), 200

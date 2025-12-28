@@ -100,6 +100,10 @@ RESPOSTAS_SIM = ['SIM', 'S', '1', 'CONFIRMO', 'QUERO', 'TENHO', 'CLARO', 'POSITI
 RESPOSTAS_NAO = ['NAO', 'NÃO', 'N', '2', 'DESISTO', 'CANCELA', 'NEGATIVO', 'NAO QUERO', 'NAO TENHO']
 RESPOSTAS_DESCONHECO = ['3', 'DESCONHECO', 'DESCONHEÇO', 'NAO SOU', 'ENGANO', 'ERRADO']
 
+# Cache para evitar processar mensagens duplicadas
+# Armazena: {msg_id: timestamp}
+_mensagens_processadas = {}
+
 MENSAGEM_PADRAO = """📋 *Olá, {nome}*!
 
 Aqui é da *Central de Agendamentos do Hospital Universitário Walter Cantídio*.
@@ -4291,6 +4295,27 @@ def webhook():
 
         if not texto:
             return jsonify({'status': 'ok'}), 200
+
+        # Proteção contra mensagens duplicadas
+        # Extrai ID único da mensagem
+        msg_id = key.get('id')
+        if msg_id:
+            agora = datetime.utcnow()
+
+            # Limpar cache de mensagens antigas (mais de 60 segundos)
+            global _mensagens_processadas
+            _mensagens_processadas = {
+                k: v for k, v in _mensagens_processadas.items()
+                if (agora - v).total_seconds() < 60
+            }
+
+            # Verificar se já processamos esta mensagem recentemente
+            if msg_id in _mensagens_processadas:
+                logger.debug(f"Webhook: Mensagem duplicada ignorada (msg_id: {msg_id})")
+                return jsonify({'status': 'ok'}), 200
+
+            # Registrar que processamos esta mensagem
+            _mensagens_processadas[msg_id] = agora
 
         texto_up = texto.upper()
         

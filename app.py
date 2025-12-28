@@ -4215,6 +4215,28 @@ def api_ws_status():
     return jsonify({'conectado': conn, 'mensagem': msg})
 
 
+# Funcao auxiliar para verificar respostas validas
+def verificar_resposta_em_lista(texto_up, lista_respostas):
+    """
+    Verifica se o texto contém alguma resposta válida.
+    Para respostas de uma palavra/número, verifica palavra completa (evita "teste" conter "S").
+    Para frases com espaço, verifica substring.
+    """
+    palavras = set(texto_up.split())
+
+    for resposta in lista_respostas:
+        if ' ' not in resposta:
+            # Resposta de uma palavra - verificar palavra completa
+            if resposta in palavras:
+                return True
+        else:
+            # Frase - pode usar substring
+            if resposta in texto_up:
+                return True
+
+    return False
+
+
 # Webhook
 @app.route('/webhook/whatsapp', methods=['POST'])
 def webhook():
@@ -4291,20 +4313,16 @@ def webhook():
             return jsonify({'status': 'ok'}), 200
         
         # Priorizar o contato com interação mais recente
-        # Isso evita loops infinitos quando há múltiplos contatos para o mesmo telefone
+        # SEMPRE usar o contato que respondeu por último (conversa ativa)
+        # Isso evita pegar contatos antigos quando há múltiplos contatos para o mesmo telefone
         c = None
         contatos_validos = [t.contato for t in telefones if t.contato]
 
         if contatos_validos:
-            # Priorizar contatos não concluídos, mas pegar o MAIS RECENTE entre eles
-            contatos_nao_concluidos = [ct for ct in contatos_validos if ct.status != 'concluido']
-
-            if contatos_nao_concluidos:
-                # Ordenar por data_resposta (mais recente primeiro), depois por id (mais novo primeiro)
-                c = max(contatos_nao_concluidos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
-            else:
-                # Se todos concluídos, pegar o mais recente
-                c = max(contatos_validos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
+            # SEMPRE pegar o contato com data_resposta mais recente, independente do status
+            # Se a pessoa acabou de confirmar (concluido) e manda outra mensagem,
+            # deve usar esse mesmo contato, não um antigo que está aguardando
+            c = max(contatos_validos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
             
         if not c:
             logger.warning(f"Webhook: Contato nao encontrado")
@@ -4333,9 +4351,9 @@ def webhook():
 
         # Verificar primeiro se é uma resposta válida da campanha (1, 2, 3)
         # Isso impede que respostas válidas sejam tratadas como FAQ ou tickets
-        respostas_validas = (any(r in texto_up for r in RESPOSTAS_SIM) or
-                            any(r in texto_up for r in RESPOSTAS_NAO) or
-                            any(r in texto_up for r in RESPOSTAS_DESCONHECO))
+        respostas_validas = (verificar_resposta_em_lista(texto_up, RESPOSTAS_SIM) or
+                            verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO) or
+                            verificar_resposta_em_lista(texto_up, RESPOSTAS_DESCONHECO))
 
         # Primeiro, tentar responder com FAQ automático
         # IMPORTANTE: NÃO processar FAQ se contato está em fluxo ativo da campanha
@@ -4408,9 +4426,9 @@ def webhook():
                     telefone_respondente = t
                     break
 
-            if any(r in texto_up for r in RESPOSTAS_SIM) or any(r in texto_up for r in RESPOSTAS_NAO):
+            if verificar_resposta_em_lista(texto_up, RESPOSTAS_SIM) or verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO):
                 # Determinar tipo de resposta
-                tipo_resp = 'confirmado' if any(r in texto_up for r in RESPOSTAS_SIM) else 'rejeitado'
+                tipo_resp = 'confirmado' if verificar_resposta_em_lista(texto_up, RESPOSTAS_SIM) else 'rejeitado'
 
                 # SEMPRE pedir Data de Nascimento para validação
                 c.status = 'aguardando_nascimento'
@@ -4427,8 +4445,8 @@ def webhook():
                 db.session.commit()
 
                 ws.enviar(numero, "🔒 Por segurança, por favor digite sua *Data de Nascimento* (ex: 03/09/1954).")
-                
-            elif any(r in texto_up for r in RESPOSTAS_DESCONHECO):
+
+            elif verificar_resposta_em_lista(texto_up, RESPOSTAS_DESCONHECO):
                 # Salvar resposta "desconheço" no telefone específico
                 if telefone_respondente:
                     telefone_respondente.resposta = texto
@@ -4487,7 +4505,7 @@ _Hospital Universitário Walter Cantídio_""")
                     intent_up = (c.resposta or '').upper()
                     msg_final = "✅ Obrigado."
 
-                    if any(r in intent_up for r in RESPOSTAS_SIM):
+                    if verificar_resposta_em_lista(intent_up, RESPOSTAS_SIM):
                         msg_final = """✅ *Confirmação Registrada com Sucesso!*
 
 Obrigado por confirmar seu interesse no procedimento.
@@ -4501,7 +4519,7 @@ Obrigado por confirmar seu interesse no procedimento.
 Digite sua pergunta a qualquer momento que responderemos!
 
 _Hospital Universitário Walter Cantídio_"""
-                    elif any(r in intent_up for r in RESPOSTAS_NAO):
+                    elif verificar_resposta_em_lista(intent_up, RESPOSTAS_NAO):
                         msg_final = """✅ *Registro Atualizado*
 
 Obrigado por sua resposta.

@@ -510,21 +510,6 @@ class Contato(db.Model):
         return tem_confirmado and tem_rejeitado
 
     # Métodos para badges/alertas na lista
-    def tem_ticket_pendente(self):
-        """Verifica se tem ticket pendente ou em atendimento"""
-        return TicketAtendimento.query.filter_by(
-            contato_id=self.id,
-            status='pendente'
-        ).first() is not None
-
-    def tem_ticket_urgente(self):
-        """Verifica se tem ticket urgente pendente"""
-        return TicketAtendimento.query.filter_by(
-            contato_id=self.id,
-            status='pendente',
-            prioridade='urgente'
-        ).first() is not None
-
     def tem_mensagens_recentes(self):
         """Verifica se tem mensagens recebidas nas últimas 24h"""
         limite = datetime.utcnow() - timedelta(hours=24)
@@ -544,19 +529,6 @@ class Contato(db.Model):
         if msg and msg.sentimento:
             return msg.sentimento
         return None
-
-    def count_tickets_pendentes(self):
-        """Conta quantos tickets pendentes este contato tem"""
-        return TicketAtendimento.query.filter_by(
-            contato_id=self.id,
-            status='pendente'
-        ).count()
-
-    def get_tickets(self):
-        """Retorna todos os tickets deste contato"""
-        return TicketAtendimento.query.filter_by(
-            contato_id=self.id
-        ).order_by(TicketAtendimento.data_criacao.desc()).all()
 
 
 class Telefone(db.Model):
@@ -4485,48 +4457,13 @@ def webhook():
             usuario_id = c.campanha.criador_id if c.campanha else None
             resposta_faq = SistemaFAQ.buscar_resposta(texto, usuario_id)
 
-        # Verificar se precisa criar ticket para atendimento humano
-        # IMPORTANTE: NÃO criar ticket se está em fluxo ativo da campanha
-        # EXCEÇÃO: Se status é 'concluido', permitir tickets (usuário pode ter dúvidas após confirmação)
-        prioridade_ticket = None
-        if c.status == 'concluido' or (c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio'] and not respostas_validas):
-            prioridade_ticket = SistemaFAQ.requer_atendimento_humano(texto, c)
+        # Sistema de tickets desativado - atendimento direto via chat na página de detalhes
+        # Mantém análise de sentimento para sinalização visual (badges)
 
-        # Se tem FAQ e NÃO é urgente, responde com FAQ (FAQ não responde mensagens urgentes)
-        if resposta_faq and not prioridade_ticket:
+        # Se tem FAQ, responde com FAQ
+        if resposta_faq:
             ws.enviar(numero, resposta_faq)
             logger.info(f"FAQ automático enviado para {c.nome}")
-            return jsonify({'status': 'ok'}), 200
-
-        # Se é urgente/importante mas tem FAQ, ainda assim cria ticket mas envia FAQ primeiro
-        # IMPORTANTE: Não cria ticket se contato está em fluxo ativo da campanha
-        # (status enviado/pronto_envio/aguardando_nascimento devem ser processados pela máquina de estados)
-        if prioridade_ticket and c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio']:
-            # Se tem FAQ, envia como resposta imediata antes de criar o ticket
-            if resposta_faq:
-                ws.enviar(numero, resposta_faq)
-                logger.info(f"FAQ automático enviado antes de criar ticket para {c.nome}")
-
-            ticket = TicketAtendimento(
-                contato_id=c.id,
-                campanha_id=c.campanha_id,
-                mensagem_usuario=texto,
-                status='pendente',
-                prioridade=prioridade_ticket
-            )
-            db.session.add(ticket)
-            db.session.commit()
-
-            # Notificar usuário (apenas se não tinha FAQ, senão fica redundante)
-            if not resposta_faq:
-                if prioridade_ticket == 'urgente':
-                    ws.enviar(numero, "🚨 Sua mensagem foi encaminhada com URGÊNCIA para nossa equipe. "
-                                     "Um atendente entrará em contato em breve.")
-                else:
-                    ws.enviar(numero, "👤 Sua mensagem foi encaminhada para um atendente. "
-                                     "Aguarde o retorno em até 24h úteis.")
-
-            logger.info(f"Ticket criado para {c.nome} - Prioridade: {prioridade_ticket}")
             return jsonify({'status': 'ok'}), 200
 
         # Maquina de Estados

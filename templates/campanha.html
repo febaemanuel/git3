@@ -239,15 +239,6 @@
                                 <td>
                                     <div class="d-flex align-items-center gap-2">
                                         <strong>{{ contato.nome }}</strong>
-                                        {% if contato.tem_ticket_urgente() %}
-                                        <span class="badge bg-danger" title="Ticket URGENTE pendente">
-                                            <i class="bi bi-exclamation-triangle-fill"></i> URGENTE
-                                        </span>
-                                        {% elif contato.tem_ticket_pendente() %}
-                                        <span class="badge bg-warning text-dark" title="Ticket pendente">
-                                            <i class="bi bi-ticket-perforated"></i> {{ contato.count_tickets_pendentes() }}
-                                        </span>
-                                        {% endif %}
                                         {% if contato.tem_mensagens_recentes() %}
                                         <span class="badge bg-primary" title="Mensagem recente (últimas 24h)">
                                             <i class="bi bi-chat-fill"></i>
@@ -255,12 +246,12 @@
                                         {% endif %}
                                         {% set sentimento = contato.sentimento_recente() %}
                                         {% if sentimento == 'urgente' %}
-                                        <span class="badge bg-danger" title="Sentimento: Urgente">
-                                            <i class="bi bi-emoji-frown"></i>
+                                        <span class="badge bg-danger" title="Sentimento: URGENTE - Requer atenção imediata">
+                                            <i class="bi bi-exclamation-triangle-fill"></i> URGENTE
                                         </span>
                                         {% elif sentimento == 'insatisfeito' %}
                                         <span class="badge bg-warning text-dark" title="Sentimento: Insatisfeito">
-                                            <i class="bi bi-emoji-neutral"></i>
+                                            <i class="bi bi-emoji-neutral"></i> Insatisfeito
                                         </span>
                                         {% endif %}
                                     </div>

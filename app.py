@@ -4348,32 +4348,44 @@ def webhook():
         ]
 
         if contatos_validos:
-            # Verificar se é uma resposta válida da campanha (1, 2, 3)
-            eh_resposta_valida = (verificar_resposta_em_lista(texto_up, RESPOSTAS_SIM) or
-                                 verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO) or
-                                 verificar_resposta_em_lista(texto_up, RESPOSTAS_DESCONHECO))
+            # Buscar campanhas concluídas e em fluxo ativo
+            contatos_concluidos = [ct for ct in contatos_validos if ct.status == 'concluido' and ct.data_resposta]
+            contatos_em_fluxo = [ct for ct in contatos_validos if ct.status in ['enviado', 'aguardando_nascimento', 'pronto_envio']]
 
-            # Se NÃO é resposta válida E há campanha concluída recentemente, priorizar ela (para FAQ)
-            if not eh_resposta_valida:
-                contatos_concluidos = [ct for ct in contatos_validos if ct.status == 'concluido' and ct.data_resposta]
-                if contatos_concluidos:
-                    # Pegar campanha concluída mais recente
-                    c = max(contatos_concluidos, key=lambda ct: (ct.data_resposta, ct.id))
+            # LÓGICA DE PRIORIZAÇÃO:
+            # 1. Se há campanha concluída E campanha em fluxo ativo, comparar datas
+            # 2. Prioriza a interação mais recente (data_resposta vs data_envio)
+            # 3. Se só há uma ou outra, usa a disponível
 
-            # Se não encontrou campanha concluída OU é resposta válida, buscar em fluxo ativo
-            if not c:
-                contatos_em_fluxo = [ct for ct in contatos_validos if ct.status in ['enviado', 'aguardando_nascimento', 'pronto_envio']]
+            if contatos_concluidos and contatos_em_fluxo:
+                # Pegar mais recente de cada tipo
+                concluido_recente = max(contatos_concluidos, key=lambda ct: (ct.data_resposta, ct.id))
 
-                if contatos_em_fluxo:
-                    # Pegar o mais recente por data de envio do telefone (última mensagem enviada)
-                    def get_ultima_data_envio(contato):
-                        datas = [t.data_envio for t in contato.telefones if t.data_envio]
-                        return max(datas) if datas else datetime.min
+                def get_ultima_data_envio(contato):
+                    datas = [t.data_envio for t in contato.telefones if t.data_envio]
+                    return max(datas) if datas else datetime.min
 
-                    c = max(contatos_em_fluxo, key=lambda ct: (get_ultima_data_envio(ct), ct.id))
+                fluxo_recente = max(contatos_em_fluxo, key=lambda ct: (get_ultima_data_envio(ct), ct.id))
+
+                # Comparar: se campanha concluída é mais recente, usar ela
+                # Isso garante que "1" após conclusão responde "já confirmou"
+                if concluido_recente.data_resposta > get_ultima_data_envio(fluxo_recente):
+                    c = concluido_recente
                 else:
-                    # Se não há contatos em fluxo, pegar por data_resposta (comportamento anterior)
-                    c = max(contatos_validos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
+                    c = fluxo_recente
+            elif contatos_concluidos:
+                # Só tem concluídas
+                c = max(contatos_concluidos, key=lambda ct: (ct.data_resposta, ct.id))
+            elif contatos_em_fluxo:
+                # Só tem fluxo ativo
+                def get_ultima_data_envio(contato):
+                    datas = [t.data_envio for t in contato.telefones if t.data_envio]
+                    return max(datas) if datas else datetime.min
+
+                c = max(contatos_em_fluxo, key=lambda ct: (get_ultima_data_envio(ct), ct.id))
+            else:
+                # Nenhuma concluída nem em fluxo, pegar qualquer uma por data_resposta
+                c = max(contatos_validos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
 
         if not c:
             # Verificar se existem contatos de outros usuários (para debug)

@@ -3712,19 +3712,19 @@ def exportar_campanha(id):
 
 
 # API
-@app.route('/api/dashboard/tickets')
-@login_required
-def api_dashboard_tickets():
-    """Retorna estatísticas de tickets para o dashboard"""
-    # Filtrar apenas tickets das campanhas do usuario atual
-    user_campanhas_ids = [c.id for c in Campanha.query.filter_by(criador_id=current_user.id).all()]
-    if user_campanhas_ids:
-        urgentes = TicketAtendimento.query.filter(TicketAtendimento.campanha_id.in_(user_campanhas_ids), TicketAtendimento.status == 'pendente', TicketAtendimento.prioridade == 'urgente').count()
-        pendentes = TicketAtendimento.query.filter(TicketAtendimento.campanha_id.in_(user_campanhas_ids), TicketAtendimento.status == 'pendente').count()
-    else:
-        urgentes = 0
-        pendentes = 0
-    return jsonify({'urgentes': urgentes, 'pendentes': pendentes})
+# @app.route('/api/dashboard/tickets')
+# @login_required
+# def api_dashboard_tickets():
+#     """Retorna estatísticas de tickets para o dashboard"""
+#     # Filtrar apenas tickets das campanhas do usuario atual
+#     user_campanhas_ids = [c.id for c in Campanha.query.filter_by(criador_id=current_user.id).all()]
+#     if user_campanhas_ids:
+#         urgentes = TicketAtendimento.query.filter(TicketAtendimento.campanha_id.in_(user_campanhas_ids), TicketAtendimento.status == 'pendente', TicketAtendimento.prioridade == 'urgente').count()
+#         pendentes = TicketAtendimento.query.filter(TicketAtendimento.campanha_id.in_(user_campanhas_ids), TicketAtendimento.status == 'pendente').count()
+#     else:
+#         urgentes = 0
+#         pendentes = 0
+#     return jsonify({'urgentes': urgentes, 'pendentes': pendentes})
 
 
 @app.route('/api/campanha/<int:id>/status')
@@ -4457,13 +4457,36 @@ def webhook():
             usuario_id = c.campanha.criador_id if c.campanha else None
             resposta_faq = SistemaFAQ.buscar_resposta(texto, usuario_id)
 
-        # Sistema de tickets desativado - atendimento direto via chat na página de detalhes
-        # Mantém análise de sentimento para sinalização visual (badges)
+        # Detecção de urgência/prioridade (para badges visuais e notificações)
+        # NÃO cria tickets no banco - apenas sinaliza visualmente e notifica usuário
+        prioridade = None
+        if c.status == 'concluido' or (c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio'] and not respostas_validas):
+            prioridade = SistemaFAQ.requer_atendimento_humano(texto, c)
 
-        # Se tem FAQ, responde com FAQ
-        if resposta_faq:
+        # Se tem FAQ e NÃO é urgente, responde com FAQ
+        if resposta_faq and not prioridade:
             ws.enviar(numero, resposta_faq)
             logger.info(f"FAQ automático enviado para {c.nome}")
+            return jsonify({'status': 'ok'}), 200
+
+        # Se é urgente/importante, notifica usuário mas NÃO cria ticket
+        # Gestores veem badge visual na lista de contatos
+        if prioridade and c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio']:
+            # Se tem FAQ, envia antes da notificação
+            if resposta_faq:
+                ws.enviar(numero, resposta_faq)
+                logger.info(f"FAQ automático enviado antes de notificar urgência para {c.nome}")
+
+            # Notificar usuário sobre encaminhamento (apenas visual, sem ticket)
+            if not resposta_faq:
+                if prioridade == 'urgente':
+                    ws.enviar(numero, "🚨 Sua mensagem foi encaminhada com URGÊNCIA para nossa equipe. "
+                                     "Um atendente entrará em contato em breve.")
+                else:
+                    ws.enviar(numero, "👤 Sua mensagem foi encaminhada para um atendente. "
+                                     "Aguarde o retorno em até 24h úteis.")
+
+            logger.info(f"Mensagem urgente detectada de {c.nome} - Prioridade: {prioridade} (badge visual ativo)")
             return jsonify({'status': 'ok'}), 200
 
         # Maquina de Estados
@@ -4726,305 +4749,305 @@ def excluir_faq(id):
     return redirect(url_for('gerenciar_faq'))
 
 
-# =============================================================================
-# ROTAS - ATENDIMENTO (TICKETS)
-# =============================================================================
-
-@app.route('/atendimento')
-@login_required
-def painel_atendimento():
-    filtro = request.args.get('filtro', 'pendente')
-    page = request.args.get('page', 1, type=int)
-
-    # Filtrar apenas tickets das campanhas do usuario atual
-    user_campanhas_ids = [c.id for c in Campanha.query.filter_by(criador_id=current_user.id).all()]
-
-    q = TicketAtendimento.query
-    if user_campanhas_ids:
-        q = q.filter(TicketAtendimento.campanha_id.in_(user_campanhas_ids))
-    else:
-        # Se nao tem campanhas, nao tem tickets
-        q = q.filter(TicketAtendimento.id == None)
-
-    if filtro == 'pendente':
-        q = q.filter_by(status='pendente')
-    elif filtro == 'em_atendimento':
-        q = q.filter_by(status='em_atendimento')
-    elif filtro == 'resolvido':
-        q = q.filter_by(status='resolvido')
-    elif filtro == 'meus':
-        q = q.filter_by(atendente_id=current_user.id, status='em_atendimento')
-    elif filtro == 'urgente':
-        q = q.filter_by(prioridade='urgente', status='pendente')
-
-    # Buscar todos os tickets (nao paginados ainda)
-    all_tickets = q.order_by(
-        TicketAtendimento.prioridade.desc(),
-        TicketAtendimento.data_criacao.desc()
-    ).all()
-
-    # Agrupar tickets por (contato_id, campanha_id)
-    from collections import defaultdict
-    grupos = defaultdict(list)
-    for ticket in all_tickets:
-        chave = (ticket.contato_id, ticket.campanha_id)
-        grupos[chave].append(ticket)
-
-    # Criar lista de grupos com informacoes agregadas
-    grupos_lista = []
-    prioridade_ordem = {'urgente': 4, 'alta': 3, 'media': 2, 'baixa': 1}
-
-    for (contato_id, campanha_id), tickets_grupo in grupos.items():
-        # Ordenar tickets do grupo por data (mais recente primeiro)
-        tickets_grupo.sort(key=lambda t: t.data_criacao, reverse=True)
-
-        # Pegar a maior prioridade do grupo
-        maior_prioridade = max(tickets_grupo, key=lambda t: prioridade_ordem.get(t.prioridade, 0))
-
-        grupo_obj = {
-            'tickets': tickets_grupo,
-            'ticket_principal': tickets_grupo[0],  # Mais recente
-            'contato': tickets_grupo[0].contato,
-            'campanha': tickets_grupo[0].campanha,
-            'prioridade': maior_prioridade.prioridade,
-            'status': tickets_grupo[0].status,
-            'data_criacao': tickets_grupo[0].data_criacao,
-            'count': len(tickets_grupo),
-            'atendente': tickets_grupo[0].atendente
-        }
-        grupos_lista.append(grupo_obj)
-
-    # Ordenar grupos por prioridade e data
-    grupos_lista.sort(
-        key=lambda g: (prioridade_ordem.get(g['prioridade'], 0), g['data_criacao']),
-        reverse=True
-    )
-
-    # Paginar os grupos
-    per_page = 20
-    total = len(grupos_lista)
-    total_pages = (total + per_page - 1) // per_page
-    start = (page - 1) * per_page
-    end = start + per_page
-    grupos_paginados = grupos_lista[start:end]
-
-    # Criar objeto de paginacao simulado
-    class PaginacaoSimulada:
-        def __init__(self, items, page, per_page, total):
-            self.items = items
-            self.page = page
-            self.per_page = per_page
-            self.total = total
-            self.pages = (total + per_page - 1) // per_page
-            self.has_prev = page > 1
-            self.has_next = page < self.pages
-            self.prev_num = page - 1 if self.has_prev else None
-            self.next_num = page + 1 if self.has_next else None
-
-        def iter_pages(self, left_edge=2, left_current=2, right_current=5, right_edge=2):
-            last = 0
-            for num in range(1, self.pages + 1):
-                if num <= left_edge or \
-                   (num > self.page - left_current - 1 and num < self.page + right_current) or \
-                   num > self.pages - right_edge:
-                    if last + 1 != num:
-                        yield None
-                    yield num
-                    last = num
-
-    tickets_agrupados = PaginacaoSimulada(grupos_paginados, page, per_page, total)
-
-    # Estatísticas apenas dos tickets das campanhas do usuario
-    # IMPORTANTE: Contar grupos (contato+campanha), não tickets individuais
-    if user_campanhas_ids:
-        # Buscar tickets pendentes e agrupar
-        tickets_pendentes = TicketAtendimento.query.filter(
-            TicketAtendimento.campanha_id.in_(user_campanhas_ids),
-            TicketAtendimento.status == 'pendente'
-        ).all()
-        grupos_pendentes = set((t.contato_id, t.campanha_id) for t in tickets_pendentes)
-
-        # Em atendimento
-        tickets_atendimento = TicketAtendimento.query.filter(
-            TicketAtendimento.campanha_id.in_(user_campanhas_ids),
-            TicketAtendimento.status == 'em_atendimento'
-        ).all()
-        grupos_atendimento = set((t.contato_id, t.campanha_id) for t in tickets_atendimento)
-
-        # Urgentes pendentes
-        tickets_urgentes = TicketAtendimento.query.filter(
-            TicketAtendimento.campanha_id.in_(user_campanhas_ids),
-            TicketAtendimento.prioridade == 'urgente',
-            TicketAtendimento.status == 'pendente'
-        ).all()
-        grupos_urgentes = set((t.contato_id, t.campanha_id) for t in tickets_urgentes)
-
-        # Resolvidos hoje
-        tickets_resolvidos = TicketAtendimento.query.filter(
-            TicketAtendimento.campanha_id.in_(user_campanhas_ids),
-            TicketAtendimento.status == 'resolvido',
-            TicketAtendimento.data_resolucao >= datetime.utcnow().replace(hour=0, minute=0, second=0)
-        ).all()
-        grupos_resolvidos = set((t.contato_id, t.campanha_id) for t in tickets_resolvidos)
-
-        stats = {
-            'pendente': len(grupos_pendentes),
-            'em_atendimento': len(grupos_atendimento),
-            'urgente': len(grupos_urgentes),
-            'resolvido_hoje': len(grupos_resolvidos)
-        }
-    else:
-        stats = {'pendente': 0, 'em_atendimento': 0, 'urgente': 0, 'resolvido_hoje': 0}
-
-    return render_template('atendimento.html', tickets=tickets_agrupados, filtro=filtro, stats=stats)
-
-
-@app.route('/atendimento/<int:id>')
-@login_required
-def detalhe_ticket(id):
-    ticket = verificar_acesso_ticket(id)
-
-    # Buscar todos os tickets do mesmo grupo (mesmo contato e campanha)
-    tickets_relacionados = TicketAtendimento.query.filter_by(
-        contato_id=ticket.contato_id,
-        campanha_id=ticket.campanha_id
-    ).order_by(TicketAtendimento.data_criacao.desc()).all()
-
-    # Buscar histórico de mensagens do contato
-    logs = LogMsg.query.filter_by(contato_id=ticket.contato_id).order_by(LogMsg.data.desc()).limit(20).all()
-
-    return render_template('ticket_detalhe.html', ticket=ticket, tickets_relacionados=tickets_relacionados, logs=logs)
-
-
-@app.route('/atendimento/<int:id>/assumir', methods=['POST'])
-@login_required
-def assumir_ticket(id):
-    ticket = verificar_acesso_ticket(id)
-
-    if ticket.status != 'pendente':
-        flash('Ticket já está em atendimento', 'warning')
-        return redirect(url_for('detalhe_ticket', id=id))
-
-    # Assumir ticket atual
-    ticket.status = 'em_atendimento'
-    ticket.atendente_id = current_user.id
-    ticket.data_atendimento = datetime.utcnow()
-
-    # Assumir TODOS os tickets relacionados (mesmo contato e campanha)
-    tickets_relacionados = TicketAtendimento.query.filter_by(
-        contato_id=ticket.contato_id,
-        campanha_id=ticket.campanha_id,
-        status='pendente'
-    ).all()
-
-    for t in tickets_relacionados:
-        t.status = 'em_atendimento'
-        t.atendente_id = current_user.id
-        t.data_atendimento = datetime.utcnow()
-
-    db.session.commit()
-
-    flash(f'✅ {len(tickets_relacionados)} ticket(s) assumido(s)!', 'success')
-    return redirect(url_for('detalhe_ticket', id=id))
-
-
-@app.route('/atendimento/<int:id>/responder', methods=['POST'])
-@login_required
-def responder_ticket(id):
-    ticket = verificar_acesso_ticket(id)
-    resposta = request.form.get('resposta', '').strip()
-
-    if not resposta:
-        flash('Digite uma resposta', 'danger')
-        return redirect(url_for('detalhe_ticket', id=id))
-
-    # Enviar via WhatsApp usando a instância do criador da campanha
-    ws = WhatsApp(ticket.campanha.criador_id)
-
-    # Priorizar telefones validados, mas aceitar todos se não houver validados
-    telefones_validados = ticket.contato.telefones.filter_by(whatsapp_valido=True).all()
-    telefones_todos = ticket.contato.telefones.all()
-
-    # Usar validados se houver, senão usar todos
-    telefones = telefones_validados if telefones_validados else telefones_todos
-
-    if not telefones:
-        flash('Nenhum telefone cadastrado para este contato', 'danger')
-        return redirect(url_for('detalhe_ticket', id=id))
-
-    enviado = False
-    erro_msg = None
-    for tel in telefones:
-        ok, resultado = ws.enviar(tel.numero_fmt, f"👤 *Resposta do atendente {current_user.nome}:*\n\n{resposta}")
-        if ok:
-            enviado = True
-
-            # Registrar log
-            log = LogMsg(
-                campanha_id=ticket.campanha_id,
-                contato_id=ticket.contato_id,
-                direcao='enviada',
-                telefone=tel.numero_fmt,
-                mensagem=f'[Atendimento] {resposta}',
-                status='ok'
-            )
-            db.session.add(log)
-            break
-        else:
-            erro_msg = resultado
-
-    if enviado:
-        # Resolver ticket atual
-        ticket.status = 'resolvido'
-        ticket.data_resolucao = datetime.utcnow()
-        ticket.resposta = resposta
-
-        # Resolver TODOS os tickets relacionados (mesmo contato e campanha)
-        tickets_relacionados = TicketAtendimento.query.filter_by(
-            contato_id=ticket.contato_id,
-            campanha_id=ticket.campanha_id
-        ).filter(TicketAtendimento.status != 'resolvido').all()
-
-        for t in tickets_relacionados:
-            t.status = 'resolvido'
-            t.data_resolucao = datetime.utcnow()
-            t.resposta = resposta
-
-        db.session.commit()
-
-        flash(f'✅ Resposta enviada e {len(tickets_relacionados)} ticket(s) resolvido(s) com sucesso!', 'success')
-    else:
-        msg_erro = f'❌ Erro ao enviar resposta via WhatsApp'
-        if erro_msg:
-            msg_erro += f': {erro_msg}'
-        flash(msg_erro, 'danger')
-
-    return redirect(url_for('painel_atendimento'))
-
-
-@app.route('/atendimento/<int:id>/cancelar', methods=['POST'])
-@login_required
-def cancelar_ticket(id):
-    ticket = verificar_acesso_ticket(id)
-
-    # Cancelar ticket atual
-    ticket.status = 'cancelado'
-
-    # Cancelar TODOS os tickets relacionados (mesmo contato e campanha)
-    tickets_relacionados = TicketAtendimento.query.filter_by(
-        contato_id=ticket.contato_id,
-        campanha_id=ticket.campanha_id
-    ).filter(TicketAtendimento.status.in_(['pendente', 'em_atendimento'])).all()
-
-    for t in tickets_relacionados:
-        t.status = 'cancelado'
-
-    db.session.commit()
-
-    flash(f'✅ {len(tickets_relacionados)} ticket(s) cancelado(s)', 'info')
-    return redirect(url_for('painel_atendimento'))
-
-
+# # =============================================================================
+# # ROTAS - ATENDIMENTO (TICKETS)
+# # =============================================================================
+# 
+# @app.route('/atendimento')
+# @login_required
+# def painel_atendimento():
+#     filtro = request.args.get('filtro', 'pendente')
+#     page = request.args.get('page', 1, type=int)
+# 
+#     # Filtrar apenas tickets das campanhas do usuario atual
+#     user_campanhas_ids = [c.id for c in Campanha.query.filter_by(criador_id=current_user.id).all()]
+# 
+#     q = TicketAtendimento.query
+#     if user_campanhas_ids:
+#         q = q.filter(TicketAtendimento.campanha_id.in_(user_campanhas_ids))
+#     else:
+#         # Se nao tem campanhas, nao tem tickets
+#         q = q.filter(TicketAtendimento.id == None)
+# 
+#     if filtro == 'pendente':
+#         q = q.filter_by(status='pendente')
+#     elif filtro == 'em_atendimento':
+#         q = q.filter_by(status='em_atendimento')
+#     elif filtro == 'resolvido':
+#         q = q.filter_by(status='resolvido')
+#     elif filtro == 'meus':
+#         q = q.filter_by(atendente_id=current_user.id, status='em_atendimento')
+#     elif filtro == 'urgente':
+#         q = q.filter_by(prioridade='urgente', status='pendente')
+# 
+#     # Buscar todos os tickets (nao paginados ainda)
+#     all_tickets = q.order_by(
+#         TicketAtendimento.prioridade.desc(),
+#         TicketAtendimento.data_criacao.desc()
+#     ).all()
+# 
+#     # Agrupar tickets por (contato_id, campanha_id)
+#     from collections import defaultdict
+#     grupos = defaultdict(list)
+#     for ticket in all_tickets:
+#         chave = (ticket.contato_id, ticket.campanha_id)
+#         grupos[chave].append(ticket)
+# 
+#     # Criar lista de grupos com informacoes agregadas
+#     grupos_lista = []
+#     prioridade_ordem = {'urgente': 4, 'alta': 3, 'media': 2, 'baixa': 1}
+# 
+#     for (contato_id, campanha_id), tickets_grupo in grupos.items():
+#         # Ordenar tickets do grupo por data (mais recente primeiro)
+#         tickets_grupo.sort(key=lambda t: t.data_criacao, reverse=True)
+# 
+#         # Pegar a maior prioridade do grupo
+#         maior_prioridade = max(tickets_grupo, key=lambda t: prioridade_ordem.get(t.prioridade, 0))
+# 
+#         grupo_obj = {
+#             'tickets': tickets_grupo,
+#             'ticket_principal': tickets_grupo[0],  # Mais recente
+#             'contato': tickets_grupo[0].contato,
+#             'campanha': tickets_grupo[0].campanha,
+#             'prioridade': maior_prioridade.prioridade,
+#             'status': tickets_grupo[0].status,
+#             'data_criacao': tickets_grupo[0].data_criacao,
+#             'count': len(tickets_grupo),
+#             'atendente': tickets_grupo[0].atendente
+#         }
+#         grupos_lista.append(grupo_obj)
+# 
+#     # Ordenar grupos por prioridade e data
+#     grupos_lista.sort(
+#         key=lambda g: (prioridade_ordem.get(g['prioridade'], 0), g['data_criacao']),
+#         reverse=True
+#     )
+# 
+#     # Paginar os grupos
+#     per_page = 20
+#     total = len(grupos_lista)
+#     total_pages = (total + per_page - 1) // per_page
+#     start = (page - 1) * per_page
+#     end = start + per_page
+#     grupos_paginados = grupos_lista[start:end]
+# 
+#     # Criar objeto de paginacao simulado
+#     class PaginacaoSimulada:
+#         def __init__(self, items, page, per_page, total):
+#             self.items = items
+#             self.page = page
+#             self.per_page = per_page
+#             self.total = total
+#             self.pages = (total + per_page - 1) // per_page
+#             self.has_prev = page > 1
+#             self.has_next = page < self.pages
+#             self.prev_num = page - 1 if self.has_prev else None
+#             self.next_num = page + 1 if self.has_next else None
+# 
+#         def iter_pages(self, left_edge=2, left_current=2, right_current=5, right_edge=2):
+#             last = 0
+#             for num in range(1, self.pages + 1):
+#                 if num <= left_edge or \
+#                    (num > self.page - left_current - 1 and num < self.page + right_current) or \
+#                    num > self.pages - right_edge:
+#                     if last + 1 != num:
+#                         yield None
+#                     yield num
+#                     last = num
+# 
+#     tickets_agrupados = PaginacaoSimulada(grupos_paginados, page, per_page, total)
+# 
+#     # Estatísticas apenas dos tickets das campanhas do usuario
+#     # IMPORTANTE: Contar grupos (contato+campanha), não tickets individuais
+#     if user_campanhas_ids:
+#         # Buscar tickets pendentes e agrupar
+#         tickets_pendentes = TicketAtendimento.query.filter(
+#             TicketAtendimento.campanha_id.in_(user_campanhas_ids),
+#             TicketAtendimento.status == 'pendente'
+#         ).all()
+#         grupos_pendentes = set((t.contato_id, t.campanha_id) for t in tickets_pendentes)
+# 
+#         # Em atendimento
+#         tickets_atendimento = TicketAtendimento.query.filter(
+#             TicketAtendimento.campanha_id.in_(user_campanhas_ids),
+#             TicketAtendimento.status == 'em_atendimento'
+#         ).all()
+#         grupos_atendimento = set((t.contato_id, t.campanha_id) for t in tickets_atendimento)
+# 
+#         # Urgentes pendentes
+#         tickets_urgentes = TicketAtendimento.query.filter(
+#             TicketAtendimento.campanha_id.in_(user_campanhas_ids),
+#             TicketAtendimento.prioridade == 'urgente',
+#             TicketAtendimento.status == 'pendente'
+#         ).all()
+#         grupos_urgentes = set((t.contato_id, t.campanha_id) for t in tickets_urgentes)
+# 
+#         # Resolvidos hoje
+#         tickets_resolvidos = TicketAtendimento.query.filter(
+#             TicketAtendimento.campanha_id.in_(user_campanhas_ids),
+#             TicketAtendimento.status == 'resolvido',
+#             TicketAtendimento.data_resolucao >= datetime.utcnow().replace(hour=0, minute=0, second=0)
+#         ).all()
+#         grupos_resolvidos = set((t.contato_id, t.campanha_id) for t in tickets_resolvidos)
+# 
+#         stats = {
+#             'pendente': len(grupos_pendentes),
+#             'em_atendimento': len(grupos_atendimento),
+#             'urgente': len(grupos_urgentes),
+#             'resolvido_hoje': len(grupos_resolvidos)
+#         }
+#     else:
+#         stats = {'pendente': 0, 'em_atendimento': 0, 'urgente': 0, 'resolvido_hoje': 0}
+# 
+#     return render_template('atendimento.html', tickets=tickets_agrupados, filtro=filtro, stats=stats)
+# 
+# 
+# @app.route('/atendimento/<int:id>')
+# @login_required
+# def detalhe_ticket(id):
+#     ticket = verificar_acesso_ticket(id)
+# 
+#     # Buscar todos os tickets do mesmo grupo (mesmo contato e campanha)
+#     tickets_relacionados = TicketAtendimento.query.filter_by(
+#         contato_id=ticket.contato_id,
+#         campanha_id=ticket.campanha_id
+#     ).order_by(TicketAtendimento.data_criacao.desc()).all()
+# 
+#     # Buscar histórico de mensagens do contato
+#     logs = LogMsg.query.filter_by(contato_id=ticket.contato_id).order_by(LogMsg.data.desc()).limit(20).all()
+# 
+#     return render_template('ticket_detalhe.html', ticket=ticket, tickets_relacionados=tickets_relacionados, logs=logs)
+# 
+# 
+# @app.route('/atendimento/<int:id>/assumir', methods=['POST'])
+# @login_required
+# def assumir_ticket(id):
+#     ticket = verificar_acesso_ticket(id)
+# 
+#     if ticket.status != 'pendente':
+#         flash('Ticket já está em atendimento', 'warning')
+#         return redirect(url_for('detalhe_ticket', id=id))
+# 
+#     # Assumir ticket atual
+#     ticket.status = 'em_atendimento'
+#     ticket.atendente_id = current_user.id
+#     ticket.data_atendimento = datetime.utcnow()
+# 
+#     # Assumir TODOS os tickets relacionados (mesmo contato e campanha)
+#     tickets_relacionados = TicketAtendimento.query.filter_by(
+#         contato_id=ticket.contato_id,
+#         campanha_id=ticket.campanha_id,
+#         status='pendente'
+#     ).all()
+# 
+#     for t in tickets_relacionados:
+#         t.status = 'em_atendimento'
+#         t.atendente_id = current_user.id
+#         t.data_atendimento = datetime.utcnow()
+# 
+#     db.session.commit()
+# 
+#     flash(f'✅ {len(tickets_relacionados)} ticket(s) assumido(s)!', 'success')
+#     return redirect(url_for('detalhe_ticket', id=id))
+# 
+# 
+# @app.route('/atendimento/<int:id>/responder', methods=['POST'])
+# @login_required
+# def responder_ticket(id):
+#     ticket = verificar_acesso_ticket(id)
+#     resposta = request.form.get('resposta', '').strip()
+# 
+#     if not resposta:
+#         flash('Digite uma resposta', 'danger')
+#         return redirect(url_for('detalhe_ticket', id=id))
+# 
+#     # Enviar via WhatsApp usando a instância do criador da campanha
+#     ws = WhatsApp(ticket.campanha.criador_id)
+# 
+#     # Priorizar telefones validados, mas aceitar todos se não houver validados
+#     telefones_validados = ticket.contato.telefones.filter_by(whatsapp_valido=True).all()
+#     telefones_todos = ticket.contato.telefones.all()
+# 
+#     # Usar validados se houver, senão usar todos
+#     telefones = telefones_validados if telefones_validados else telefones_todos
+# 
+#     if not telefones:
+#         flash('Nenhum telefone cadastrado para este contato', 'danger')
+#         return redirect(url_for('detalhe_ticket', id=id))
+# 
+#     enviado = False
+#     erro_msg = None
+#     for tel in telefones:
+#         ok, resultado = ws.enviar(tel.numero_fmt, f"👤 *Resposta do atendente {current_user.nome}:*\n\n{resposta}")
+#         if ok:
+#             enviado = True
+# 
+#             # Registrar log
+#             log = LogMsg(
+#                 campanha_id=ticket.campanha_id,
+#                 contato_id=ticket.contato_id,
+#                 direcao='enviada',
+#                 telefone=tel.numero_fmt,
+#                 mensagem=f'[Atendimento] {resposta}',
+#                 status='ok'
+#             )
+#             db.session.add(log)
+#             break
+#         else:
+#             erro_msg = resultado
+# 
+#     if enviado:
+#         # Resolver ticket atual
+#         ticket.status = 'resolvido'
+#         ticket.data_resolucao = datetime.utcnow()
+#         ticket.resposta = resposta
+# 
+#         # Resolver TODOS os tickets relacionados (mesmo contato e campanha)
+#         tickets_relacionados = TicketAtendimento.query.filter_by(
+#             contato_id=ticket.contato_id,
+#             campanha_id=ticket.campanha_id
+#         ).filter(TicketAtendimento.status != 'resolvido').all()
+# 
+#         for t in tickets_relacionados:
+#             t.status = 'resolvido'
+#             t.data_resolucao = datetime.utcnow()
+#             t.resposta = resposta
+# 
+#         db.session.commit()
+# 
+#         flash(f'✅ Resposta enviada e {len(tickets_relacionados)} ticket(s) resolvido(s) com sucesso!', 'success')
+#     else:
+#         msg_erro = f'❌ Erro ao enviar resposta via WhatsApp'
+#         if erro_msg:
+#             msg_erro += f': {erro_msg}'
+#         flash(msg_erro, 'danger')
+# 
+#     return redirect(url_for('painel_atendimento'))
+# 
+# 
+# @app.route('/atendimento/<int:id>/cancelar', methods=['POST'])
+# @login_required
+# def cancelar_ticket(id):
+#     ticket = verificar_acesso_ticket(id)
+# 
+#     # Cancelar ticket atual
+#     ticket.status = 'cancelado'
+# 
+#     # Cancelar TODOS os tickets relacionados (mesmo contato e campanha)
+#     tickets_relacionados = TicketAtendimento.query.filter_by(
+#         contato_id=ticket.contato_id,
+#         campanha_id=ticket.campanha_id
+#     ).filter(TicketAtendimento.status.in_(['pendente', 'em_atendimento'])).all()
+# 
+#     for t in tickets_relacionados:
+#         t.status = 'cancelado'
+# 
+#     db.session.commit()
+# 
+#     flash(f'✅ {len(tickets_relacionados)} ticket(s) cancelado(s)', 'info')
+#     return redirect(url_for('painel_atendimento'))
+# 
+# 
 # =============================================================================
 # ROTAS - CADASTRO PUBLICO
 # =============================================================================

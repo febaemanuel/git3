@@ -19,26 +19,30 @@
     <!-- Filtros -->
     <div class="row mb-3">
         <div class="col-12">
-            <div class="btn-group" role="group">
-                <a href="{{ url_for('consultas_listar', status='AGUARDANDO_CONFIRMACAO') }}"
-                   class="btn btn-outline-warning {% if status_atual == 'AGUARDANDO_CONFIRMACAO' %}active{% endif %}">
-                    <i class="bi bi-clock-history"></i> Aguardando Confirmação
-                </a>
-                <a href="{{ url_for('consultas_listar', status='AGUARDANDO_COMPROVANTE') }}"
-                   class="btn btn-outline-info {% if status_atual == 'AGUARDANDO_COMPROVANTE' %}active{% endif %}">
-                    <i class="bi bi-file-earmark-arrow-up"></i> Aguardando Comprovante
+            <div class="btn-group btn-group-sm" role="group">
+                <a href="{{ url_for('consultas_listar', status='todos') }}"
+                   class="btn btn-outline-secondary {% if status_atual == 'todos' %}active{% endif %}">
+                    Todos
                 </a>
                 <a href="{{ url_for('consultas_listar', status='CONFIRMADO') }}"
                    class="btn btn-outline-success {% if status_atual == 'CONFIRMADO' %}active{% endif %}">
-                    <i class="bi bi-check-circle"></i> Confirmados
-                </a>
-                <a href="{{ url_for('consultas_listar', status='CANCELADO') }}"
-                   class="btn btn-outline-secondary {% if status_atual == 'CANCELADO' %}active{% endif %}">
-                    <i class="bi bi-dash-circle"></i> Cancelados
+                    Confirmados
                 </a>
                 <a href="{{ url_for('consultas_listar', status='REJEITADO') }}"
-                   class="btn btn-outline-danger {% if status_atual == 'REJEITADO' %}active{% endif %}">
-                    <i class="bi bi-x-circle"></i> Rejeitados
+                   class="btn btn-outline-warning {% if status_atual == 'REJEITADO' %}active{% endif %}">
+                    Rejeitados
+                </a>
+                <a href="{{ url_for('consultas_listar', status='AGUARDANDO_CONFIRMACAO') }}"
+                   class="btn btn-outline-info {% if status_atual == 'AGUARDANDO_CONFIRMACAO' %}active{% endif %}">
+                    Aguardando
+                </a>
+                <a href="{{ url_for('consultas_listar', status='AGUARDANDO_ENVIO') }}"
+                   class="btn btn-outline-secondary {% if status_atual == 'AGUARDANDO_ENVIO' %}active{% endif %}">
+                    Pendentes
+                </a>
+                <a href="{{ url_for('consultas_listar', status='CANCELADO') }}"
+                   class="btn btn-outline-danger {% if status_atual == 'CANCELADO' %}active{% endif %}">
+                    Erros
                 </a>
             </div>
         </div>
@@ -72,7 +76,16 @@
                                 {% for consulta in consultas.items %}
                                 <tr>
                                     <td>{{ consulta.id }}</td>
-                                    <td>{{ consulta.paciente }}</td>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <strong>{{ consulta.paciente }}</strong>
+                                            {% if consulta.tem_interacao_recente() %}
+                                            <span class="badge bg-primary" title="Interação recente (últimas 24h)">
+                                                <i class="bi bi-chat-fill"></i>
+                                            </span>
+                                            {% endif %}
+                                        </div>
+                                    </td>
                                     <td><span class="badge bg-secondary">{{ consulta.tipo }}</span></td>
                                     <td>{{ consulta.especialidade or '-' }}</td>
                                     <td>{{ consulta.profissional or '-' }}</td>

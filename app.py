@@ -694,7 +694,8 @@ class CampanhaConsulta(db.Model):
     def atualizar_stats(self):
         """Atualiza estatísticas da campanha - IGUAL à fila"""
         self.total_consultas = self.consultas.count()
-        self.total_enviados = self.consultas.filter_by(mensagem_enviada=True).count()
+        # Conta enviados como todas que NÃO estão em AGUARDANDO_ENVIO
+        self.total_enviados = self.consultas.filter(AgendamentoConsulta.status != 'AGUARDANDO_ENVIO').count()
         self.total_confirmados = self.consultas.filter_by(status='CONFIRMADO').count()
         self.total_aguardando_comprovante = self.consultas.filter_by(status='AGUARDANDO_COMPROVANTE').count()
         self.total_cancelados = self.consultas.filter_by(status='CANCELADO').count()
@@ -730,11 +731,11 @@ class CampanhaConsulta(db.Model):
 
     def pendentes_validar(self):
         """Consultas pendentes de validação - COPIADO da fila"""
-        return self.consultas.filter_by(mensagem_enviada=False).count()
+        return self.consultas.filter_by(status='AGUARDANDO_ENVIO').count()
 
     def pendentes_enviar(self):
         """Consultas prontas para envio - COPIADO da fila"""
-        return self.consultas.filter_by(mensagem_enviada=False).count()
+        return self.consultas.filter_by(status='AGUARDANDO_ENVIO').count()
 
     def pode_enviar_hoje(self):
         """Verifica se pode enviar mais consultas hoje - IGUAL à fila"""
@@ -6326,8 +6327,8 @@ def campanhas_consultas():
     campanhas_com_stats = []
     for campanha in campanhas_lista:
         total = campanha.consultas.count()
-        aguardando_envio = campanha.consultas.filter_by(mensagem_enviada=False).count()
-        enviados = campanha.consultas.filter_by(mensagem_enviada=True).count()
+        aguardando_envio = campanha.consultas.filter_by(status='AGUARDANDO_ENVIO').count()
+        enviados = campanha.consultas.filter(AgendamentoConsulta.status != 'AGUARDANDO_ENVIO').count()
         confirmados = campanha.consultas.filter_by(status='CONFIRMADO').count()
         cancelados = campanha.consultas.filter_by(status='CANCELADO').count()
 
@@ -6519,11 +6520,9 @@ def api_enviar_proximas_consultas(id):
     if not campanha.pode_enviar_hoje():
         return jsonify({'sucesso': False, 'mensagem': 'Meta diária atingida'}), 400
 
-    # Buscar consultas pendentes de envio
+    # Buscar consultas pendentes de envio (status AGUARDANDO_ENVIO)
     consultas_pendentes = campanha.consultas.filter_by(
-        mensagem_enviada=False
-    ).filter(
-        AgendamentoConsulta.status.in_(['AGUARDANDO_CONFIRMACAO', 'REJEITADO'])
+        status='AGUARDANDO_ENVIO'
     ).limit(campanha.meta_diaria - campanha.enviados_hoje).all()
 
     enviados = 0
@@ -6542,8 +6541,8 @@ def api_enviar_proximas_consultas(id):
         else:
             logger.error(f'Erro ao enviar consulta {consulta.id}: {msg_id}')
 
-    # Verificar se terminou
-    pendentes = campanha.consultas.filter_by(mensagem_enviada=False).count()
+    # Verificar se terminou (contar consultas AGUARDANDO_ENVIO)
+    pendentes = campanha.consultas.filter_by(status='AGUARDANDO_ENVIO').count()
     if pendentes == 0:
         campanha.status = 'concluido'
         campanha.data_fim = datetime.utcnow()

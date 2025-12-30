@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 
-{% block title %}Lote: {{ lote.nome }}{% endblock %}
+{% block title %}Lote: {{ campanha.nome }}{% endblock %}
 
 {% block content %}
 <div class="container-fluid mt-4">
     <div class="row mb-4">
         <div class="col-12">
-            <h2><i class="bi bi-stack"></i> {{ lote.nome }}</h2>
+            <h2><i class="bi bi-stack"></i> {{ campanha.nome }}</h2>
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
                     <li class="breadcrumb-item"><a href="{{ url_for('consultas_dashboard') }}">Consultas</a></li>
@@ -60,38 +60,38 @@
                     <i class="bi bi-gear"></i> Configurações de Envio
                 </div>
                 <div class="card-body">
-                    <form method="POST" action="{% if lote.status == 'pendente' %}{{ url_for('lote_consultas_iniciar', id=lote.id) }}{% else %}{{ url_for('lote_consultas_atualizar', id=lote.id) }}{% endif %}" id="formConfig">
+                    <form method="POST" action="{% if campanha.status == 'pendente' %}{{ url_for('lote_consultas_iniciar', id=campanha.id) }}{% else %}{{ url_for('lote_consultas_atualizar', id=campanha.id) }}{% endif %}" id="formConfig">
                         <div class="mb-3">
                             <label class="form-label">Meta Diária</label>
-                            <input type="number" class="form-control" name="meta_diaria" value="{{ lote.meta_diaria }}" min="1" {% if lote.status == 'concluido' %}disabled{% endif %}>
+                            <input type="number" class="form-control" name="meta_diaria" value="{{ campanha.meta_diaria }}" min="1" {% if campanha.status == 'concluido' %}disabled{% endif %}>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Horário (Início - Fim)</label>
                             <div class="row">
                                 <div class="col-6">
-                                    <input type="number" class="form-control" name="hora_inicio" value="{{ lote.hora_inicio }}" min="0" max="23" {% if lote.status == 'concluido' %}disabled{% endif %}>
+                                    <input type="number" class="form-control" name="hora_inicio" value="{{ campanha.hora_inicio }}" min="0" max="23" {% if campanha.status == 'concluido' %}disabled{% endif %}>
                                 </div>
                                 <div class="col-6">
-                                    <input type="number" class="form-control" name="hora_fim" value="{{ lote.hora_fim }}" min="0" max="23" {% if lote.status == 'concluido' %}disabled{% endif %}>
+                                    <input type="number" class="form-control" name="hora_fim" value="{{ campanha.hora_fim }}" min="0" max="23" {% if campanha.status == 'concluido' %}disabled{% endif %}>
                                 </div>
                             </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">Intervalo entre Envios (segundos)</label>
-                            <input type="number" class="form-control" name="tempo_entre_envios" value="{{ lote.tempo_entre_envios }}" min="5" {% if lote.status == 'concluido' %}disabled{% endif %}>
+                            <input type="number" class="form-control" name="tempo_entre_envios" value="{{ campanha.tempo_entre_envios }}" min="5" {% if campanha.status == 'concluido' %}disabled{% endif %}>
                         </div>
 
-                        {% if lote.status == 'pendente' %}
+                        {% if campanha.status == 'pendente' %}
                         <button type="submit" class="btn btn-success w-100">
                             <i class="bi bi-play-fill"></i> Iniciar Envio
                         </button>
 
-                        {% elif lote.status == 'enviando' %}
+                        {% elif campanha.status == 'enviando' %}
                         <div class="d-grid gap-2">
                             <button type="button" class="btn btn-primary" onclick="enviarProximas()">
                                 <i class="bi bi-send"></i> Enviar Próximas Mensagens
                             </button>
-                            <form method="POST" action="{{ url_for('lote_consultas_pausar', id=lote.id) }}" style="margin: 0;">
+                            <form method="POST" action="{{ url_for('lote_consultas_pausar', id=campanha.id) }}" style="margin: 0;">
                                 <button type="submit" class="btn btn-warning w-100">
                                     <i class="bi bi-pause-fill"></i> Pausar Envio
                                 </button>
@@ -101,12 +101,12 @@
                             </button>
                         </div>
 
-                        {% elif lote.status == 'pausado' %}
+                        {% elif campanha.status == 'pausado' %}
                         <div class="alert alert-warning mb-3">
                             <i class="bi bi-pause-circle"></i> Envio pausado
                         </div>
                         <div class="d-grid gap-2">
-                            <form method="POST" action="{{ url_for('lote_consultas_continuar', id=lote.id) }}" style="margin: 0;">
+                            <form method="POST" action="{{ url_for('lote_consultas_continuar', id=campanha.id) }}" style="margin: 0;">
                                 <button type="submit" class="btn btn-success w-100">
                                     <i class="bi bi-play-fill"></i> Continuar Envio
                                 </button>
@@ -135,16 +135,16 @@
                     <table class="table table-sm">
                         <tr>
                             <th width="40%">Tipo:</th>
-                            <td><span class="badge bg-secondary">{{ lote.tipo }}</span></td>
+                            <td><span class="badge bg-secondary">{{ campanha.tipo }}</span></td>
                         </tr>
                         <tr>
                             <th>Status:</th>
                             <td>
-                                {% if lote.status == 'pendente' %}
+                                {% if campanha.status == 'pendente' %}
                                 <span class="badge bg-warning text-dark">Pendente</span>
-                                {% elif lote.status == 'enviando' %}
+                                {% elif campanha.status == 'enviando' %}
                                 <span class="badge bg-primary">Enviando</span>
-                                {% elif lote.status == 'pausado' %}
+                                {% elif campanha.status == 'pausado' %}
                                 <span class="badge bg-secondary">Pausado</span>
                                 {% else %}
                                 <span class="badge bg-success">Concluído</span>
@@ -153,23 +153,23 @@
                         </tr>
                         <tr>
                             <th>Criado em:</th>
-                            <td>{{ lote.created_at.strftime('%d/%m/%Y %H:%M') if lote.created_at else '-' }}</td>
+                            <td>{{ campanha.created_at.strftime('%d/%m/%Y %H:%M') if campanha.created_at else '-' }}</td>
                         </tr>
-                        {% if lote.data_inicio %}
+                        {% if campanha.data_inicio %}
                         <tr>
                             <th>Iniciado em:</th>
-                            <td>{{ lote.data_inicio.strftime('%d/%m/%Y %H:%M') }}</td>
+                            <td>{{ campanha.data_inicio.strftime('%d/%m/%Y %H:%M') }}</td>
                         </tr>
                         {% endif %}
-                        {% if lote.data_fim %}
+                        {% if campanha.data_fim %}
                         <tr>
                             <th>Concluído em:</th>
-                            <td>{{ lote.data_fim.strftime('%d/%m/%Y %H:%M') }}</td>
+                            <td>{{ campanha.data_fim.strftime('%d/%m/%Y %H:%M') }}</td>
                         </tr>
                         {% endif %}
                         <tr>
                             <th>Enviados Hoje:</th>
-                            <td>{{ lote.enviados_hoje }} / {{ lote.meta_diaria }}</td>
+                            <td>{{ campanha.enviados_hoje }} / {{ campanha.meta_diaria }}</td>
                         </tr>
                     </table>
                 </div>
@@ -199,7 +199,7 @@ function enviarProximas() {
         return;
     }
 
-    fetch(`/api/consultas/lote/{{ lote.id }}/enviar_proximas`, {
+    fetch(`/api/consultas/campanha/{{ campanha.id }}/enviar_proximas`, {
         method: 'POST'
     })
     .then(response => response.json())

@@ -21,8 +21,8 @@
         <div class="col-md-6 col-lg-4 mb-4">
             <div class="card h-100">
                 <div class="card-header d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0">{{ item.lote.nome }}</h5>
-                    <span class="badge bg-primary">{{ item.lote.tipo }}</span>
+                    <h5 class="mb-0">{{ item.campanha.nome }}</h5>
+                    <span class="badge bg-primary">{{ item.campanha.tipo }}</span>
                 </div>
                 <div class="card-body">
                     <!-- Estatísticas -->
@@ -80,33 +80,33 @@
                     <div class="mb-3">
                         <small class="text-muted d-block"><i class="bi bi-gear"></i> Configurações:</small>
                         <small class="d-block">
-                            <i class="bi bi-clock"></i> {{ item.lote.hora_inicio }}h - {{ item.lote.hora_fim }}h
+                            <i class="bi bi-clock"></i> {{ item.campanha.hora_inicio }}h - {{ item.campanha.hora_fim }}h
                         </small>
                         <small class="d-block">
-                            <i class="bi bi-speedometer2"></i> Meta: {{ item.lote.meta_diaria }}/dia
+                            <i class="bi bi-speedometer2"></i> Meta: {{ item.campanha.meta_diaria }}/dia
                         </small>
                         <small class="d-block">
-                            <i class="bi bi-hourglass-split"></i> Intervalo: {{ item.lote.tempo_entre_envios }}s
+                            <i class="bi bi-hourglass-split"></i> Intervalo: {{ item.campanha.tempo_entre_envios }}s
                         </small>
                     </div>
 
                     <!-- Contador diário -->
-                    {% if item.lote.enviados_hoje > 0 %}
+                    {% if item.campanha.enviados_hoje > 0 %}
                     <div class="alert alert-info py-2 mb-3">
                         <small>
                             <i class="bi bi-calendar-check"></i>
-                            Hoje: {{ item.lote.enviados_hoje }}/{{ item.lote.meta_diaria }} enviados
+                            Hoje: {{ item.campanha.enviados_hoje }}/{{ item.campanha.meta_diaria }} enviados
                         </small>
                     </div>
                     {% endif %}
 
                     <!-- Data de criação -->
                     <small class="text-muted d-block mb-3">
-                        <i class="bi bi-calendar"></i> Criado em {{ item.lote.created_at.strftime('%d/%m/%Y %H:%M') }}
+                        <i class="bi bi-calendar"></i> Criado em {{ item.campanha.created_at.strftime('%d/%m/%Y %H:%M') }}
                     </small>
                 </div>
                 <div class="card-footer">
-                    <a href="{{ url_for('lote_consultas_detalhe', id=item.lote.id) }}"
+                    <a href="{{ url_for('campanha_consultas_detalhe', id=item.campanha.id) }}"
                        class="btn btn-primary btn-sm w-100">
                         <i class="bi bi-gear"></i> Gerenciar Lote
                     </a>
@@ -123,8 +123,8 @@
             <div class="card">
                 <div class="card-body text-center py-5">
                     <i class="bi bi-inbox" style="font-size: 4rem; color: #ccc;"></i>
-                    <h4 class="mt-3 mb-2">Nenhum lote de consultas encontrado</h4>
-                    <p class="text-muted mb-4">Comece importando uma planilha de consultas para criar seu primeiro lote.</p>
+                    <h4 class="mt-3 mb-2">Nenhum campanha de consultas encontrado</h4>
+                    <p class="text-muted mb-4">Comece importando uma planilha de consultas para criar seu primeiro campanha.</p>
                     <a href="{{ url_for('consultas_importar') }}" class="btn btn-success">
                         <i class="bi bi-upload"></i> Importar Planilha
                     </a>

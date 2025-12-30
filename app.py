@@ -5745,13 +5745,13 @@ def processar_resposta_consulta(telefone, mensagem_texto):
             try:
                 ws = WhatsApp(consulta.usuario_id)
                 if ws.ok():
-                    mensagem_resposta = f"""Agradecemos a confirmação!
+                    mensagem_resposta = f"""✅ Obrigado por confirmar!
 
-Agora precisamos que você envie um COMPROVANTE DE RESIDÊNCIA (conta de luz, água ou telefone) para validar seu agendamento.
+Sua consulta está confirmada para o dia {consulta.data_aghu or 'DATA'} com {consulta.profissional or 'PROFISSIONAL'}.
 
-Por favor, tire uma foto ou envie o PDF do comprovante por este chat.
+Aguarde as próximas instruções em breve.
 
-⚠️ Sem o comprovante, sua consulta será cancelada automaticamente."""
+Hospital Universitário Walter Cantídio."""
 
                     ws.enviar(telefone, mensagem_resposta)
                     logger.info(f'Resposta automática enviada para consulta {consulta.id}')
@@ -5876,12 +5876,12 @@ def consultas_importar():
                 tipo = request.form.get('tipo', 'RETORNO')
 
                 # Criar campanha de consultas
-                nome_lote = request.form.get('nome_lote', f"Lote {tipo} - {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+                nome_lote = request.form.get('nome_lote', f"Campanha {tipo} - {datetime.now().strftime('%d/%m/%Y %H:%M')}")
                 campanha = CampanhaConsulta(
                     nome=nome_lote,
                     criador_id=current_user.id,
                     tipo=tipo,
-                    arquivo=file.filename,
+                    arquivo=arquivo.filename,
                     meta_diaria=int(request.form.get('meta_diaria', 50)),
                     hora_inicio=int(request.form.get('hora_inicio', 8)),
                     hora_fim=int(request.form.get('hora_fim', 18)),
@@ -5936,7 +5936,7 @@ def consultas_importar():
                 os.remove(filepath)
 
                 if importados > 0:
-                    flash(f'{importados} consultas importadas com sucesso no campanha "{campanha.nome}"!', 'success')
+                    flash(f'{importados} consultas importadas com sucesso na campanha "{campanha.nome}"!', 'success')
                     flash('Configure as opções de envio e clique em "Iniciar Envio" quando estiver pronto.', 'info')
                 if erros:
                     flash(f'{len(erros)} erros encontrados. Verifique o log.', 'warning')

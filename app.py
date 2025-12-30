@@ -653,7 +653,6 @@ class CampanhaConsulta(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(200), nullable=False)
     descricao = db.Column(db.Text)
-    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id', ondelete='SET NULL'))
     tipo = db.Column(db.String(50))  # RETORNO ou INTERCONSULTA
     arquivo = db.Column(db.String(255))  # Nome do arquivo importado
 
@@ -671,36 +670,74 @@ class CampanhaConsulta(db.Model):
     total_cancelados = db.Column(db.Integer, default=0)
     total_rejeitados = db.Column(db.Integer, default=0)
 
-    # Configurações de envio
-    meta_diaria = db.Column(db.Integer, default=50)
-    hora_inicio = db.Column(db.Integer, default=8)
-    hora_fim = db.Column(db.Integer, default=18)
-    tempo_entre_envios = db.Column(db.Integer, default=15)  # segundos
+    # Configurações de envio (IGUAL à fila)
+    limite_diario = db.Column(db.Integer, default=50)
+    tempo_entre_envios = db.Column(db.Integer, default=15)
+    meta_diaria = db.Column(db.Integer, default=50)  # Meta de consultas por dia
+    hora_inicio = db.Column(db.Integer, default=8)   # Hora de início (0-23)
+    hora_fim = db.Column(db.Integer, default=18)     # Hora de fim (0-23)
+    dias_duracao = db.Column(db.Integer, default=0)  # 0 = até acabar, >0 = quantidade de dias
 
     # Controle diário
     enviados_hoje = db.Column(db.Integer, default=0)
     data_ultimo_envio = db.Column(db.Date)
 
-    # Timestamps
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    # Relacionamentos
+    criador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id', ondelete='SET NULL'))
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     data_inicio = db.Column(db.DateTime)
     data_fim = db.Column(db.DateTime)
 
-    # Relacionamentos
-    usuario = db.relationship('Usuario', backref='campanhas_consultas')
+    criador = db.relationship('Usuario', backref='campanhas_consultas')
     consultas = db.relationship('AgendamentoConsulta', backref='campanha', lazy='dynamic')
 
     def atualizar_stats(self):
-        """Atualiza estatísticas da campanha"""
+        """Atualiza estatísticas da campanha - IGUAL à fila"""
         self.total_consultas = self.consultas.count()
         self.total_enviados = self.consultas.filter_by(mensagem_enviada=True).count()
         self.total_confirmados = self.consultas.filter_by(status='CONFIRMADO').count()
         self.total_aguardando_comprovante = self.consultas.filter_by(status='AGUARDANDO_COMPROVANTE').count()
         self.total_cancelados = self.consultas.filter_by(status='CANCELADO').count()
         self.total_rejeitados = self.consultas.filter_by(status='REJEITADO').count()
-        db.session.commit()
+        # NÃO faz commit - deixa para o chamador (igual à fila)
+
+    def pct_validacao(self):
+        """Percentual de consultas enviadas - COPIADO da fila"""
+        if self.total_consultas == 0:
+            return 0
+        return round((self.total_enviados / self.total_consultas) * 100, 1)
+
+    def pct_envio(self):
+        """Percentual de envio - COPIADO da fila"""
+        return self.pct_validacao()
+
+    def pct_confirmacao(self):
+        """Percentual de confirmação - COPIADO da fila"""
+        if self.total_enviados == 0:
+            return 0
+        return round((self.total_confirmados / self.total_enviados) * 100, 1)
+
+    def percentual_conclusao(self):
+        """Percentual geral de conclusão - COPIADO da fila"""
+        if self.total_consultas == 0:
+            return 0
+        return round((self.total_enviados / self.total_consultas) * 100, 1)
+
+    # Aliases para templates (igual à fila)
+    percentual_validacao = pct_validacao
+    percentual_envio = pct_envio
+    percentual_confirmacao = pct_confirmacao
+
+    def pendentes_validar(self):
+        """Consultas pendentes de validação - COPIADO da fila"""
+        return self.consultas.filter_by(mensagem_enviada=False).count()
+
+    def pendentes_enviar(self):
+        """Consultas prontas para envio - COPIADO da fila"""
+        return self.consultas.filter_by(mensagem_enviada=False).count()
 
     def pode_enviar_hoje(self):
+        """Verifica se pode enviar mais consultas hoje - IGUAL à fila"""
         hoje = date.today()
         if self.data_ultimo_envio != hoje:
             self.enviados_hoje = 0
@@ -709,8 +746,59 @@ class CampanhaConsulta(db.Model):
         return self.enviados_hoje < self.meta_diaria
 
     def pode_enviar_agora(self):
-        agora = datetime.now().hour
-        return self.hora_inicio <= agora < self.hora_fim
+        """Verifica se está dentro do horário de envio - IGUAL à fila (com overnight)"""
+        agora = datetime.now()
+        hora_atual = agora.hour
+
+        if self.hora_inicio <= self.hora_fim:
+            # Horário normal (ex: 8h às 18h)
+            dentro_horario = self.hora_inicio <= hora_atual < self.hora_fim
+        else:
+            # Horário overnight (ex: 22h às 6h)
+            dentro_horario = hora_atual >= self.hora_inicio or hora_atual < self.hora_fim
+
+        return dentro_horario
+
+    def atingiu_duracao(self):
+        """Verifica se atingiu o número de dias definido - COPIADO da fila"""
+        if self.dias_duracao == 0:
+            return False  # Sem limite de duração
+
+        if not self.data_inicio:
+            return False
+
+        dias_decorridos = (datetime.now() - self.data_inicio).days
+        return dias_decorridos >= self.dias_duracao
+
+    def registrar_envio(self):
+        """Registra que um envio foi realizado hoje - COPIADO da fila"""
+        hoje = date.today()
+        if self.data_ultimo_envio != hoje:
+            self.enviados_hoje = 1
+            self.data_ultimo_envio = hoje
+        else:
+            self.enviados_hoje += 1
+        db.session.commit()
+
+    def calcular_intervalo(self):
+        """Calcula automaticamente o intervalo entre envios - COPIADO da fila"""
+        if self.meta_diaria <= 0:
+            return 15  # Default
+
+        if self.hora_inicio <= self.hora_fim:
+            # Horário normal
+            horas_trabalho = self.hora_fim - self.hora_inicio
+        else:
+            # Horário overnight
+            horas_trabalho = (24 - self.hora_inicio) + self.hora_fim
+
+        segundos_disponiveis = horas_trabalho * 3600
+        intervalo = segundos_disponiveis / self.meta_diaria
+
+        # Mínimo de 5 segundos
+        intervalo = max(5, int(intervalo))
+
+        return intervalo
 
 
 class AgendamentoConsulta(db.Model):
@@ -5791,8 +5879,9 @@ def consultas_importar():
                 nome_lote = request.form.get('nome_lote', f"Lote {tipo} - {datetime.now().strftime('%d/%m/%Y %H:%M')}")
                 campanha = CampanhaConsulta(
                     nome=nome_lote,
-                    usuario_id=current_user.id,
+                    criador_id=current_user.id,
                     tipo=tipo,
+                    arquivo=file.filename,
                     meta_diaria=int(request.form.get('meta_diaria', 50)),
                     hora_inicio=int(request.form.get('hora_inicio', 8)),
                     hora_fim=int(request.form.get('hora_fim', 18)),
@@ -5999,7 +6088,7 @@ def campanhas_consultas():
         return redirect(url_for('dashboard'))
 
     # Buscar todos os lotes do usuário
-    lotes = CampanhaConsulta.query.filter_by(usuario_id=current_user.id).order_by(CampanhaConsulta.created_at.desc()).all()
+    lotes = CampanhaConsulta.query.filter_by(criador_id=current_user.id).order_by(CampanhaConsulta.data_criacao.desc()).all()
 
     # Calcular estatísticas para cada campanha
     lotes_com_stats = []
@@ -6033,7 +6122,7 @@ def campanha_consultas_detalhe(id):
 
     campanha = CampanhaConsulta.query.get_or_404(id)
 
-    if campanha.usuario_id != current_user.id:
+    if campanha.criador_id != current_user.id:
         flash('Você não tem permissão para visualizar este campanha.', 'danger')
         return redirect(url_for('consultas_dashboard'))
 
@@ -6060,7 +6149,7 @@ def campanha_consultas_iniciar(id):
 
     campanha = CampanhaConsulta.query.get_or_404(id)
 
-    if campanha.usuario_id != current_user.id:
+    if campanha.criador_id != current_user.id:
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
     if campanha.status == 'enviando':
@@ -6091,7 +6180,7 @@ def campanha_consultas_pausar(id):
 
     campanha = CampanhaConsulta.query.get_or_404(id)
 
-    if campanha.usuario_id != current_user.id:
+    if campanha.criador_id != current_user.id:
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
     if campanha.status != 'enviando':
@@ -6114,7 +6203,7 @@ def campanha_consultas_continuar(id):
 
     campanha = CampanhaConsulta.query.get_or_404(id)
 
-    if campanha.usuario_id != current_user.id:
+    if campanha.criador_id != current_user.id:
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
     if campanha.status != 'pausado':
@@ -6137,7 +6226,7 @@ def campanha_consultas_atualizar(id):
 
     campanha = CampanhaConsulta.query.get_or_404(id)
 
-    if campanha.usuario_id != current_user.id:
+    if campanha.criador_id != current_user.id:
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
     # Atualizar configurações
@@ -6158,7 +6247,7 @@ def api_enviar_proximas_consultas(id):
     """Envia próximas mensagens do campanha respeitando limites"""
     campanha = CampanhaConsulta.query.get_or_404(id)
 
-    if campanha.usuario_id != current_user.id:
+    if campanha.criador_id != current_user.id:
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
     if campanha.status != 'enviando':

@@ -11,7 +11,27 @@ ALTER TABLE IF EXISTS lotes_consultas RENAME TO campanhas_consultas;
 ALTER TABLE IF EXISTS agendamentos_consultas
     RENAME COLUMN lote_id TO campanha_id;
 
--- 3. Adicionar novos campos em campanhas_consultas
+-- 3. Renomear usuario_id para criador_id e created_at para data_criacao
+DO $$
+BEGIN
+    -- Renomear usuario_id para criador_id
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'campanhas_consultas' AND column_name = 'usuario_id'
+    ) THEN
+        ALTER TABLE campanhas_consultas RENAME COLUMN usuario_id TO criador_id;
+    END IF;
+
+    -- Renomear created_at para data_criacao
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'campanhas_consultas' AND column_name = 'created_at'
+    ) THEN
+        ALTER TABLE campanhas_consultas RENAME COLUMN created_at TO data_criacao;
+    END IF;
+END $$;
+
+-- 4. Adicionar novos campos em campanhas_consultas
 DO $$
 BEGIN
     -- Adicionar campo descricao
@@ -44,6 +64,22 @@ BEGIN
         WHERE table_name = 'campanhas_consultas' AND column_name = 'task_id'
     ) THEN
         ALTER TABLE campanhas_consultas ADD COLUMN task_id VARCHAR(100);
+    END IF;
+
+    -- Adicionar campo limite_diario (IGUAL à fila)
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'campanhas_consultas' AND column_name = 'limite_diario'
+    ) THEN
+        ALTER TABLE campanhas_consultas ADD COLUMN limite_diario INTEGER DEFAULT 50;
+    END IF;
+
+    -- Adicionar campo dias_duracao (IGUAL à fila)
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'campanhas_consultas' AND column_name = 'dias_duracao'
+    ) THEN
+        ALTER TABLE campanhas_consultas ADD COLUMN dias_duracao INTEGER DEFAULT 0;
     END IF;
 
     -- Adicionar campos de estatísticas
@@ -90,12 +126,13 @@ BEGIN
     END IF;
 END $$;
 
--- 4. Atualizar índices
+-- 5. Atualizar índices
 DROP INDEX IF EXISTS idx_lotes_usuario_id;
 DROP INDEX IF EXISTS idx_lotes_status;
 DROP INDEX IF EXISTS idx_agendamentos_lote_id;
+DROP INDEX IF EXISTS idx_campanhas_usuario_id;
 
-CREATE INDEX IF NOT EXISTS idx_campanhas_usuario_id ON campanhas_consultas(usuario_id);
+CREATE INDEX IF NOT EXISTS idx_campanhas_criador_id ON campanhas_consultas(criador_id);
 CREATE INDEX IF NOT EXISTS idx_campanhas_status ON campanhas_consultas(status);
 CREATE INDEX IF NOT EXISTS idx_agendamentos_campanha_id ON agendamentos_consultas(campanha_id);
 

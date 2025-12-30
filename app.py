@@ -6272,8 +6272,15 @@ def campanha_consultas_detalhe(id):
     campanha.atualizar_stats()
     db.session.commit()
 
+    # Aplicar filtro se fornecido
+    filtro = request.args.get('filtro', 'todos')
+    query = campanha.consultas
+
+    if filtro and filtro != 'todos':
+        query = query.filter_by(status=filtro)
+
     # Listar consultas da campanha
-    consultas = campanha.consultas.order_by(AgendamentoConsulta.created_at.desc()).all()
+    consultas = query.order_by(AgendamentoConsulta.created_at.desc()).all()
 
     # Estatísticas da campanha
     total = campanha.total_consultas

@@ -1364,7 +1364,8 @@ class WhatsApp:
             from flask import request
             if request:
                 # Usar o domínio da requisição atual
-                scheme = request.scheme
+                # Forçar HTTPS para webhook (mesmo que a requisição interna seja HTTP)
+                scheme = 'https'
                 host = request.host
                 webhook_url = f"{scheme}://{host}/webhook/whatsapp"
             else:

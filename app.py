@@ -5966,6 +5966,39 @@ def api_consulta_cancelar(id):
     return jsonify({'sucesso': True, 'mensagem': 'Consulta cancelada'})
 
 
+@app.route('/consultas/lotes')
+@login_required
+def lotes_consultas():
+    """Lista todos os lotes de consultas do usuário"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        flash('Você não tem permissão para acessar esta área.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    # Buscar todos os lotes do usuário
+    lotes = LoteConsultas.query.filter_by(usuario_id=current_user.id).order_by(LoteConsultas.created_at.desc()).all()
+
+    # Calcular estatísticas para cada lote
+    lotes_com_stats = []
+    for lote in lotes:
+        total = lote.consultas.count()
+        aguardando_envio = lote.consultas.filter_by(mensagem_enviada=False).count()
+        enviados = lote.consultas.filter_by(mensagem_enviada=True).count()
+        confirmados = lote.consultas.filter_by(status='CONFIRMADO').count()
+        cancelados = lote.consultas.filter_by(status='CANCELADO').count()
+
+        lotes_com_stats.append({
+            'lote': lote,
+            'total': total,
+            'aguardando_envio': aguardando_envio,
+            'enviados': enviados,
+            'confirmados': confirmados,
+            'cancelados': cancelados,
+            'percentual_enviado': (enviados / total * 100) if total > 0 else 0
+        })
+
+    return render_template('lotes_consultas.html', lotes=lotes_com_stats)
+
+
 @app.route('/consultas/lote/<int:id>')
 @login_required
 def lote_consultas_detalhe(id):

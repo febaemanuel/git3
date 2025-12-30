@@ -5876,12 +5876,12 @@ def consultas_importar():
                 tipo = request.form.get('tipo', 'RETORNO')
 
                 # Criar campanha de consultas
-                nome_lote = request.form.get('nome_lote', f"Lote {tipo} - {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+                nome_lote = request.form.get('nome_lote', f"Campanha {tipo} - {datetime.now().strftime('%d/%m/%Y %H:%M')}")
                 campanha = CampanhaConsulta(
                     nome=nome_lote,
                     criador_id=current_user.id,
                     tipo=tipo,
-                    arquivo=file.filename,
+                    arquivo=arquivo.filename,
                     meta_diaria=int(request.form.get('meta_diaria', 50)),
                     hora_inicio=int(request.form.get('hora_inicio', 8)),
                     hora_fim=int(request.form.get('hora_fim', 18)),
@@ -5936,7 +5936,7 @@ def consultas_importar():
                 os.remove(filepath)
 
                 if importados > 0:
-                    flash(f'{importados} consultas importadas com sucesso no campanha "{campanha.nome}"!', 'success')
+                    flash(f'{importados} consultas importadas com sucesso na campanha "{campanha.nome}"!', 'success')
                     flash('Configure as opções de envio e clique em "Iniciar Envio" quando estiver pronto.', 'info')
                 if erros:
                     flash(f'{len(erros)} erros encontrados. Verifique o log.', 'warning')

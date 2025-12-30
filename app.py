@@ -5975,25 +5975,43 @@ def consultas_importar():
 @app.route('/consultas/listar')
 @login_required
 def consultas_listar():
-    """Listar consultas por status"""
+    """Listar consultas por status e campanha"""
     if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
         flash('Você não tem permissão para acessar esta área.', 'danger')
         return redirect(url_for('dashboard'))
 
     status = request.args.get('status', 'AGUARDANDO_CONFIRMACAO')
+    campanha_id = request.args.get('campanha_id', type=int)
     page = request.args.get('page', 1, type=int)
     per_page = 50
 
-    consultas = AgendamentoConsulta.query.filter_by(
-        usuario_id=current_user.id,
-        status=status
-    ).order_by(AgendamentoConsulta.created_at.desc()).paginate(
+    # Montar query base
+    query = AgendamentoConsulta.query.filter_by(usuario_id=current_user.id)
+
+    # Filtrar por campanha se fornecido
+    if campanha_id:
+        query = query.filter_by(campanha_id=campanha_id)
+
+    # Filtrar por status (se não for 'todos')
+    if status and status != 'todos':
+        query = query.filter_by(status=status)
+
+    consultas = query.order_by(AgendamentoConsulta.created_at.desc()).paginate(
         page=page, per_page=per_page, error_out=False
     )
 
+    # Buscar nome da campanha se filtrado
+    campanha_nome = None
+    if campanha_id:
+        campanha = CampanhaConsulta.query.get(campanha_id)
+        if campanha:
+            campanha_nome = campanha.nome
+
     return render_template('consultas_listar.html',
                          consultas=consultas,
-                         status_atual=status)
+                         status_atual=status,
+                         campanha_id=campanha_id,
+                         campanha_nome=campanha_nome)
 
 
 @app.route('/consultas/<int:id>')
@@ -6152,6 +6170,8 @@ def campanha_consultas_detalhe(id):
     # Estatísticas da campanha
     total = campanha.total_consultas
     aguardando_envio = campanha.consultas.filter_by(status='AGUARDANDO_ENVIO').count()
+    aguardando_confirmacao = campanha.consultas.filter_by(status='AGUARDANDO_CONFIRMACAO').count()
+    aguardando_comprovante = campanha.consultas.filter_by(status='AGUARDANDO_COMPROVANTE').count()
     enviados = campanha.total_enviados
     confirmados = campanha.total_confirmados
     rejeitados = campanha.total_rejeitados
@@ -6162,6 +6182,8 @@ def campanha_consultas_detalhe(id):
                          consultas=consultas,
                          total=total,
                          aguardando_envio=aguardando_envio,
+                         aguardando_confirmacao=aguardando_confirmacao,
+                         aguardando_comprovante=aguardando_comprovante,
                          enviados=enviados,
                          confirmados=confirmados,
                          rejeitados=rejeitados,

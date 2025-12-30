@@ -16,47 +16,77 @@
         </div>
     </div>
 
-    <!-- Cards de Estatísticas -->
+    <!-- Cards de Estatísticas (Clicáveis) -->
     <div class="row g-3 mb-4">
         <div class="col-md-4 col-lg-2">
-            <div class="card stat-card total h-100">
-                <div class="card-body">
-                    <h6 class="text-muted mb-1">Total de Consultas</h6>
-                    <h3 class="mb-0">{{ total }}</h3>
+            <a href="{{ url_for('consultas_listar', status='todos', campanha_id=campanha.id) }}" class="text-decoration-none">
+                <div class="card stat-card total h-100" style="cursor: pointer;">
+                    <div class="card-body">
+                        <h6 class="text-muted mb-1">Total de Consultas</h6>
+                        <h3 class="mb-0">{{ total }}</h3>
+                    </div>
                 </div>
-            </div>
+            </a>
         </div>
         <div class="col-md-4 col-lg-2">
-            <div class="card stat-card enviados h-100">
-                <div class="card-body">
-                    <h6 class="text-muted mb-1">Enviados</h6>
-                    <h3 class="mb-0">{{ enviados }}</h3>
+            <a href="{{ url_for('consultas_listar', status='AGUARDANDO_ENVIO', campanha_id=campanha.id) }}" class="text-decoration-none">
+                <div class="card stat-card h-100" style="cursor: pointer; border-left: 4px solid #6c757d;">
+                    <div class="card-body">
+                        <h6 class="text-muted mb-1">Aguardando Envio</h6>
+                        <h3 class="mb-0">{{ aguardando_envio }}</h3>
+                    </div>
                 </div>
-            </div>
+            </a>
         </div>
         <div class="col-md-4 col-lg-2">
-            <div class="card stat-card confirmados h-100">
-                <div class="card-body">
-                    <h6 class="text-muted mb-1">Confirmados</h6>
-                    <h3 class="mb-0">{{ confirmados }}</h3>
+            <a href="{{ url_for('consultas_listar', status='AGUARDANDO_CONFIRMACAO', campanha_id=campanha.id) }}" class="text-decoration-none">
+                <div class="card stat-card h-100" style="cursor: pointer; border-left: 4px solid #ffc107;">
+                    <div class="card-body">
+                        <h6 class="text-muted mb-1">Aguard. Confirmação</h6>
+                        <h3 class="mb-0">{{ aguardando_confirmacao }}</h3>
+                    </div>
                 </div>
-            </div>
+            </a>
         </div>
         <div class="col-md-4 col-lg-2">
-            <div class="card stat-card rejeitados h-100">
-                <div class="card-body">
-                    <h6 class="text-muted mb-1">Rejeitados</h6>
-                    <h3 class="mb-0">{{ rejeitados }}</h3>
+            <a href="{{ url_for('consultas_listar', status='AGUARDANDO_COMPROVANTE', campanha_id=campanha.id) }}" class="text-decoration-none">
+                <div class="card stat-card h-100" style="cursor: pointer; border-left: 4px solid #0dcaf0;">
+                    <div class="card-body">
+                        <h6 class="text-muted mb-1">Aguard. Comprovante</h6>
+                        <h3 class="mb-0">{{ aguardando_comprovante }}</h3>
+                    </div>
                 </div>
-            </div>
+            </a>
         </div>
         <div class="col-md-4 col-lg-2">
-            <div class="card stat-card erros h-100">
-                <div class="card-body">
-                    <h6 class="text-muted mb-1">Cancelados</h6>
-                    <h3 class="mb-0">{{ cancelados }}</h3>
+            <a href="{{ url_for('consultas_listar', status='CONFIRMADO', campanha_id=campanha.id) }}" class="text-decoration-none">
+                <div class="card stat-card confirmados h-100" style="cursor: pointer;">
+                    <div class="card-body">
+                        <h6 class="text-muted mb-1">Confirmados</h6>
+                        <h3 class="mb-0">{{ confirmados }}</h3>
+                    </div>
                 </div>
-            </div>
+            </a>
+        </div>
+        <div class="col-md-4 col-lg-2">
+            <a href="{{ url_for('consultas_listar', status='REJEITADO', campanha_id=campanha.id) }}" class="text-decoration-none">
+                <div class="card stat-card rejeitados h-100" style="cursor: pointer;">
+                    <div class="card-body">
+                        <h6 class="text-muted mb-1">Rejeitados</h6>
+                        <h3 class="mb-0">{{ rejeitados }}</h3>
+                    </div>
+                </div>
+            </a>
+        </div>
+        <div class="col-md-4 col-lg-2">
+            <a href="{{ url_for('consultas_listar', status='CANCELADO', campanha_id=campanha.id) }}" class="text-decoration-none">
+                <div class="card stat-card erros h-100" style="cursor: pointer;">
+                    <div class="card-body">
+                        <h6 class="text-muted mb-1">Cancelados</h6>
+                        <h3 class="mb-0">{{ cancelados }}</h3>
+                    </div>
+                </div>
+            </a>
         </div>
     </div>
 

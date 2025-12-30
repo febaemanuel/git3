@@ -59,29 +59,28 @@
                         <!-- Configurações de Envio -->
                         <h6 class="mt-4 mb-3">Configurações de Envio</h6>
                         <div class="row mb-3">
-                            <div class="col-md-6">
-                                <label for="meta_diaria" class="form-label">Meta Diária (mensagens/dia)</label>
+                            <div class="col-md-4">
+                                <label for="meta_diaria" class="form-label">Meta Diária</label>
                                 <input type="number" class="form-control" id="meta_diaria" name="meta_diaria"
                                        value="50" min="1" max="500">
+                                <small class="form-text text-muted">Consultas por dia</small>
                             </div>
-                            <div class="col-md-6">
-                                <label for="tempo_entre_envios" class="form-label">Intervalo entre envios (segundos)</label>
-                                <input type="number" class="form-control" id="tempo_entre_envios" name="tempo_entre_envios"
-                                       value="15" min="5" max="60">
-                            </div>
-                        </div>
-
-                        <div class="row mb-4">
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <label for="hora_inicio" class="form-label">Horário de Início</label>
                                 <input type="number" class="form-control" id="hora_inicio" name="hora_inicio"
                                        value="8" min="0" max="23">
+                                <small class="form-text text-muted">Hora de início (0-23)</small>
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <label for="hora_fim" class="form-label">Horário de Término</label>
                                 <input type="number" class="form-control" id="hora_fim" name="hora_fim"
                                        value="18" min="0" max="23">
+                                <small class="form-text text-muted">Hora de término (0-23)</small>
                             </div>
+                        </div>
+
+                        <div class="alert alert-success mb-4">
+                            <i class="bi bi-check-circle"></i> <strong>Intervalo automático:</strong> O intervalo entre envios será calculado automaticamente com base na meta diária e horário de funcionamento.
                         </div>
 
                         <!-- Instruções -->

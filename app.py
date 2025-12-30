@@ -128,6 +128,7 @@ class Usuario(UserMixin, db.Model):
     senha_hash = db.Column(db.String(255), nullable=False)
     ativo = db.Column(db.Boolean, default=True)
     is_admin = db.Column(db.Boolean, default=False)  # Flag de administrador
+    tipo_sistema = db.Column(db.String(50), default='FILA_CIRURGICA')  # FILA_CIRURGICA ou AGENDAMENTO_CONSULTA
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     ultimo_acesso = db.Column(db.DateTime)
 
@@ -644,6 +645,132 @@ class ConfigTentativas(db.Model):
             db.session.add(c)
             db.session.commit()
         return c
+
+
+class LoteConsultas(db.Model):
+    """Lote de consultas importadas com configurações de envio"""
+    __tablename__ = 'lotes_consultas'
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(200), nullable=False)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id', ondelete='SET NULL'))
+    tipo = db.Column(db.String(50))  # RETORNO ou INTERCONSULTA
+
+    # Configurações de envio
+    meta_diaria = db.Column(db.Integer, default=50)
+    hora_inicio = db.Column(db.Integer, default=8)
+    hora_fim = db.Column(db.Integer, default=18)
+    tempo_entre_envios = db.Column(db.Integer, default=15)  # segundos
+
+    # Controle diário
+    enviados_hoje = db.Column(db.Integer, default=0)
+    data_ultimo_envio = db.Column(db.Date)
+
+    # Status
+    status = db.Column(db.String(50), default='pendente')
+    # pendente, enviando, pausado, concluido
+
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    data_inicio = db.Column(db.DateTime)
+    data_fim = db.Column(db.DateTime)
+
+    # Relacionamentos
+    usuario = db.relationship('Usuario', backref='lotes_consultas')
+    consultas = db.relationship('AgendamentoConsulta', backref='lote', lazy='dynamic')
+
+    def pode_enviar_hoje(self):
+        hoje = date.today()
+        if self.data_ultimo_envio != hoje:
+            self.enviados_hoje = 0
+            self.data_ultimo_envio = hoje
+            db.session.commit()
+        return self.enviados_hoje < self.meta_diaria
+
+    def pode_enviar_agora(self):
+        agora = datetime.now().hour
+        return self.hora_inicio <= agora < self.hora_fim
+
+
+class AgendamentoConsulta(db.Model):
+    """Modelo para agendamento de consultas (RETORNO e INTERCONSULTA)"""
+    __tablename__ = 'agendamentos_consultas'
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Relacionamento com usuário que criou
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id', ondelete='SET NULL'))
+    lote_id = db.Column(db.Integer, db.ForeignKey('lotes_consultas.id', ondelete='SET NULL'))
+
+    # Dados da planilha
+    pasta = db.Column(db.String(50))
+    od_maste = db.Column(db.String(50))
+    codigo_agh = db.Column(db.String(50))
+    paciente = db.Column(db.String(200), nullable=False)
+    telefone_cadas = db.Column(db.String(20))
+    telefone_regist = db.Column(db.String(20))
+    tipo = db.Column(db.String(50), nullable=False)  # RETORNO ou INTERCONSULTA
+
+    # Dados da consulta
+    sub_especialidade = db.Column(db.String(200))
+    especialidade = db.Column(db.String(200))
+    grade = db.Column(db.String(50))
+    prioridade = db.Column(db.String(50))
+    data_aghu = db.Column(db.String(50))  # Data da consulta
+    hora_consulta = db.Column(db.String(10))  # Hora da consulta
+    dia_semana = db.Column(db.String(20))
+    unidade_funcional = db.Column(db.String(200))
+    profissional = db.Column(db.String(200))
+
+    # Campo específico para INTERCONSULTA
+    paciente_voltar_posto_sms = db.Column(db.String(10))  # SIM ou NÃO
+
+    # Controle de status
+    status = db.Column(db.String(50), default='AGUARDANDO_CONFIRMACAO')
+    # Status: AGUARDANDO_CONFIRMACAO, AGUARDANDO_COMPROVANTE, CONFIRMADO, CANCELADO, REJEITADO
+
+    # Controle de envio de mensagens (similar à Campanha)
+    mensagem_enviada = db.Column(db.Boolean, default=False)  # Se já foi enviada a mensagem inicial
+    data_envio_mensagem = db.Column(db.DateTime)  # Quando foi enviada
+
+    # Comprovante
+    comprovante_path = db.Column(db.String(255))
+
+    # Observações
+    observacoes = db.Column(db.Text)
+
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    data_confirmacao = db.Column(db.DateTime)
+    data_cancelamento = db.Column(db.DateTime)
+
+    # Relacionamento
+    usuario = db.relationship('Usuario', backref='agendamentos_consultas')
+
+    def get_telefone_principal(self):
+        """Retorna o telefone principal para envio"""
+        return self.telefone_regist if self.telefone_regist else self.telefone_cadas
+
+    def status_badge(self):
+        """Retorna classe CSS do badge baseado no status"""
+        badges = {
+            'AGUARDANDO_CONFIRMACAO': 'bg-warning text-dark',
+            'AGUARDANDO_COMPROVANTE': 'bg-info',
+            'CONFIRMADO': 'bg-success',
+            'CANCELADO': 'bg-secondary',
+            'REJEITADO': 'bg-danger'
+        }
+        return badges.get(self.status, 'bg-light text-dark')
+
+    def status_texto(self):
+        """Retorna texto amigável do status"""
+        textos = {
+            'AGUARDANDO_CONFIRMACAO': 'Aguardando Confirmação',
+            'AGUARDANDO_COMPROVANTE': 'Aguardando Comprovante',
+            'CONFIRMADO': 'Confirmado',
+            'CANCELADO': 'Cancelado',
+            'REJEITADO': 'Rejeitado'
+        }
+        return textos.get(self.status, self.status)
 
 
 class Tutorial(db.Model):
@@ -3359,6 +3486,11 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
+    # Redirecionar para o sistema correto baseado no tipo_sistema do usuário
+    if hasattr(current_user, 'tipo_sistema') and current_user.tipo_sistema == 'AGENDAMENTO_CONSULTA':
+        return redirect(url_for('consultas_dashboard'))
+
+    # Dashboard da Fila Cirúrgica (padrão)
     # Filtrar apenas campanhas do usuario atual
     camps = Campanha.query.filter_by(criador_id=current_user.id).order_by(Campanha.data_criacao.desc()).all()
     for c in camps:
@@ -4408,6 +4540,12 @@ def webhook():
                 c = max(contatos_validos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
 
         if not c:
+            # Não encontrou contato de campanha, verificar se é consulta
+            sucesso_consulta, msg_consulta = processar_resposta_consulta(numero, texto)
+            if sucesso_consulta:
+                logger.info(f"Webhook: Resposta de consulta processada para {numero}")
+                return jsonify({'status': 'ok'}), 200
+
             # Verificar se existem contatos de outros usuários (para debug)
             todos_contatos = [t.contato for t in telefones if t.contato]
             if todos_contatos:
@@ -4415,7 +4553,7 @@ def webhook():
                 logger.warning(f"Webhook: Telefone {numero} não tem campanhas do usuário {usuario_id}. "
                              f"Campanhas existem para usuários: {outros_usuarios}")
             else:
-                logger.warning(f"Webhook: Telefone {numero} não encontrado em nenhuma campanha")
+                logger.warning(f"Webhook: Telefone {numero} não encontrado em nenhuma campanha ou consulta")
             return jsonify({'status': 'ok'}), 200
 
         logger.info(f"Webhook: [{instance_name}] Mensagem de {c.nome} ({numero}). "
@@ -5086,8 +5224,11 @@ def cadastro_publico():
             flash('Email já cadastrado', 'danger')
             return render_template('cadastro.html')
 
+        # Tipo de sistema
+        tipo_sistema = request.form.get('tipo_sistema', 'FILA_CIRURGICA')
+
         # Criar usuário
-        usuario = Usuario(nome=nome, email=email, ativo=True)
+        usuario = Usuario(nome=nome, email=email, ativo=True, tipo_sistema=tipo_sistema)
         usuario.set_password(senha)
         db.session.add(usuario)
         db.session.commit()
@@ -5356,6 +5497,694 @@ def task_cancel(task_id):
         'sucesso': True,
         'task_id': task_id,
         'message': 'Task cancelada'
+    })
+
+
+# =============================================================================
+# FUNCOES - AGENDAMENTO DE CONSULTAS
+# =============================================================================
+
+def formatar_mensagem_consulta(consulta):
+    """Formata mensagem de acordo com tipo e status da consulta"""
+
+    # MSG 2 - INTERCONSULTA com VOLTAR_POSTO = SIM (Rejeição)
+    if consulta.tipo == 'INTERCONSULTA' and consulta.paciente_voltar_posto_sms == 'SIM':
+        return f"""HOSPITAL WALTER CANTIDIO
+Boa tarde! Falo com {consulta.paciente}?
+Sua consulta para o serviço de {consulta.especialidade or 'especialidade'} foi avaliada e por não se encaixar nos critérios do hospital, não foi possível seguir com o agendamento, portanto será necessário procurar um posto de saúde para realizar seu atendimento.
+Agradecemos a compreensão, tenha uma boa tarde!"""
+
+    # MSG 1 - RETORNO ou INTERCONSULTA com VOLTAR_POSTO = NÃO (Confirmação)
+    if consulta.status == 'AGUARDANDO_CONFIRMACAO':
+        return f"""Bom dia!
+Falamos do HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO.
+Estamos informando que a CONSULTA do paciente {consulta.paciente}, foi MARCADA para o dia {consulta.data_aghu or 'DATA'}, com {consulta.profissional or 'PROFISSIONAL'}, com especialidade em {consulta.especialidade or 'ESPECIALIDADE'}.
+
+Caso não haja confirmação em até 1 dia útil, sua consulta será cancelada!
+
+Posso confirmar o agendamento?"""
+
+    # MSG 3 - Confirmação final (após comprovante)
+    if consulta.status == 'CONFIRMADO':
+        return f"""O Hospital Walter Cantídio agradece seu contato. CONSULTA CONFIRMADA!
+
+Responda a pesquisa de satisfação: https://forms.gle/feteZxSNBRd5xfDUA
+
+O hospital entra em contato através do: (85) 992081534 / (85)996700783 / (85)991565903 / (85) 992614237 / (85) 992726080. É importante que atenda as ligações e responda as mensagens desses números. Por tanto, salve-os!
+
+Confira seu comprovante: data, horário e nome do(a) médico(a).
+
+Não fazemos marcação de exames, apenas consultas.
+
+Caso falte, procurar o ambulatório para ser colocado novamente no pré-agendamento.
+
+Você sabia que pode verificar sua consulta no app HU Digital? https://play.google.com/store/apps/details?id=br.gov.ebserh.hudigital&pcampaignid=web_share . Após 5 horas dessa mensagem, verifique sua consulta agendada no app.
+
+Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital."""
+
+    return None
+
+
+def enviar_mensagem_consulta(consulta_id, usuario_id):
+    """Envia mensagem WhatsApp para uma consulta específica"""
+    try:
+        consulta = AgendamentoConsulta.query.get(consulta_id)
+        if not consulta:
+            logger.error(f'Consulta {consulta_id} não encontrada')
+            return False, 'Consulta não encontrada'
+
+        # Obter telefone
+        telefone = consulta.get_telefone_principal()
+        if not telefone:
+            logger.error(f'Consulta {consulta_id} sem telefone')
+            return False, 'Sem telefone'
+
+        # Formatar mensagem
+        mensagem = formatar_mensagem_consulta(consulta)
+        if not mensagem:
+            logger.error(f'Não foi possível formatar mensagem para consulta {consulta_id}')
+            return False, 'Erro ao formatar mensagem'
+
+        # Enviar via WhatsApp
+        ws = WhatsApp(usuario_id)
+        if not ws.ok():
+            logger.error(f'WhatsApp não configurado para usuário {usuario_id}')
+            return False, 'WhatsApp não configurado'
+
+        sucesso, msg_id = ws.enviar(telefone, mensagem)
+
+        if sucesso:
+            logger.info(f'Mensagem enviada para consulta {consulta_id}: {msg_id}')
+            return True, msg_id
+        else:
+            logger.error(f'Erro ao enviar mensagem para consulta {consulta_id}: {msg_id}')
+            return False, msg_id
+
+    except Exception as e:
+        logger.error(f'Erro ao enviar mensagem para consulta {consulta_id}: {str(e)}')
+        return False, str(e)
+
+
+def processar_resposta_consulta(telefone, mensagem_texto):
+    """Processa resposta do paciente sobre agendamento de consulta"""
+    try:
+        # Normalizar telefone (apenas dígitos)
+        telefone_fmt = ''.join(filter(str.isdigit, telefone))
+
+        # Buscar consulta aguardando confirmação ou mensagem enviada recentemente
+        # Busca pelos últimos 8-11 dígitos para cobrir variações (com/sem 9, com/sem DDD completo)
+        consultas = AgendamentoConsulta.query.filter(
+            AgendamentoConsulta.mensagem_enviada == True,
+            AgendamentoConsulta.status == 'AGUARDANDO_CONFIRMACAO'
+        ).all()
+
+        # Filtrar por telefone E validar usuario_id
+        consulta_encontrada = None
+        for consulta in consultas:
+            # Validar que a consulta tem usuario_id válido
+            if not consulta.usuario_id:
+                continue
+
+            tel_cadas = ''.join(filter(str.isdigit, consulta.telefone_cadas or ''))
+            tel_regist = ''.join(filter(str.isdigit, consulta.telefone_regist or ''))
+
+            # Comparar últimos 8-9 dígitos
+            if (telefone_fmt[-9:] == tel_cadas[-9:] or telefone_fmt[-9:] == tel_regist[-9:] or
+                telefone_fmt[-8:] == tel_cadas[-8:] or telefone_fmt[-8:] == tel_regist[-8:]):
+                consulta_encontrada = consulta
+                break
+
+        if not consulta_encontrada:
+            return False, 'Sem consulta pendente'
+
+        consulta = consulta_encontrada
+
+        # Verificar se é uma confirmação
+        msg_upper = mensagem_texto.upper()
+        confirmacoes = ['SIM', 'S', '1', 'CONFIRMO', 'QUERO', 'CONFIRMAR', 'OK', 'POSITIVO']
+        rejeicoes = ['NÃO', 'NAO', 'N', 'CANCELAR', 'CANCELA', 'DESMARCAR', 'DESMARCA', 'RECUSAR', 'RECUSO']
+
+        if any(palavra in msg_upper for palavra in confirmacoes):
+            # Paciente confirmou
+            consulta.status = 'AGUARDANDO_COMPROVANTE'
+            consulta.data_confirmacao = datetime.now()
+            db.session.commit()
+            logger.info(f'Consulta {consulta.id} confirmada pelo paciente via telefone {telefone}')
+
+            # Enviar resposta automática confirmando o recebimento
+            try:
+                ws = WhatsApp(consulta.usuario_id)
+                if ws.ok():
+                    mensagem_resposta = f"""Agradecemos a confirmação!
+
+Agora precisamos que você envie um COMPROVANTE DE RESIDÊNCIA (conta de luz, água ou telefone) para validar seu agendamento.
+
+Por favor, tire uma foto ou envie o PDF do comprovante por este chat.
+
+⚠️ Sem o comprovante, sua consulta será cancelada automaticamente."""
+
+                    ws.enviar(telefone, mensagem_resposta)
+                    logger.info(f'Resposta automática enviada para consulta {consulta.id}')
+            except Exception as e:
+                logger.error(f'Erro ao enviar resposta automática para consulta {consulta.id}: {str(e)}')
+
+            return True, 'Consulta confirmada - aguardando comprovante'
+
+        elif any(palavra in msg_upper for palavra in rejeicoes):
+            # Paciente rejeitou/cancelou
+            consulta.status = 'CANCELADO'
+            consulta.data_cancelamento = datetime.now()
+            consulta.observacoes = (consulta.observacoes or '') + f'\nCancelado pelo paciente via WhatsApp em {datetime.now().strftime("%d/%m/%Y %H:%M")}'
+            db.session.commit()
+            logger.info(f'Consulta {consulta.id} cancelada pelo paciente via telefone {telefone}')
+
+            # Enviar resposta automática confirmando o cancelamento
+            try:
+                ws = WhatsApp(consulta.usuario_id)
+                if ws.ok():
+                    mensagem_resposta = """Sua consulta foi cancelada conforme solicitado.
+
+Caso precise reagendar, entre em contato com o ambulatório.
+
+Obrigado!"""
+
+                    ws.enviar(telefone, mensagem_resposta)
+                    logger.info(f'Resposta de cancelamento enviada para consulta {consulta.id}')
+            except Exception as e:
+                logger.error(f'Erro ao enviar resposta de cancelamento para consulta {consulta.id}: {str(e)}')
+
+            return True, 'Consulta cancelada pelo paciente'
+
+        return False, 'Resposta não reconhecida'
+
+    except Exception as e:
+        logger.error(f'Erro ao processar resposta de consulta: {str(e)}')
+        return False, str(e)
+
+
+# =============================================================================
+# ROTAS - AGENDAMENTO DE CONSULTAS
+# =============================================================================
+
+@app.route('/consultas')
+@login_required
+def consultas_dashboard():
+    """Dashboard de agendamento de consultas"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        flash('Você não tem permissão para acessar esta área.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    # Estatísticas
+    aguardando_confirmacao = AgendamentoConsulta.query.filter_by(
+        usuario_id=current_user.id,
+        status='AGUARDANDO_CONFIRMACAO'
+    ).count()
+
+    aguardando_comprovante = AgendamentoConsulta.query.filter_by(
+        usuario_id=current_user.id,
+        status='AGUARDANDO_COMPROVANTE'
+    ).count()
+
+    confirmados = AgendamentoConsulta.query.filter_by(
+        usuario_id=current_user.id,
+        status='CONFIRMADO'
+    ).count()
+
+    cancelados = AgendamentoConsulta.query.filter_by(
+        usuario_id=current_user.id,
+        status='CANCELADO'
+    ).count()
+
+    rejeitados = AgendamentoConsulta.query.filter_by(
+        usuario_id=current_user.id,
+        status='REJEITADO'
+    ).count()
+
+    # Consultas recentes
+    consultas_recentes = AgendamentoConsulta.query.filter_by(
+        usuario_id=current_user.id
+    ).order_by(AgendamentoConsulta.created_at.desc()).limit(10).all()
+
+    return render_template('consultas_dashboard.html',
+                         aguardando_confirmacao=aguardando_confirmacao,
+                         aguardando_comprovante=aguardando_comprovante,
+                         confirmados=confirmados,
+                         cancelados=cancelados,
+                         rejeitados=rejeitados,
+                         consultas_recentes=consultas_recentes)
+
+
+@app.route('/consultas/importar', methods=['GET', 'POST'])
+@login_required
+def consultas_importar():
+    """Importar planilha de consultas"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        flash('Você não tem permissão para acessar esta área.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        if 'arquivo' not in request.files:
+            flash('Nenhum arquivo enviado.', 'danger')
+            return redirect(request.url)
+
+        arquivo = request.files['arquivo']
+        if arquivo.filename == '':
+            flash('Nenhum arquivo selecionado.', 'danger')
+            return redirect(request.url)
+
+        if arquivo and arquivo.filename.endswith(('.xlsx', '.xls')):
+            try:
+                # Salvar arquivo temporariamente
+                filename = f"consultas_{current_user.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                arquivo.save(filepath)
+
+                # Processar planilha
+                df = pd.read_excel(filepath)
+
+                # Tipo de importação (RETORNO ou INTERCONSULTA)
+                tipo = request.form.get('tipo', 'RETORNO')
+
+                # Criar lote de consultas
+                nome_lote = request.form.get('nome_lote', f"Lote {tipo} - {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+                lote = LoteConsultas(
+                    nome=nome_lote,
+                    usuario_id=current_user.id,
+                    tipo=tipo,
+                    meta_diaria=int(request.form.get('meta_diaria', 50)),
+                    hora_inicio=int(request.form.get('hora_inicio', 8)),
+                    hora_fim=int(request.form.get('hora_fim', 18)),
+                    tempo_entre_envios=int(request.form.get('tempo_entre_envios', 15))
+                )
+                db.session.add(lote)
+                db.session.flush()  # Para pegar o ID do lote
+
+                # Contador de sucesso
+                importados = 0
+                erros = []
+
+                for idx, row in df.iterrows():
+                    try:
+                        consulta = AgendamentoConsulta(
+                            usuario_id=current_user.id,
+                            lote_id=lote.id,
+                            pasta=str(row.get('PASTA', '')) if pd.notna(row.get('PASTA')) else None,
+                            od_maste=str(row.get('OD MASTE', '')) if pd.notna(row.get('OD MASTE')) else None,
+                            codigo_agh=str(row.get('CÓDIGO AGH', '')) if pd.notna(row.get('CÓDIGO AGH')) else None,
+                            paciente=str(row['PACIENTE']),
+                            telefone_cadas=str(row.get('TELEFONE CADAS', '')) if pd.notna(row.get('TELEFONE CADAS')) else None,
+                            telefone_regist=str(row.get('TELEFONE REGIST', '')) if pd.notna(row.get('TELEFONE REGIST')) else None,
+                            tipo=tipo,
+                            sub_especialidade=str(row.get('SUB-ESPECIALIDADE', '')) if pd.notna(row.get('SUB-ESPECIALIDADE')) else None,
+                            especialidade=str(row.get('ESPECIALIDADE', '')) if pd.notna(row.get('ESPECIALIDADE')) else None,
+                            grade=str(row.get('GRADE', '')) if pd.notna(row.get('GRADE')) else None,
+                            prioridade=str(row.get('PRIORIDADE', '')) if pd.notna(row.get('PRIORIDADE')) else None,
+                            data_aghu=str(row.get('DATA AGHU', '')) if pd.notna(row.get('DATA AGHU')) else None,
+                            hora_consulta=str(row.get('HORA CONSULTA', '')) if pd.notna(row.get('HORA CONSULTA')) else None,
+                            dia_semana=str(row.get('DIA SEMANA', '')) if pd.notna(row.get('DIA SEMANA')) else None,
+                            unidade_funcional=str(row.get('UNIDADE FUNCIONAL', '')) if pd.notna(row.get('UNIDADE FUNCIONAL')) else None,
+                            profissional=str(row.get('PROFISSIONAL', '')) if pd.notna(row.get('PROFISSIONAL')) else None,
+                            paciente_voltar_posto_sms=str(row.get('PACIENTE_VOLTAR_POSTO_SMS', 'NÃO')) if tipo == 'INTERCONSULTA' else None
+                        )
+
+                        # Definir status inicial
+                        if tipo == 'INTERCONSULTA' and consulta.paciente_voltar_posto_sms == 'SIM':
+                            consulta.status = 'REJEITADO'
+                        else:
+                            consulta.status = 'AGUARDANDO_CONFIRMACAO'
+
+                        db.session.add(consulta)
+                        importados += 1
+
+                    except Exception as e:
+                        erros.append(f"Linha {idx + 2}: {str(e)}")
+
+                db.session.commit()
+
+                # Remover arquivo temporário
+                os.remove(filepath)
+
+                if importados > 0:
+                    flash(f'{importados} consultas importadas com sucesso no lote "{lote.nome}"!', 'success')
+                    flash('Configure as opções de envio e clique em "Iniciar Envio" quando estiver pronto.', 'info')
+                if erros:
+                    flash(f'{len(erros)} erros encontrados. Verifique o log.', 'warning')
+                    for erro in erros[:5]:  # Mostrar apenas os 5 primeiros erros
+                        flash(erro, 'warning')
+
+                return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+
+            except Exception as e:
+                flash(f'Erro ao processar planilha: {str(e)}', 'danger')
+                logger.error(f'Erro ao importar consultas: {str(e)}')
+                return redirect(request.url)
+        else:
+            flash('Formato de arquivo inválido. Use .xlsx ou .xls', 'danger')
+            return redirect(request.url)
+
+    return render_template('consultas_importar.html')
+
+
+@app.route('/consultas/listar')
+@login_required
+def consultas_listar():
+    """Listar consultas por status"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        flash('Você não tem permissão para acessar esta área.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    status = request.args.get('status', 'AGUARDANDO_CONFIRMACAO')
+    page = request.args.get('page', 1, type=int)
+    per_page = 50
+
+    consultas = AgendamentoConsulta.query.filter_by(
+        usuario_id=current_user.id,
+        status=status
+    ).order_by(AgendamentoConsulta.created_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+
+    return render_template('consultas_listar.html',
+                         consultas=consultas,
+                         status_atual=status)
+
+
+@app.route('/consultas/<int:id>')
+@login_required
+def consulta_detalhe(id):
+    """Detalhes de uma consulta"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        flash('Você não tem permissão para acessar esta área.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    consulta = AgendamentoConsulta.query.get_or_404(id)
+
+    if consulta.usuario_id != current_user.id:
+        flash('Você não tem permissão para visualizar esta consulta.', 'danger')
+        return redirect(url_for('consultas_dashboard'))
+
+    return render_template('consulta_detalhe.html', consulta=consulta)
+
+
+@app.route('/consultas/<int:id>/comprovante', methods=['POST'])
+@login_required
+def consulta_upload_comprovante(id):
+    """Upload de comprovante de consulta"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    consulta = AgendamentoConsulta.query.get_or_404(id)
+
+    if consulta.usuario_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    if consulta.status != 'AGUARDANDO_COMPROVANTE':
+        return jsonify({'sucesso': False, 'mensagem': 'Consulta não está aguardando comprovante'}), 400
+
+    if 'comprovante' not in request.files:
+        return jsonify({'sucesso': False, 'mensagem': 'Nenhum arquivo enviado'}), 400
+
+    arquivo = request.files['comprovante']
+    if arquivo.filename == '':
+        return jsonify({'sucesso': False, 'mensagem': 'Nenhum arquivo selecionado'}), 400
+
+    if arquivo:
+        try:
+            # Salvar comprovante
+            ext = arquivo.filename.rsplit('.', 1)[1].lower() if '.' in arquivo.filename else 'jpg'
+            filename = f"comprovante_{id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            arquivo.save(filepath)
+
+            consulta.comprovante_path = filename
+            consulta.status = 'CONFIRMADO'
+            consulta.data_confirmacao = datetime.utcnow()
+            db.session.commit()
+
+            # Enviar mensagem final via WhatsApp
+            sucesso_msg, msg_id = enviar_mensagem_consulta(consulta.id, current_user.id)
+            if sucesso_msg:
+                logger.info(f'Mensagem de confirmação enviada para consulta {consulta.id}')
+            else:
+                logger.warning(f'Não foi possível enviar mensagem de confirmação: {msg_id}')
+
+            return jsonify({'sucesso': True, 'mensagem': 'Comprovante enviado e mensagem de confirmação enviada!'})
+
+        except Exception as e:
+            logger.error(f'Erro ao fazer upload de comprovante: {str(e)}')
+            return jsonify({'sucesso': False, 'mensagem': f'Erro: {str(e)}'}), 500
+
+
+@app.route('/api/consulta/<int:id>/confirmar', methods=['POST'])
+@login_required
+def api_consulta_confirmar(id):
+    """API para confirmar uma consulta manualmente"""
+    consulta = AgendamentoConsulta.query.get_or_404(id)
+
+    if consulta.usuario_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    if consulta.status == 'AGUARDANDO_CONFIRMACAO':
+        consulta.status = 'AGUARDANDO_COMPROVANTE'
+        db.session.commit()
+        return jsonify({'sucesso': True, 'mensagem': 'Consulta confirmada'})
+    else:
+        return jsonify({'sucesso': False, 'mensagem': 'Status inválido'}), 400
+
+
+@app.route('/api/consulta/<int:id>/cancelar', methods=['POST'])
+@login_required
+def api_consulta_cancelar(id):
+    """API para cancelar uma consulta"""
+    consulta = AgendamentoConsulta.query.get_or_404(id)
+
+    if consulta.usuario_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    consulta.status = 'CANCELADO'
+    consulta.data_cancelamento = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({'sucesso': True, 'mensagem': 'Consulta cancelada'})
+
+
+@app.route('/consultas/lotes')
+@login_required
+def lotes_consultas():
+    """Lista todos os lotes de consultas do usuário"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        flash('Você não tem permissão para acessar esta área.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    # Buscar todos os lotes do usuário
+    lotes = LoteConsultas.query.filter_by(usuario_id=current_user.id).order_by(LoteConsultas.created_at.desc()).all()
+
+    # Calcular estatísticas para cada lote
+    lotes_com_stats = []
+    for lote in lotes:
+        total = lote.consultas.count()
+        aguardando_envio = lote.consultas.filter_by(mensagem_enviada=False).count()
+        enviados = lote.consultas.filter_by(mensagem_enviada=True).count()
+        confirmados = lote.consultas.filter_by(status='CONFIRMADO').count()
+        cancelados = lote.consultas.filter_by(status='CANCELADO').count()
+
+        lotes_com_stats.append({
+            'lote': lote,
+            'total': total,
+            'aguardando_envio': aguardando_envio,
+            'enviados': enviados,
+            'confirmados': confirmados,
+            'cancelados': cancelados,
+            'percentual_enviado': (enviados / total * 100) if total > 0 else 0
+        })
+
+    return render_template('lotes_consultas.html', lotes=lotes_com_stats)
+
+
+@app.route('/consultas/lote/<int:id>')
+@login_required
+def lote_consultas_detalhe(id):
+    """Detalhes e configuração de um lote de consultas"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        flash('Você não tem permissão para acessar esta área.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    lote = LoteConsultas.query.get_or_404(id)
+
+    if lote.usuario_id != current_user.id:
+        flash('Você não tem permissão para visualizar este lote.', 'danger')
+        return redirect(url_for('consultas_dashboard'))
+
+    # Estatísticas do lote
+    total = lote.consultas.count()
+    aguardando_envio = lote.consultas.filter_by(mensagem_enviada=False, status='AGUARDANDO_CONFIRMACAO').count()
+    enviados = lote.consultas.filter_by(mensagem_enviada=True).count()
+    rejeitados = lote.consultas.filter_by(status='REJEITADO').count()
+
+    return render_template('lote_consultas_detalhe.html',
+                         lote=lote,
+                         total=total,
+                         aguardando_envio=aguardando_envio,
+                         enviados=enviados,
+                         rejeitados=rejeitados)
+
+
+@app.route('/consultas/lote/<int:id>/iniciar', methods=['POST'])
+@login_required
+def lote_consultas_iniciar(id):
+    """Inicia envio controlado de mensagens do lote"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    lote = LoteConsultas.query.get_or_404(id)
+
+    if lote.usuario_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    if lote.status == 'enviando':
+        return jsonify({'sucesso': False, 'mensagem': 'Lote já está em envio'}), 400
+
+    # Atualizar configurações do lote se enviadas
+    lote.meta_diaria = int(request.form.get('meta_diaria', lote.meta_diaria))
+    lote.hora_inicio = int(request.form.get('hora_inicio', lote.hora_inicio))
+    lote.hora_fim = int(request.form.get('hora_fim', lote.hora_fim))
+    lote.tempo_entre_envios = int(request.form.get('tempo_entre_envios', lote.tempo_entre_envios))
+
+    lote.status = 'enviando'
+    lote.data_inicio = datetime.utcnow()
+    db.session.commit()
+
+    # Iniciar envio em background (sem Celery por enquanto, vamos fazer síncrono controlado)
+    flash('Envio iniciado! As mensagens serão enviadas respeitando a meta diária e horário configurados.', 'success')
+
+    return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+
+
+@app.route('/consultas/lote/<int:id>/pausar', methods=['POST'])
+@login_required
+def lote_consultas_pausar(id):
+    """Pausa o envio controlado de mensagens do lote"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    lote = LoteConsultas.query.get_or_404(id)
+
+    if lote.usuario_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    if lote.status != 'enviando':
+        flash('O lote não está em modo de envio.', 'warning')
+        return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+
+    lote.status = 'pausado'
+    db.session.commit()
+
+    flash('Envio pausado com sucesso!', 'success')
+    return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+
+
+@app.route('/consultas/lote/<int:id>/continuar', methods=['POST'])
+@login_required
+def lote_consultas_continuar(id):
+    """Continua o envio de um lote pausado"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    lote = LoteConsultas.query.get_or_404(id)
+
+    if lote.usuario_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    if lote.status != 'pausado':
+        flash('O lote não está pausado.', 'warning')
+        return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+
+    lote.status = 'enviando'
+    db.session.commit()
+
+    flash('Envio retomado com sucesso!', 'success')
+    return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+
+
+@app.route('/consultas/lote/<int:id>/atualizar', methods=['POST'])
+@login_required
+def lote_consultas_atualizar(id):
+    """Atualiza configurações do lote (meta, horários, intervalo)"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    lote = LoteConsultas.query.get_or_404(id)
+
+    if lote.usuario_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    # Atualizar configurações
+    lote.meta_diaria = int(request.form.get('meta_diaria', lote.meta_diaria))
+    lote.hora_inicio = int(request.form.get('hora_inicio', lote.hora_inicio))
+    lote.hora_fim = int(request.form.get('hora_fim', lote.hora_fim))
+    lote.tempo_entre_envios = int(request.form.get('tempo_entre_envios', lote.tempo_entre_envios))
+
+    db.session.commit()
+
+    flash('Configurações atualizadas com sucesso!', 'success')
+    return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+
+
+@app.route('/api/consultas/lote/<int:id>/enviar_proximas', methods=['POST'])
+@login_required
+def api_enviar_proximas_consultas(id):
+    """Envia próximas mensagens do lote respeitando limites"""
+    lote = LoteConsultas.query.get_or_404(id)
+
+    if lote.usuario_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    if lote.status != 'enviando':
+        return jsonify({'sucesso': False, 'mensagem': 'Lote não está em modo de envio'}), 400
+
+    # Verificar se pode enviar agora
+    if not lote.pode_enviar_agora():
+        return jsonify({'sucesso': False, 'mensagem': 'Fora do horário de envio'}), 400
+
+    if not lote.pode_enviar_hoje():
+        return jsonify({'sucesso': False, 'mensagem': 'Meta diária atingida'}), 400
+
+    # Buscar consultas pendentes de envio
+    consultas_pendentes = lote.consultas.filter_by(
+        mensagem_enviada=False
+    ).filter(
+        AgendamentoConsulta.status.in_(['AGUARDANDO_CONFIRMACAO', 'REJEITADO'])
+    ).limit(lote.meta_diaria - lote.enviados_hoje).all()
+
+    enviados = 0
+    for consulta in consultas_pendentes:
+        if not lote.pode_enviar_hoje():
+            break
+
+        sucesso, msg_id = enviar_mensagem_consulta(consulta.id, current_user.id)
+        if sucesso:
+            consulta.mensagem_enviada = True
+            consulta.data_envio_mensagem = datetime.utcnow()
+            lote.enviados_hoje += 1
+            enviados += 1
+            db.session.commit()
+            time.sleep(lote.tempo_entre_envios)
+        else:
+            logger.error(f'Erro ao enviar consulta {consulta.id}: {msg_id}')
+
+    # Verificar se terminou
+    pendentes = lote.consultas.filter_by(mensagem_enviada=False).count()
+    if pendentes == 0:
+        lote.status = 'concluido'
+        lote.data_fim = datetime.utcnow()
+        db.session.commit()
+
+    return jsonify({
+        'sucesso': True,
+        'enviados': enviados,
+        'pendentes': pendentes,
+        'meta_diaria': lote.meta_diaria,
+        'enviados_hoje': lote.enviados_hoje
     })
 
 

@@ -7,7 +7,10 @@
     <div class="row mb-4">
         <div class="col-12">
             <div class="d-flex justify-content-between align-items-center">
-                <h2><i class="bi bi-calendar-check"></i> Agendamento de Consultas</h2>
+                <div>
+                    <h2><i class="bi bi-calendar-check"></i> Agendamento de Consultas</h2>
+                    <p class="text-muted mb-0">Gerencie suas campanhas de consultas</p>
+                </div>
                 <a href="{{ url_for('consultas_importar') }}" class="btn btn-primary">
                     <i class="bi bi-upload"></i> Importar Planilha
                 </a>
@@ -15,8 +18,24 @@
         </div>
     </div>
 
-    <!-- Estatísticas -->
+    <!-- Estatísticas Gerais -->
     <div class="row g-3 mb-4">
+        <div class="col-md-4 col-lg-2">
+            <div class="card stat-card total">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="text-muted mb-1">Campanhas</h6>
+                            <h3 class="mb-0">{{ campanhas|length }}</h3>
+                        </div>
+                        <div class="ms-2">
+                            <i class="bi bi-folder fs-1 text-primary"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="col-md-4 col-lg-2">
             <div class="card stat-card total">
                 <div class="card-body">
@@ -98,8 +117,107 @@
         </div>
     </div>
 
+    <!-- Lista de Campanhas -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-list-ul"></i> Campanhas</span>
+                    <span class="badge bg-secondary">{{ campanhas|length }} campanhas</span>
+                </div>
+                <div class="card-body p-0">
+                    {% if campanhas %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Nome</th>
+                                    <th class="text-center">Status</th>
+                                    <th class="text-center">Consultas</th>
+                                    <th class="text-center">Enviados</th>
+                                    <th class="text-center">Confirmados</th>
+                                    <th class="text-center">Rejeitados</th>
+                                    <th>Progresso</th>
+                                    <th>Data</th>
+                                    <th class="text-center">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for campanha in campanhas %}
+                                <tr style="cursor: pointer;" onclick="window.location='{{ url_for('campanha_consultas_detalhe', id=campanha.id) }}'">
+                                    <td>
+                                        <strong>{{ campanha.nome }}</strong>
+                                        {% if campanha.tipo %}
+                                        <br><small class="text-muted">{{ campanha.tipo }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        {% if campanha.status == 'pendente' %}
+                                        <span class="badge bg-secondary">Pendente</span>
+                                        {% elif campanha.status == 'enviando' %}
+                                        <span class="badge bg-primary">
+                                            <span class="spinner-border spinner-border-sm" role="status"></span>
+                                            Enviando
+                                        </span>
+                                        {% elif campanha.status == 'pausado' %}
+                                        <span class="badge bg-warning">Pausado</span>
+                                        {% elif campanha.status == 'concluido' %}
+                                        <span class="badge bg-success">Concluído</span>
+                                        {% else %}
+                                        <span class="badge bg-secondary">{{ campanha.status }}</span>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">{{ campanha.total_consultas }}</td>
+                                    <td class="text-center">
+                                        <span class="text-info">{{ campanha.total_enviados }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="text-success">{{ campanha.total_confirmados }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="text-danger">{{ campanha.total_rejeitados }}</span>
+                                    </td>
+                                    <td>
+                                        <div class="progress" style="height: 20px;">
+                                            <div class="progress-bar" role="progressbar"
+                                                 style="width: {{ campanha.percentual_conclusao() }}%">
+                                                {{ campanha.percentual_conclusao() }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <small>{{ campanha.data_criacao.strftime('%d/%m/%Y') if campanha.data_criacao else '-' }}</small>
+                                    </td>
+                                    <td class="text-center" onclick="event.stopPropagation();">
+                                        <div class="btn-group btn-group-sm">
+                                            <a href="{{ url_for('campanha_consultas_detalhe', id=campanha.id) }}"
+                                               class="btn btn-outline-primary" title="Ver detalhes">
+                                                <i class="bi bi-eye"></i>
+                                            </a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-inbox text-muted" style="font-size: 4rem;"></i>
+                        <h5 class="mt-3">Nenhuma campanha criada</h5>
+                        <p class="text-muted">Clique em "Importar Planilha" para começar</p>
+                        <a href="{{ url_for('consultas_importar') }}" class="btn btn-primary mt-2">
+                            <i class="bi bi-upload"></i> Importar Planilha
+                        </a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Ações Rápidas -->
-    <div class="row mb-4">
+    <div class="row mt-4">
         <div class="col-12">
             <div class="card">
                 <div class="card-header">
@@ -116,57 +234,10 @@
                         <a href="{{ url_for('consultas_listar', status='CONFIRMADO') }}" class="btn btn-outline-success">
                             <i class="bi bi-check-circle"></i> Ver Confirmados
                         </a>
+                        <a href="{{ url_for('campanhas_consultas') }}" class="btn btn-outline-primary">
+                            <i class="bi bi-folder-open"></i> Gerenciar Campanhas
+                        </a>
                     </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Consultas Recentes -->
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <i class="bi bi-list-ul"></i> Consultas Recentes
-                </div>
-                <div class="card-body">
-                    {% if consultas_recentes %}
-                    <div class="table-responsive">
-                        <table class="table table-hover">
-                            <thead>
-                                <tr>
-                                    <th>Paciente</th>
-                                    <th>Tipo</th>
-                                    <th>Especialidade</th>
-                                    <th>Data Consulta</th>
-                                    <th>Status</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for consulta in consultas_recentes %}
-                                <tr>
-                                    <td>{{ consulta.paciente }}</td>
-                                    <td><span class="badge bg-secondary">{{ consulta.tipo }}</span></td>
-                                    <td>{{ consulta.especialidade }}</td>
-                                    <td>{{ consulta.data_aghu }}</td>
-                                    <td><span class="badge {{ consulta.status_badge() }}">{{ consulta.status_texto() }}</span></td>
-                                    <td>
-                                        <a href="{{ url_for('consulta_detalhe', id=consulta.id) }}" class="btn btn-sm btn-outline-primary">
-                                            <i class="bi bi-eye"></i> Ver
-                                        </a>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    {% else %}
-                    <div class="alert alert-info mb-0">
-                        <i class="bi bi-info-circle"></i> Nenhuma consulta cadastrada ainda.
-                        <a href="{{ url_for('consultas_importar') }}">Importe uma planilha</a> para começar.
-                    </div>
-                    {% endif %}
                 </div>
             </div>
         </div>

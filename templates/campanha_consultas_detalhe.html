@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 
-{% block title %}Lote: {{ campanha.nome }}{% endblock %}
+{% block title %}Campanha: {{ campanha.nome }}{% endblock %}
 
 {% block content %}
 <div class="container-fluid mt-4">
@@ -10,7 +10,7 @@
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
                     <li class="breadcrumb-item"><a href="{{ url_for('consultas_dashboard') }}">Consultas</a></li>
-                    <li class="breadcrumb-item active">Lote</li>
+                    <li class="breadcrumb-item active">Campanha</li>
                 </ol>
             </nav>
         </div>
@@ -60,7 +60,7 @@
                     <i class="bi bi-gear"></i> Configurações de Envio
                 </div>
                 <div class="card-body">
-                    <form method="POST" action="{% if campanha.status == 'pendente' %}{{ url_for('lote_consultas_iniciar', id=campanha.id) }}{% else %}{{ url_for('lote_consultas_atualizar', id=campanha.id) }}{% endif %}" id="formConfig">
+                    <form method="POST" action="{% if campanha.status == 'pendente' %}{{ url_for('campanha_consultas_iniciar', id=campanha.id) }}{% else %}{{ url_for('campanha_consultas_atualizar', id=campanha.id) }}{% endif %}" id="formConfig">
                         <div class="mb-3">
                             <label class="form-label">Meta Diária</label>
                             <input type="number" class="form-control" name="meta_diaria" value="{{ campanha.meta_diaria }}" min="1" {% if campanha.status == 'concluido' %}disabled{% endif %}>
@@ -91,7 +91,7 @@
                             <button type="button" class="btn btn-primary" onclick="enviarProximas()">
                                 <i class="bi bi-send"></i> Enviar Próximas Mensagens
                             </button>
-                            <form method="POST" action="{{ url_for('lote_consultas_pausar', id=campanha.id) }}" style="margin: 0;">
+                            <form method="POST" action="{{ url_for('campanha_consultas_pausar', id=campanha.id) }}" style="margin: 0;">
                                 <button type="submit" class="btn btn-warning w-100">
                                     <i class="bi bi-pause-fill"></i> Pausar Envio
                                 </button>
@@ -106,7 +106,7 @@
                             <i class="bi bi-pause-circle"></i> Envio pausado
                         </div>
                         <div class="d-grid gap-2">
-                            <form method="POST" action="{{ url_for('lote_consultas_continuar', id=campanha.id) }}" style="margin: 0;">
+                            <form method="POST" action="{{ url_for('campanha_consultas_continuar', id=campanha.id) }}" style="margin: 0;">
                                 <button type="submit" class="btn btn-success w-100">
                                     <i class="bi bi-play-fill"></i> Continuar Envio
                                 </button>
@@ -129,7 +129,7 @@
         <div class="col-lg-6 mb-4">
             <div class="card">
                 <div class="card-header">
-                    <i class="bi bi-info-circle"></i> Informações do Lote
+                    <i class="bi bi-info-circle"></i> Informações da Campanha
                 </div>
                 <div class="card-body">
                     <table class="table table-sm">
@@ -153,7 +153,7 @@
                         </tr>
                         <tr>
                             <th>Criado em:</th>
-                            <td>{{ campanha.created_at.strftime('%d/%m/%Y %H:%M') if campanha.created_at else '-' }}</td>
+                            <td>{{ campanha.data_criacao.strftime('%d/%m/%Y %H:%M') if campanha.data_criacao else '-' }}</td>
                         </tr>
                         {% if campanha.data_inicio %}
                         <tr>

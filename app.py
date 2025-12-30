@@ -5928,6 +5928,16 @@ def consultas_importar():
                         grade = row.get('GRADE_AGHU') or row.get('GRADE')
                         profissional = row.get('MEDICO_SOLICITANTE') or row.get('PROFISSIONAL')
 
+                        # Limpar telefones - pegar apenas o primeiro se houver múltiplos (separados por / ou espaço)
+                        if pd.notna(telefone_cadas):
+                            telefone_cadas = str(telefone_cadas).split('/')[0].strip()
+                            # Remover espaços em branco
+                            telefone_cadas = ''.join(telefone_cadas.split())
+                        if pd.notna(telefone_regist):
+                            telefone_regist = str(telefone_regist).split('/')[0].strip()
+                            # Remover espaços em branco
+                            telefone_regist = ''.join(telefone_regist.split())
+
                         consulta = AgendamentoConsulta(
                             usuario_id=current_user.id,
                             campanha_id=campanha.id,

@@ -647,13 +647,29 @@ class ConfigTentativas(db.Model):
         return c
 
 
-class LoteConsultas(db.Model):
-    """Lote de consultas importadas com configurações de envio"""
-    __tablename__ = 'lotes_consultas'
+class CampanhaConsulta(db.Model):
+    """Campanha de consultas (RETORNO e INTERCONSULTA) com controle de envio"""
+    __tablename__ = 'campanhas_consultas'
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(200), nullable=False)
+    descricao = db.Column(db.Text)
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id', ondelete='SET NULL'))
     tipo = db.Column(db.String(50))  # RETORNO ou INTERCONSULTA
+    arquivo = db.Column(db.String(255))  # Nome do arquivo importado
+
+    # Status e controle de task
+    status = db.Column(db.String(50), default='pendente')
+    # pendente, enviando, pausado, concluido
+    status_msg = db.Column(db.String(255))
+    task_id = db.Column(db.String(100))  # ID da task Celery
+
+    # Estatísticas
+    total_consultas = db.Column(db.Integer, default=0)
+    total_enviados = db.Column(db.Integer, default=0)
+    total_confirmados = db.Column(db.Integer, default=0)
+    total_aguardando_comprovante = db.Column(db.Integer, default=0)
+    total_cancelados = db.Column(db.Integer, default=0)
+    total_rejeitados = db.Column(db.Integer, default=0)
 
     # Configurações de envio
     meta_diaria = db.Column(db.Integer, default=50)
@@ -665,18 +681,24 @@ class LoteConsultas(db.Model):
     enviados_hoje = db.Column(db.Integer, default=0)
     data_ultimo_envio = db.Column(db.Date)
 
-    # Status
-    status = db.Column(db.String(50), default='pendente')
-    # pendente, enviando, pausado, concluido
-
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     data_inicio = db.Column(db.DateTime)
     data_fim = db.Column(db.DateTime)
 
     # Relacionamentos
-    usuario = db.relationship('Usuario', backref='lotes_consultas')
-    consultas = db.relationship('AgendamentoConsulta', backref='lote', lazy='dynamic')
+    usuario = db.relationship('Usuario', backref='campanhas_consultas')
+    consultas = db.relationship('AgendamentoConsulta', backref='campanha', lazy='dynamic')
+
+    def atualizar_stats(self):
+        """Atualiza estatísticas da campanha"""
+        self.total_consultas = self.consultas.count()
+        self.total_enviados = self.consultas.filter_by(mensagem_enviada=True).count()
+        self.total_confirmados = self.consultas.filter_by(status='CONFIRMADO').count()
+        self.total_aguardando_comprovante = self.consultas.filter_by(status='AGUARDANDO_COMPROVANTE').count()
+        self.total_cancelados = self.consultas.filter_by(status='CANCELADO').count()
+        self.total_rejeitados = self.consultas.filter_by(status='REJEITADO').count()
+        db.session.commit()
 
     def pode_enviar_hoje(self):
         hoje = date.today()
@@ -698,7 +720,7 @@ class AgendamentoConsulta(db.Model):
 
     # Relacionamento com usuário que criou
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id', ondelete='SET NULL'))
-    lote_id = db.Column(db.Integer, db.ForeignKey('lotes_consultas.id', ondelete='SET NULL'))
+    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas_consultas.id', ondelete='SET NULL'))
 
     # Dados da planilha
     pasta = db.Column(db.String(50))
@@ -2051,15 +2073,15 @@ def validar_campanha_bg(campanha_id):
             # Processa em lotes
             batch = 50
             for i in range(0, total, batch):
-                lote = telefones[i:i+batch]
-                nums = [t.numero_fmt for t in lote]
+                campanha = telefones[i:i+batch]
+                nums = [t.numero_fmt for t in campanha]
 
-                camp.status_msg = f'Verificando {i+len(lote)}/{total}...'
+                camp.status_msg = f'Verificando {i+len(campanha)}/{total}...'
                 db.session.commit()
 
                 result = ws.verificar_numeros(nums)
 
-                for t in lote:
+                for t in campanha:
                     info = result.get(t.numero_fmt, {})
                     t.whatsapp_valido = info.get('exists', False)
                     t.jid = info.get('jid', '')
@@ -5765,9 +5787,9 @@ def consultas_importar():
                 # Tipo de importação (RETORNO ou INTERCONSULTA)
                 tipo = request.form.get('tipo', 'RETORNO')
 
-                # Criar lote de consultas
+                # Criar campanha de consultas
                 nome_lote = request.form.get('nome_lote', f"Lote {tipo} - {datetime.now().strftime('%d/%m/%Y %H:%M')}")
-                lote = LoteConsultas(
+                campanha = CampanhaConsulta(
                     nome=nome_lote,
                     usuario_id=current_user.id,
                     tipo=tipo,
@@ -5776,8 +5798,8 @@ def consultas_importar():
                     hora_fim=int(request.form.get('hora_fim', 18)),
                     tempo_entre_envios=int(request.form.get('tempo_entre_envios', 15))
                 )
-                db.session.add(lote)
-                db.session.flush()  # Para pegar o ID do lote
+                db.session.add(campanha)
+                db.session.flush()  # Para pegar o ID do campanha
 
                 # Contador de sucesso
                 importados = 0
@@ -5787,7 +5809,7 @@ def consultas_importar():
                     try:
                         consulta = AgendamentoConsulta(
                             usuario_id=current_user.id,
-                            lote_id=lote.id,
+                            campanha_id=campanha.id,
                             pasta=str(row.get('PASTA', '')) if pd.notna(row.get('PASTA')) else None,
                             od_maste=str(row.get('OD MASTE', '')) if pd.notna(row.get('OD MASTE')) else None,
                             codigo_agh=str(row.get('CÓDIGO AGH', '')) if pd.notna(row.get('CÓDIGO AGH')) else None,
@@ -5825,14 +5847,14 @@ def consultas_importar():
                 os.remove(filepath)
 
                 if importados > 0:
-                    flash(f'{importados} consultas importadas com sucesso no lote "{lote.nome}"!', 'success')
+                    flash(f'{importados} consultas importadas com sucesso no campanha "{campanha.nome}"!', 'success')
                     flash('Configure as opções de envio e clique em "Iniciar Envio" quando estiver pronto.', 'info')
                 if erros:
                     flash(f'{len(erros)} erros encontrados. Verifique o log.', 'warning')
                     for erro in erros[:5]:  # Mostrar apenas os 5 primeiros erros
                         flash(erro, 'warning')
 
-                return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+                return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
 
             except Exception as e:
                 flash(f'Erro ao processar planilha: {str(e)}', 'danger')
@@ -5970,26 +5992,26 @@ def api_consulta_cancelar(id):
 
 @app.route('/consultas/lotes')
 @login_required
-def lotes_consultas():
+def campanhas_consultas():
     """Lista todos os lotes de consultas do usuário"""
     if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
         flash('Você não tem permissão para acessar esta área.', 'danger')
         return redirect(url_for('dashboard'))
 
     # Buscar todos os lotes do usuário
-    lotes = LoteConsultas.query.filter_by(usuario_id=current_user.id).order_by(LoteConsultas.created_at.desc()).all()
+    lotes = CampanhaConsulta.query.filter_by(usuario_id=current_user.id).order_by(CampanhaConsulta.created_at.desc()).all()
 
-    # Calcular estatísticas para cada lote
+    # Calcular estatísticas para cada campanha
     lotes_com_stats = []
-    for lote in lotes:
-        total = lote.consultas.count()
-        aguardando_envio = lote.consultas.filter_by(mensagem_enviada=False).count()
-        enviados = lote.consultas.filter_by(mensagem_enviada=True).count()
-        confirmados = lote.consultas.filter_by(status='CONFIRMADO').count()
-        cancelados = lote.consultas.filter_by(status='CANCELADO').count()
+    for campanha in lotes:
+        total = campanha.consultas.count()
+        aguardando_envio = campanha.consultas.filter_by(mensagem_enviada=False).count()
+        enviados = campanha.consultas.filter_by(mensagem_enviada=True).count()
+        confirmados = campanha.consultas.filter_by(status='CONFIRMADO').count()
+        cancelados = campanha.consultas.filter_by(status='CANCELADO').count()
 
         lotes_com_stats.append({
-            'lote': lote,
+            'campanha': campanha,
             'total': total,
             'aguardando_envio': aguardando_envio,
             'enviados': enviados,
@@ -5998,193 +6020,193 @@ def lotes_consultas():
             'percentual_enviado': (enviados / total * 100) if total > 0 else 0
         })
 
-    return render_template('lotes_consultas.html', lotes=lotes_com_stats)
+    return render_template('campanhas_consultas.html', lotes=lotes_com_stats)
 
 
-@app.route('/consultas/lote/<int:id>')
+@app.route('/consultas/campanha/<int:id>')
 @login_required
-def lote_consultas_detalhe(id):
-    """Detalhes e configuração de um lote de consultas"""
+def campanha_consultas_detalhe(id):
+    """Detalhes e configuração de um campanha de consultas"""
     if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
         flash('Você não tem permissão para acessar esta área.', 'danger')
         return redirect(url_for('dashboard'))
 
-    lote = LoteConsultas.query.get_or_404(id)
+    campanha = CampanhaConsulta.query.get_or_404(id)
 
-    if lote.usuario_id != current_user.id:
-        flash('Você não tem permissão para visualizar este lote.', 'danger')
+    if campanha.usuario_id != current_user.id:
+        flash('Você não tem permissão para visualizar este campanha.', 'danger')
         return redirect(url_for('consultas_dashboard'))
 
-    # Estatísticas do lote
-    total = lote.consultas.count()
-    aguardando_envio = lote.consultas.filter_by(mensagem_enviada=False, status='AGUARDANDO_CONFIRMACAO').count()
-    enviados = lote.consultas.filter_by(mensagem_enviada=True).count()
-    rejeitados = lote.consultas.filter_by(status='REJEITADO').count()
+    # Estatísticas do campanha
+    total = campanha.consultas.count()
+    aguardando_envio = campanha.consultas.filter_by(mensagem_enviada=False, status='AGUARDANDO_CONFIRMACAO').count()
+    enviados = campanha.consultas.filter_by(mensagem_enviada=True).count()
+    rejeitados = campanha.consultas.filter_by(status='REJEITADO').count()
 
-    return render_template('lote_consultas_detalhe.html',
-                         lote=lote,
+    return render_template('campanha_consultas_detalhe.html',
+                         campanha=campanha,
                          total=total,
                          aguardando_envio=aguardando_envio,
                          enviados=enviados,
                          rejeitados=rejeitados)
 
 
-@app.route('/consultas/lote/<int:id>/iniciar', methods=['POST'])
+@app.route('/consultas/campanha/<int:id>/iniciar', methods=['POST'])
 @login_required
-def lote_consultas_iniciar(id):
-    """Inicia envio controlado de mensagens do lote"""
+def campanha_consultas_iniciar(id):
+    """Inicia envio controlado de mensagens do campanha"""
     if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
-    lote = LoteConsultas.query.get_or_404(id)
+    campanha = CampanhaConsulta.query.get_or_404(id)
 
-    if lote.usuario_id != current_user.id:
+    if campanha.usuario_id != current_user.id:
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
-    if lote.status == 'enviando':
+    if campanha.status == 'enviando':
         return jsonify({'sucesso': False, 'mensagem': 'Lote já está em envio'}), 400
 
-    # Atualizar configurações do lote se enviadas
-    lote.meta_diaria = int(request.form.get('meta_diaria', lote.meta_diaria))
-    lote.hora_inicio = int(request.form.get('hora_inicio', lote.hora_inicio))
-    lote.hora_fim = int(request.form.get('hora_fim', lote.hora_fim))
-    lote.tempo_entre_envios = int(request.form.get('tempo_entre_envios', lote.tempo_entre_envios))
+    # Atualizar configurações do campanha se enviadas
+    campanha.meta_diaria = int(request.form.get('meta_diaria', campanha.meta_diaria))
+    campanha.hora_inicio = int(request.form.get('hora_inicio', campanha.hora_inicio))
+    campanha.hora_fim = int(request.form.get('hora_fim', campanha.hora_fim))
+    campanha.tempo_entre_envios = int(request.form.get('tempo_entre_envios', campanha.tempo_entre_envios))
 
-    lote.status = 'enviando'
-    lote.data_inicio = datetime.utcnow()
+    campanha.status = 'enviando'
+    campanha.data_inicio = datetime.utcnow()
     db.session.commit()
 
     # Iniciar envio em background (sem Celery por enquanto, vamos fazer síncrono controlado)
     flash('Envio iniciado! As mensagens serão enviadas respeitando a meta diária e horário configurados.', 'success')
 
-    return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+    return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
 
 
-@app.route('/consultas/lote/<int:id>/pausar', methods=['POST'])
+@app.route('/consultas/campanha/<int:id>/pausar', methods=['POST'])
 @login_required
-def lote_consultas_pausar(id):
-    """Pausa o envio controlado de mensagens do lote"""
+def campanha_consultas_pausar(id):
+    """Pausa o envio controlado de mensagens do campanha"""
     if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
-    lote = LoteConsultas.query.get_or_404(id)
+    campanha = CampanhaConsulta.query.get_or_404(id)
 
-    if lote.usuario_id != current_user.id:
+    if campanha.usuario_id != current_user.id:
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
-    if lote.status != 'enviando':
-        flash('O lote não está em modo de envio.', 'warning')
-        return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+    if campanha.status != 'enviando':
+        flash('O campanha não está em modo de envio.', 'warning')
+        return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
 
-    lote.status = 'pausado'
+    campanha.status = 'pausado'
     db.session.commit()
 
     flash('Envio pausado com sucesso!', 'success')
-    return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+    return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
 
 
-@app.route('/consultas/lote/<int:id>/continuar', methods=['POST'])
+@app.route('/consultas/campanha/<int:id>/continuar', methods=['POST'])
 @login_required
-def lote_consultas_continuar(id):
-    """Continua o envio de um lote pausado"""
+def campanha_consultas_continuar(id):
+    """Continua o envio de um campanha pausado"""
     if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
-    lote = LoteConsultas.query.get_or_404(id)
+    campanha = CampanhaConsulta.query.get_or_404(id)
 
-    if lote.usuario_id != current_user.id:
+    if campanha.usuario_id != current_user.id:
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
-    if lote.status != 'pausado':
-        flash('O lote não está pausado.', 'warning')
-        return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+    if campanha.status != 'pausado':
+        flash('O campanha não está pausado.', 'warning')
+        return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
 
-    lote.status = 'enviando'
+    campanha.status = 'enviando'
     db.session.commit()
 
     flash('Envio retomado com sucesso!', 'success')
-    return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+    return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
 
 
-@app.route('/consultas/lote/<int:id>/atualizar', methods=['POST'])
+@app.route('/consultas/campanha/<int:id>/atualizar', methods=['POST'])
 @login_required
-def lote_consultas_atualizar(id):
-    """Atualiza configurações do lote (meta, horários, intervalo)"""
+def campanha_consultas_atualizar(id):
+    """Atualiza configurações do campanha (meta, horários, intervalo)"""
     if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
-    lote = LoteConsultas.query.get_or_404(id)
+    campanha = CampanhaConsulta.query.get_or_404(id)
 
-    if lote.usuario_id != current_user.id:
+    if campanha.usuario_id != current_user.id:
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
     # Atualizar configurações
-    lote.meta_diaria = int(request.form.get('meta_diaria', lote.meta_diaria))
-    lote.hora_inicio = int(request.form.get('hora_inicio', lote.hora_inicio))
-    lote.hora_fim = int(request.form.get('hora_fim', lote.hora_fim))
-    lote.tempo_entre_envios = int(request.form.get('tempo_entre_envios', lote.tempo_entre_envios))
+    campanha.meta_diaria = int(request.form.get('meta_diaria', campanha.meta_diaria))
+    campanha.hora_inicio = int(request.form.get('hora_inicio', campanha.hora_inicio))
+    campanha.hora_fim = int(request.form.get('hora_fim', campanha.hora_fim))
+    campanha.tempo_entre_envios = int(request.form.get('tempo_entre_envios', campanha.tempo_entre_envios))
 
     db.session.commit()
 
     flash('Configurações atualizadas com sucesso!', 'success')
-    return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+    return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
 
 
-@app.route('/api/consultas/lote/<int:id>/enviar_proximas', methods=['POST'])
+@app.route('/api/consultas/campanha/<int:id>/enviar_proximas', methods=['POST'])
 @login_required
 def api_enviar_proximas_consultas(id):
-    """Envia próximas mensagens do lote respeitando limites"""
-    lote = LoteConsultas.query.get_or_404(id)
+    """Envia próximas mensagens do campanha respeitando limites"""
+    campanha = CampanhaConsulta.query.get_or_404(id)
 
-    if lote.usuario_id != current_user.id:
+    if campanha.usuario_id != current_user.id:
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
-    if lote.status != 'enviando':
+    if campanha.status != 'enviando':
         return jsonify({'sucesso': False, 'mensagem': 'Lote não está em modo de envio'}), 400
 
     # Verificar se pode enviar agora
-    if not lote.pode_enviar_agora():
+    if not campanha.pode_enviar_agora():
         return jsonify({'sucesso': False, 'mensagem': 'Fora do horário de envio'}), 400
 
-    if not lote.pode_enviar_hoje():
+    if not campanha.pode_enviar_hoje():
         return jsonify({'sucesso': False, 'mensagem': 'Meta diária atingida'}), 400
 
     # Buscar consultas pendentes de envio
-    consultas_pendentes = lote.consultas.filter_by(
+    consultas_pendentes = campanha.consultas.filter_by(
         mensagem_enviada=False
     ).filter(
         AgendamentoConsulta.status.in_(['AGUARDANDO_CONFIRMACAO', 'REJEITADO'])
-    ).limit(lote.meta_diaria - lote.enviados_hoje).all()
+    ).limit(campanha.meta_diaria - campanha.enviados_hoje).all()
 
     enviados = 0
     for consulta in consultas_pendentes:
-        if not lote.pode_enviar_hoje():
+        if not campanha.pode_enviar_hoje():
             break
 
         sucesso, msg_id = enviar_mensagem_consulta(consulta.id, current_user.id)
         if sucesso:
             consulta.mensagem_enviada = True
             consulta.data_envio_mensagem = datetime.utcnow()
-            lote.enviados_hoje += 1
+            campanha.enviados_hoje += 1
             enviados += 1
             db.session.commit()
-            time.sleep(lote.tempo_entre_envios)
+            time.sleep(campanha.tempo_entre_envios)
         else:
             logger.error(f'Erro ao enviar consulta {consulta.id}: {msg_id}')
 
     # Verificar se terminou
-    pendentes = lote.consultas.filter_by(mensagem_enviada=False).count()
+    pendentes = campanha.consultas.filter_by(mensagem_enviada=False).count()
     if pendentes == 0:
-        lote.status = 'concluido'
-        lote.data_fim = datetime.utcnow()
+        campanha.status = 'concluido'
+        campanha.data_fim = datetime.utcnow()
         db.session.commit()
 
     return jsonify({
         'sucesso': True,
         'enviados': enviados,
         'pendentes': pendentes,
-        'meta_diaria': lote.meta_diaria,
-        'enviados_hoje': lote.enviados_hoje
+        'meta_diaria': campanha.meta_diaria,
+        'enviados_hoje': campanha.enviados_hoje
     })
 
 

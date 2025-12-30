@@ -433,6 +433,8 @@ function enviarMensagem(event) {
     .then(res => res.json())
     .then(data => {
         if (data.sucesso) {
+            // Salvar telefone selecionado para manter após reload
+            localStorage.setItem(`telefone_selecionado_${contatoId}`, telefoneId);
             document.getElementById('message-input').value = '';
             setTimeout(() => location.reload(), 500);
         } else {
@@ -450,6 +452,24 @@ function enviarMensagem(event) {
 
 // Initialize
 scrollToBottom();
+
+// Restaurar telefone selecionado (se houver)
+const telefoneAnterior = localStorage.getItem(`telefone_selecionado_${contatoId}`);
+if (telefoneAnterior) {
+    const selectTelefone = document.getElementById('select-telefone');
+    // Verificar se o telefone ainda existe no select
+    const opcaoExiste = Array.from(selectTelefone.options).some(opt => opt.value === telefoneAnterior);
+    if (opcaoExiste) {
+        selectTelefone.value = telefoneAnterior;
+    }
+}
+
+// Salvar telefone quando selecionar manualmente
+document.getElementById('select-telefone').addEventListener('change', function() {
+    if (this.value) {
+        localStorage.setItem(`telefone_selecionado_${contatoId}`, this.value);
+    }
+});
 
 // Auto-refresh every 5 seconds
 setInterval(refreshMessages, 5000);

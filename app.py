@@ -884,6 +884,14 @@ class AgendamentoConsulta(db.Model):
         }
         return textos.get(self.status, self.status)
 
+    def tem_interacao_recente(self):
+        """Verifica se houve interação recente (últimas 24h)"""
+        if not self.updated_at:
+            return False
+        limite = datetime.utcnow() - timedelta(hours=24)
+        # Considera interação se foi atualizado recentemente E não está no status inicial
+        return self.updated_at > limite and self.status not in ['AGUARDANDO_ENVIO']
+
 
 class Tutorial(db.Model):
     __tablename__ = 'tutoriais'

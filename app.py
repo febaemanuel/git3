@@ -6118,7 +6118,7 @@ def campanhas_consultas():
 @app.route('/consultas/campanha/<int:id>')
 @login_required
 def campanha_consultas_detalhe(id):
-    """Detalhes e configuração de um campanha de consultas"""
+    """Detalhes e configuração de uma campanha de consultas"""
     if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
         flash('Você não tem permissão para acessar esta área.', 'danger')
         return redirect(url_for('dashboard'))
@@ -6126,21 +6126,33 @@ def campanha_consultas_detalhe(id):
     campanha = CampanhaConsulta.query.get_or_404(id)
 
     if campanha.criador_id != current_user.id:
-        flash('Você não tem permissão para visualizar este campanha.', 'danger')
+        flash('Você não tem permissão para visualizar esta campanha.', 'danger')
         return redirect(url_for('consultas_dashboard'))
 
-    # Estatísticas do campanha
-    total = campanha.consultas.count()
+    # Atualizar estatísticas
+    campanha.atualizar_stats()
+    db.session.commit()
+
+    # Listar consultas da campanha
+    consultas = campanha.consultas.order_by(AgendamentoConsulta.created_at.desc()).all()
+
+    # Estatísticas da campanha
+    total = campanha.total_consultas
     aguardando_envio = campanha.consultas.filter_by(mensagem_enviada=False, status='AGUARDANDO_CONFIRMACAO').count()
-    enviados = campanha.consultas.filter_by(mensagem_enviada=True).count()
-    rejeitados = campanha.consultas.filter_by(status='REJEITADO').count()
+    enviados = campanha.total_enviados
+    confirmados = campanha.total_confirmados
+    rejeitados = campanha.total_rejeitados
+    cancelados = campanha.total_cancelados
 
     return render_template('campanha_consultas_detalhe.html',
                          campanha=campanha,
+                         consultas=consultas,
                          total=total,
                          aguardando_envio=aguardando_envio,
                          enviados=enviados,
-                         rejeitados=rejeitados)
+                         confirmados=confirmados,
+                         rejeitados=rejeitados,
+                         cancelados=cancelados)
 
 
 @app.route('/consultas/campanha/<int:id>/iniciar', methods=['POST'])

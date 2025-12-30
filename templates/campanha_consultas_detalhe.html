@@ -16,175 +16,273 @@
         </div>
     </div>
 
-    <!-- Status e Estatísticas -->
+    <!-- Cards de Estatísticas -->
     <div class="row g-3 mb-4">
-        <div class="col-md-3">
-            <div class="card stat-card total">
+        <div class="col-md-4 col-lg-2">
+            <div class="card stat-card total h-100">
                 <div class="card-body">
-                    <h6 class="text-muted mb-1">Total</h6>
+                    <h6 class="text-muted mb-1">Total de Consultas</h6>
                     <h3 class="mb-0">{{ total }}</h3>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card stat-card enviados">
-                <div class="card-body">
-                    <h6 class="text-muted mb-1">Aguardando Envio</h6>
-                    <h3 class="mb-0">{{ aguardando_envio }}</h3>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card stat-card confirmados">
+        <div class="col-md-4 col-lg-2">
+            <div class="card stat-card enviados h-100">
                 <div class="card-body">
                     <h6 class="text-muted mb-1">Enviados</h6>
                     <h3 class="mb-0">{{ enviados }}</h3>
                 </div>
             </div>
         </div>
-        <div class="col-md-3">
-            <div class="card stat-card rejeitados">
+        <div class="col-md-4 col-lg-2">
+            <div class="card stat-card confirmados h-100">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1">Confirmados</h6>
+                    <h3 class="mb-0">{{ confirmados }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4 col-lg-2">
+            <div class="card stat-card rejeitados h-100">
                 <div class="card-body">
                     <h6 class="text-muted mb-1">Rejeitados</h6>
                     <h3 class="mb-0">{{ rejeitados }}</h3>
                 </div>
             </div>
         </div>
+        <div class="col-md-4 col-lg-2">
+            <div class="card stat-card erros h-100">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1">Cancelados</h6>
+                    <h3 class="mb-0">{{ cancelados }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Agendamento e Controle + Progresso -->
+    <div class="row mb-4">
+        <div class="col-lg-6 mb-3">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-calendar3"></i> Agendamento e Controle
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-6 mb-3">
+                            <small class="text-muted">Meta Diária</small>
+                            <h5>{{ campanha.meta_diaria }} consultas/dia</h5>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <small class="text-muted">Enviados Hoje</small>
+                            <h5>{{ campanha.enviados_hoje }} / {{ campanha.meta_diaria }}</h5>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <small class="text-muted">Horário de Funcionamento</small>
+                            <h5>{{ '%02d'|format(campanha.hora_inicio) }}:00 - {{ '%02d'|format(campanha.hora_fim) }}:00</h5>
+                        </div>
+                        <div class="col-6 mb-3">
+                            <small class="text-muted">Duração</small>
+                            <h5>{% if campanha.dias_duracao == 0 %}Até acabar{% else %}{{ campanha.dias_duracao }} dias{% endif %}</h5>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6 mb-3">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-graph-up"></i> Progresso do Envio
+                </div>
+                <div class="card-body">
+                    <h6 class="mb-2">{{ enviados }} consultas contactadas</h6>
+                    <div class="progress mb-3" style="height: 25px;">
+                        <div class="progress-bar" role="progressbar"
+                             style="width: {{ campanha.percentual_conclusao() }}%"
+                             aria-valuenow="{{ campanha.percentual_conclusao() }}"
+                             aria-valuemin="0" aria-valuemax="100">
+                            {{ campanha.percentual_conclusao() }}%
+                        </div>
+                    </div>
+                    <p class="mb-2">
+                        <strong>Status:</strong>
+                        {% if campanha.status == 'pendente' %}
+                        <span class="badge bg-secondary">Pendente</span>
+                        {% elif campanha.status == 'enviando' %}
+                        <span class="badge bg-primary">Enviando</span>
+                        {% elif campanha.status == 'pausado' %}
+                        <span class="badge bg-warning">Pausado</span>
+                        {% elif campanha.status == 'concluido' %}
+                        <span class="badge bg-success">Concluído</span>
+                        {% endif %}
+                    </p>
+                    {% if enviados > 0 %}
+                    <p class="mb-0">
+                        <small>Taxa de confirmação: <strong>{{ campanha.pct_confirmacao() }}%</strong></small>
+                    </p>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Configurações e Controle -->
-    <div class="row">
-        <div class="col-lg-6 mb-4">
+    <div class="row mb-4">
+        <div class="col-lg-12">
             <div class="card">
                 <div class="card-header">
                     <i class="bi bi-gear"></i> Configurações de Envio
                 </div>
                 <div class="card-body">
                     <form method="POST" action="{% if campanha.status == 'pendente' %}{{ url_for('campanha_consultas_iniciar', id=campanha.id) }}{% else %}{{ url_for('campanha_consultas_atualizar', id=campanha.id) }}{% endif %}" id="formConfig">
-                        <div class="mb-3">
-                            <label class="form-label">Meta Diária</label>
-                            <input type="number" class="form-control" name="meta_diaria" value="{{ campanha.meta_diaria }}" min="1" {% if campanha.status == 'concluido' %}disabled{% endif %}>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Horário (Início - Fim)</label>
-                            <div class="row">
-                                <div class="col-6">
-                                    <input type="number" class="form-control" name="hora_inicio" value="{{ campanha.hora_inicio }}" min="0" max="23" {% if campanha.status == 'concluido' %}disabled{% endif %}>
-                                </div>
-                                <div class="col-6">
-                                    <input type="number" class="form-control" name="hora_fim" value="{{ campanha.hora_fim }}" min="0" max="23" {% if campanha.status == 'concluido' %}disabled{% endif %}>
-                                </div>
+                        <div class="row">
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">Meta Diária</label>
+                                <input type="number" class="form-control" name="meta_diaria" value="{{ campanha.meta_diaria }}" min="1" {% if campanha.status == 'concluido' %}disabled{% endif %}>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">Hora Início</label>
+                                <input type="number" class="form-control" name="hora_inicio" value="{{ campanha.hora_inicio }}" min="0" max="23" {% if campanha.status == 'concluido' %}disabled{% endif %}>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">Hora Fim</label>
+                                <input type="number" class="form-control" name="hora_fim" value="{{ campanha.hora_fim }}" min="0" max="23" {% if campanha.status == 'concluido' %}disabled{% endif %}>
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">Intervalo (segundos)</label>
+                                <input type="number" class="form-control" name="tempo_entre_envios" value="{{ campanha.tempo_entre_envios }}" min="5" {% if campanha.status == 'concluido' %}disabled{% endif %}>
                             </div>
                         </div>
-                        <div class="mb-3">
-                            <label class="form-label">Intervalo entre Envios (segundos)</label>
-                            <input type="number" class="form-control" name="tempo_entre_envios" value="{{ campanha.tempo_entre_envios }}" min="5" {% if campanha.status == 'concluido' %}disabled{% endif %}>
-                        </div>
 
-                        {% if campanha.status == 'pendente' %}
-                        <button type="submit" class="btn btn-success w-100">
-                            <i class="bi bi-play-fill"></i> Iniciar Envio
-                        </button>
-
-                        {% elif campanha.status == 'enviando' %}
-                        <div class="d-grid gap-2">
+                        <div class="d-flex gap-2">
+                            {% if campanha.status == 'pendente' %}
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-play-fill"></i> Iniciar Envio
+                            </button>
+                            {% elif campanha.status == 'enviando' %}
                             <button type="button" class="btn btn-primary" onclick="enviarProximas()">
                                 <i class="bi bi-send"></i> Enviar Próximas Mensagens
                             </button>
-                            <form method="POST" action="{{ url_for('campanha_consultas_pausar', id=campanha.id) }}" style="margin: 0;">
-                                <button type="submit" class="btn btn-warning w-100">
+                            <form method="POST" action="{{ url_for('campanha_consultas_pausar', id=campanha.id) }}" style="margin: 0; display: inline;">
+                                <button type="submit" class="btn btn-warning">
                                     <i class="bi bi-pause-fill"></i> Pausar Envio
                                 </button>
                             </form>
                             <button type="submit" class="btn btn-outline-secondary btn-sm" form="formConfig">
-                                <i class="bi bi-gear"></i> Atualizar Configurações
+                                <i class="bi bi-gear"></i> Atualizar
                             </button>
-                        </div>
-
-                        {% elif campanha.status == 'pausado' %}
-                        <div class="alert alert-warning mb-3">
-                            <i class="bi bi-pause-circle"></i> Envio pausado
-                        </div>
-                        <div class="d-grid gap-2">
-                            <form method="POST" action="{{ url_for('campanha_consultas_continuar', id=campanha.id) }}" style="margin: 0;">
-                                <button type="submit" class="btn btn-success w-100">
+                            {% elif campanha.status == 'pausado' %}
+                            <form method="POST" action="{{ url_for('campanha_consultas_continuar', id=campanha.id) }}" style="margin: 0; display: inline;">
+                                <button type="submit" class="btn btn-success">
                                     <i class="bi bi-play-fill"></i> Continuar Envio
                                 </button>
                             </form>
                             <button type="submit" class="btn btn-outline-secondary btn-sm" form="formConfig">
-                                <i class="bi bi-gear"></i> Atualizar Configurações
+                                <i class="bi bi-gear"></i> Atualizar
                             </button>
+                            {% else %}
+                            <div class="alert alert-success mb-0">
+                                <i class="bi bi-check-circle"></i> Envio Concluído!
+                            </div>
+                            {% endif %}
                         </div>
-
-                        {% else %}
-                        <div class="alert alert-success mb-0">
-                            <i class="bi bi-check-circle"></i> Envio Concluído!
-                        </div>
-                        {% endif %}
                     </form>
-                </div>
-            </div>
-        </div>
-
-        <div class="col-lg-6 mb-4">
-            <div class="card">
-                <div class="card-header">
-                    <i class="bi bi-info-circle"></i> Informações da Campanha
-                </div>
-                <div class="card-body">
-                    <table class="table table-sm">
-                        <tr>
-                            <th width="40%">Tipo:</th>
-                            <td><span class="badge bg-secondary">{{ campanha.tipo }}</span></td>
-                        </tr>
-                        <tr>
-                            <th>Status:</th>
-                            <td>
-                                {% if campanha.status == 'pendente' %}
-                                <span class="badge bg-warning text-dark">Pendente</span>
-                                {% elif campanha.status == 'enviando' %}
-                                <span class="badge bg-primary">Enviando</span>
-                                {% elif campanha.status == 'pausado' %}
-                                <span class="badge bg-secondary">Pausado</span>
-                                {% else %}
-                                <span class="badge bg-success">Concluído</span>
-                                {% endif %}
-                            </td>
-                        </tr>
-                        <tr>
-                            <th>Criado em:</th>
-                            <td>{{ campanha.data_criacao.strftime('%d/%m/%Y %H:%M') if campanha.data_criacao else '-' }}</td>
-                        </tr>
-                        {% if campanha.data_inicio %}
-                        <tr>
-                            <th>Iniciado em:</th>
-                            <td>{{ campanha.data_inicio.strftime('%d/%m/%Y %H:%M') }}</td>
-                        </tr>
-                        {% endif %}
-                        {% if campanha.data_fim %}
-                        <tr>
-                            <th>Concluído em:</th>
-                            <td>{{ campanha.data_fim.strftime('%d/%m/%Y %H:%M') }}</td>
-                        </tr>
-                        {% endif %}
-                        <tr>
-                            <th>Enviados Hoje:</th>
-                            <td>{{ campanha.enviados_hoje }} / {{ campanha.meta_diaria }}</td>
-                        </tr>
-                    </table>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Ações -->
+    <!-- Tabela de Consultas -->
     <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-list-ul"></i> Consultas
+                </div>
+                <div class="card-body p-0">
+                    {% if consultas %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Nome</th>
+                                    <th>Telefone</th>
+                                    <th>Especialidade</th>
+                                    <th>Data Consulta</th>
+                                    <th class="text-center">Status</th>
+                                    <th>Data Envio</th>
+                                    <th class="text-center">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for consulta in consultas %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ consulta.paciente }}</strong>
+                                        {% if consulta.tipo %}
+                                        <br><small class="text-muted">{{ consulta.tipo }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {% if consulta.telefone_regist %}
+                                        {{ consulta.telefone_regist }}<br>
+                                        {% endif %}
+                                        {% if consulta.telefone_cadas %}
+                                        <small class="text-muted">{{ consulta.telefone_cadas }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {{ consulta.especialidade or '-' }}
+                                        {% if consulta.sub_especialidade %}
+                                        <br><small class="text-muted">{{ consulta.sub_especialidade }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td>
+                                        {{ consulta.data_aghu or '-' }}
+                                        {% if consulta.hora_consulta %}
+                                        <br><small>{{ consulta.hora_consulta }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge {{ consulta.status_badge() }}">
+                                            {{ consulta.status_texto() }}
+                                        </span>
+                                    </td>
+                                    <td>
+                                        {% if consulta.data_envio_mensagem %}
+                                        <small>{{ consulta.data_envio_mensagem.strftime('%d/%m %H:%M') }}</small>
+                                        {% else %}
+                                        <small class="text-muted">-</small>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <a href="{{ url_for('consulta_detalhe', id=consulta.id) }}"
+                                           class="btn btn-sm btn-outline-primary" title="Ver detalhes">
+                                            <i class="bi bi-eye"></i>
+                                        </a>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center py-5">
+                        <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
+                        <p class="text-muted mt-3">Nenhuma consulta nesta campanha</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Botão Voltar -->
+    <div class="row mt-4">
         <div class="col-12">
             <a href="{{ url_for('consultas_dashboard') }}" class="btn btn-outline-secondary">
                 <i class="bi bi-arrow-left"></i> Voltar ao Dashboard
-            </a>
-            <a href="{{ url_for('consultas_listar', status='AGUARDANDO_CONFIRMACAO') }}" class="btn btn-outline-primary">
-                <i class="bi bi-list"></i> Ver Consultas
             </a>
         </div>
     </div>

@@ -5745,13 +5745,13 @@ def processar_resposta_consulta(telefone, mensagem_texto):
             try:
                 ws = WhatsApp(consulta.usuario_id)
                 if ws.ok():
-                    mensagem_resposta = f"""Agradecemos a confirmação!
+                    mensagem_resposta = f"""✅ Obrigado por confirmar!
 
-Agora precisamos que você envie um COMPROVANTE DE RESIDÊNCIA (conta de luz, água ou telefone) para validar seu agendamento.
+Sua consulta está confirmada para o dia {consulta.data_aghu or 'DATA'} com {consulta.profissional or 'PROFISSIONAL'}.
 
-Por favor, tire uma foto ou envie o PDF do comprovante por este chat.
+Aguarde as próximas instruções em breve.
 
-⚠️ Sem o comprovante, sua consulta será cancelada automaticamente."""
+Hospital Universitário Walter Cantídio."""
 
                     ws.enviar(telefone, mensagem_resposta)
                     logger.info(f'Resposta automática enviada para consulta {consulta.id}')

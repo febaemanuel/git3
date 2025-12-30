@@ -5920,25 +5920,33 @@ def consultas_importar():
 
                 for idx, row in df.iterrows():
                     try:
+                        # Obter valores com fallback para nomes antigos e novos de colunas
+                        telefone_cadas = row.get('TELEFONE CADASTRO') or row.get('TELEFONE CADAS')
+                        telefone_regist = row.get('TELEFONE REGISTRO') or row.get('TELEFONE REGIST')
+                        od_maste = row.get('COD MASTER') or row.get('OD MASTE')
+                        codigo_agh = row.get('CODIGO AGHU') or row.get('CÓDIGO AGH')
+                        grade = row.get('GRADE_AGHU') or row.get('GRADE')
+                        profissional = row.get('MEDICO_SOLICITANTE') or row.get('PROFISSIONAL')
+
                         consulta = AgendamentoConsulta(
                             usuario_id=current_user.id,
                             campanha_id=campanha.id,
                             pasta=str(row.get('PASTA', '')) if pd.notna(row.get('PASTA')) else None,
-                            od_maste=str(row.get('OD MASTE', '')) if pd.notna(row.get('OD MASTE')) else None,
-                            codigo_agh=str(row.get('CÓDIGO AGH', '')) if pd.notna(row.get('CÓDIGO AGH')) else None,
+                            od_maste=str(od_maste) if pd.notna(od_maste) else None,
+                            codigo_agh=str(codigo_agh) if pd.notna(codigo_agh) else None,
                             paciente=str(row['PACIENTE']),
-                            telefone_cadas=str(row.get('TELEFONE CADAS', '')) if pd.notna(row.get('TELEFONE CADAS')) else None,
-                            telefone_regist=str(row.get('TELEFONE REGIST', '')) if pd.notna(row.get('TELEFONE REGIST')) else None,
+                            telefone_cadas=str(telefone_cadas) if pd.notna(telefone_cadas) else None,
+                            telefone_regist=str(telefone_regist) if pd.notna(telefone_regist) else None,
                             tipo=tipo,
                             sub_especialidade=str(row.get('SUB-ESPECIALIDADE', '')) if pd.notna(row.get('SUB-ESPECIALIDADE')) else None,
                             especialidade=str(row.get('ESPECIALIDADE', '')) if pd.notna(row.get('ESPECIALIDADE')) else None,
-                            grade=str(row.get('GRADE', '')) if pd.notna(row.get('GRADE')) else None,
+                            grade=str(grade) if pd.notna(grade) else None,
                             prioridade=str(row.get('PRIORIDADE', '')) if pd.notna(row.get('PRIORIDADE')) else None,
                             data_aghu=str(row.get('DATA AGHU', '')) if pd.notna(row.get('DATA AGHU')) else None,
                             hora_consulta=str(row.get('HORA CONSULTA', '')) if pd.notna(row.get('HORA CONSULTA')) else None,
                             dia_semana=str(row.get('DIA SEMANA', '')) if pd.notna(row.get('DIA SEMANA')) else None,
                             unidade_funcional=str(row.get('UNIDADE FUNCIONAL', '')) if pd.notna(row.get('UNIDADE FUNCIONAL')) else None,
-                            profissional=str(row.get('PROFISSIONAL', '')) if pd.notna(row.get('PROFISSIONAL')) else None,
+                            profissional=str(profissional) if pd.notna(profissional) else None,
                             paciente_voltar_posto_sms=str(row.get('PACIENTE_VOLTAR_POSTO_SMS', 'NÃO')) if tipo == 'INTERCONSULTA' else None
                         )
 

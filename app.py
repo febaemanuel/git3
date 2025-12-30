@@ -4520,6 +4520,8 @@ def webhook():
                     telefone_respondente.data_resposta = datetime.utcnow()
                     telefone_respondente.tipo_resposta = tipo_resp  # Guarda a intenção
                     telefone_respondente.validacao_pendente = True
+                    # Se o telefone respondeu, marcar como WhatsApp válido
+                    telefone_respondente.whatsapp_valido = True
 
                 db.session.commit()
 
@@ -4532,6 +4534,8 @@ def webhook():
                     telefone_respondente.data_resposta = datetime.utcnow()
                     telefone_respondente.tipo_resposta = 'desconheco'
                     telefone_respondente.validacao_pendente = False
+                    # Se o telefone respondeu, marcar como WhatsApp válido
+                    telefone_respondente.whatsapp_valido = True
 
                 # Recalcular status final do contato baseado em todas as respostas
                 # "Desconheço" não é conflito - pode ter outro número confirmado
@@ -4579,6 +4583,8 @@ _Hospital Universitário Walter Cantídio_""")
                     # Data Correta - Confirmar a resposta do telefone
                     if telefone_validando:
                         telefone_validando.validacao_pendente = False
+                        # Telefone validado com sucesso, marcar como WhatsApp válido
+                        telefone_validando.whatsapp_valido = True
 
                     # Verificar intencao original
                     intent_up = (c.resposta or '').upper()

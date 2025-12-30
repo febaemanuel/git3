@@ -855,10 +855,19 @@ class AgendamentoConsulta(db.Model):
 
     # Relacionamento
     usuario = db.relationship('Usuario', backref='agendamentos_consultas')
+    telefones = db.relationship('TelefoneConsulta', backref='consulta', lazy='dynamic', cascade='all, delete-orphan')
 
     def get_telefone_principal(self):
-        """Retorna o telefone principal para envio"""
+        """Retorna o telefone principal para envio (primeiro telefone cadastrado)"""
+        primeiro_tel = self.telefones.first()
+        if primeiro_tel:
+            return primeiro_tel.numero
+        # Fallback para campos antigos
         return self.telefone_regist if self.telefone_regist else self.telefone_cadas
+
+    def telefones_str(self):
+        """Retorna string com todos os telefones"""
+        return ", ".join([t.numero for t in self.telefones])
 
     def status_badge(self):
         """Retorna classe CSS do badge baseado no status"""
@@ -891,6 +900,31 @@ class AgendamentoConsulta(db.Model):
         limite = datetime.utcnow() - timedelta(hours=24)
         # Considera interação se foi atualizado recentemente E não está no status inicial
         return self.updated_at > limite and self.status not in ['AGUARDANDO_ENVIO']
+
+
+class TelefoneConsulta(db.Model):
+    """Modelo para armazenar múltiplos telefones de uma consulta (igual Telefone da fila)"""
+    __tablename__ = 'telefones_consultas'
+    id = db.Column(db.Integer, primary_key=True)
+    consulta_id = db.Column(db.Integer, db.ForeignKey('agendamentos_consultas.id', ondelete='CASCADE'), nullable=False)
+
+    numero = db.Column(db.String(20), nullable=False)
+    numero_fmt = db.Column(db.String(20))  # 558599999999
+
+    whatsapp_valido = db.Column(db.Boolean, default=None)
+    jid = db.Column(db.String(50))
+    data_validacao = db.Column(db.DateTime)
+
+    enviado = db.Column(db.Boolean, default=False)
+    data_envio = db.Column(db.DateTime)
+    msg_id = db.Column(db.String(100))
+
+    # Response tracking per phone number
+    resposta = db.Column(db.Text)
+    data_resposta = db.Column(db.DateTime)
+    tipo_resposta = db.Column(db.String(20))  # 'confirmado', 'rejeitado', 'desconheco', null
+
+    prioridade = db.Column(db.Integer, default=1)  # 1 = principal, 2 = secundário, etc.
 
 
 class Tutorial(db.Model):
@@ -5666,18 +5700,18 @@ Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU D
 
 
 def enviar_mensagem_consulta(consulta_id, usuario_id):
-    """Envia mensagem WhatsApp para uma consulta específica"""
+    """Envia mensagem WhatsApp para TODOS os telefones da consulta (igual fila cirúrgica)"""
     try:
         consulta = AgendamentoConsulta.query.get(consulta_id)
         if not consulta:
             logger.error(f'Consulta {consulta_id} não encontrada')
             return False, 'Consulta não encontrada'
 
-        # Obter telefone
-        telefone = consulta.get_telefone_principal()
-        if not telefone:
-            logger.error(f'Consulta {consulta_id} sem telefone')
-            return False, 'Sem telefone'
+        # Buscar TODOS os telefones da consulta
+        telefones_obj = consulta.telefones.order_by(TelefoneConsulta.prioridade).all()
+        if not telefones_obj:
+            logger.error(f'Consulta {consulta_id} sem telefones cadastrados')
+            return False, 'Sem telefones'
 
         # Formatar mensagem
         mensagem = formatar_mensagem_consulta(consulta)
@@ -5691,25 +5725,43 @@ def enviar_mensagem_consulta(consulta_id, usuario_id):
             logger.error(f'WhatsApp não configurado para usuário {usuario_id}')
             return False, 'WhatsApp não configurado'
 
-        sucesso, msg_id = ws.enviar(telefone, mensagem)
+        # Tentar enviar para cada telefone (ordem de prioridade)
+        algum_enviado = False
+        ultimo_msg_id = None
 
-        if sucesso:
+        for tel_obj in telefones_obj:
+            if tel_obj.enviado:  # Já foi enviado para este telefone
+                continue
+
+            sucesso, msg_id = ws.enviar(tel_obj.numero, mensagem)
+
+            if sucesso:
+                # Marcar telefone como enviado
+                tel_obj.enviado = True
+                tel_obj.data_envio = datetime.now()
+                tel_obj.msg_id = msg_id
+                algum_enviado = True
+                ultimo_msg_id = msg_id
+                logger.info(f'Mensagem enviada para telefone {tel_obj.numero} da consulta {consulta_id}: {msg_id}')
+                # Enviar apenas para o primeiro telefone com sucesso (igual fila)
+                break
+            else:
+                logger.warning(f'Falha ao enviar para {tel_obj.numero}: {msg_id}')
+
+        if algum_enviado:
             # Atualizar status da consulta
             consulta.mensagem_enviada = True
             consulta.data_envio_mensagem = datetime.now()
 
             # Mudar status apenas se estiver AGUARDANDO_ENVIO
-            # REJEITADO continua REJEITADO (já foi enviada a mensagem de rejeição)
             if consulta.status == 'AGUARDANDO_ENVIO':
                 consulta.status = 'AGUARDANDO_CONFIRMACAO'
 
             db.session.commit()
-
-            logger.info(f'Mensagem enviada para consulta {consulta_id}: {msg_id}')
-            return True, msg_id
+            return True, ultimo_msg_id
         else:
-            logger.error(f'Erro ao enviar mensagem para consulta {consulta_id}: {msg_id}')
-            return False, msg_id
+            logger.error(f'Não foi possível enviar mensagem para nenhum telefone da consulta {consulta_id}')
+            return False, 'Erro ao enviar para todos os telefones'
 
     except Exception as e:
         logger.error(f'Erro ao enviar mensagem para consulta {consulta_id}: {str(e)}')
@@ -5722,33 +5774,27 @@ def processar_resposta_consulta(telefone, mensagem_texto):
         # Normalizar telefone (apenas dígitos)
         telefone_fmt = ''.join(filter(str.isdigit, telefone))
 
-        # Buscar consulta aguardando confirmação ou mensagem enviada recentemente
-        # Busca pelos últimos 8-11 dígitos para cobrir variações (com/sem 9, com/sem DDD completo)
-        consultas = AgendamentoConsulta.query.filter(
-            AgendamentoConsulta.mensagem_enviada == True,
-            AgendamentoConsulta.status == 'AGUARDANDO_CONFIRMACAO'
+        # Buscar pelo modelo TelefoneConsulta (igual fila cirúrgica)
+        telefone_obj = None
+        consulta = None
+
+        # Buscar telefone que recebeu mensagem e está aguardando confirmação
+        telefones_consulta = TelefoneConsulta.query.filter(
+            TelefoneConsulta.enviado == True
         ).all()
 
-        # Filtrar por telefone E validar usuario_id
-        consulta_encontrada = None
-        for consulta in consultas:
-            # Validar que a consulta tem usuario_id válido
-            if not consulta.usuario_id:
-                continue
-
-            tel_cadas = ''.join(filter(str.isdigit, consulta.telefone_cadas or ''))
-            tel_regist = ''.join(filter(str.isdigit, consulta.telefone_regist or ''))
-
+        for tel in telefones_consulta:
+            tel_numero = ''.join(filter(str.isdigit, tel.numero))
             # Comparar últimos 8-9 dígitos
-            if (telefone_fmt[-9:] == tel_cadas[-9:] or telefone_fmt[-9:] == tel_regist[-9:] or
-                telefone_fmt[-8:] == tel_cadas[-8:] or telefone_fmt[-8:] == tel_regist[-8:]):
-                consulta_encontrada = consulta
-                break
+            if telefone_fmt[-9:] == tel_numero[-9:] or telefone_fmt[-8:] == tel_numero[-8:]:
+                # Verificar se a consulta está aguardando confirmação
+                if tel.consulta.status == 'AGUARDANDO_CONFIRMACAO' and tel.consulta.usuario_id:
+                    telefone_obj = tel
+                    consulta = tel.consulta
+                    break
 
-        if not consulta_encontrada:
+        if not consulta:
             return False, 'Sem consulta pendente'
-
-        consulta = consulta_encontrada
 
         # Verificar se é uma confirmação
         msg_upper = mensagem_texto.upper()
@@ -5759,6 +5805,13 @@ def processar_resposta_consulta(telefone, mensagem_texto):
             # Paciente confirmou
             consulta.status = 'AGUARDANDO_COMPROVANTE'
             consulta.data_confirmacao = datetime.now()
+
+            # Marcar resposta no telefone
+            if telefone_obj:
+                telefone_obj.resposta = mensagem_texto
+                telefone_obj.data_resposta = datetime.now()
+                telefone_obj.tipo_resposta = 'confirmado'
+
             db.session.commit()
             logger.info(f'Consulta {consulta.id} confirmada pelo paciente via telefone {telefone}')
 
@@ -5786,6 +5839,13 @@ Hospital Universitário Walter Cantídio."""
             consulta.status = 'CANCELADO'
             consulta.data_cancelamento = datetime.now()
             consulta.observacoes = (consulta.observacoes or '') + f'\nCancelado pelo paciente via WhatsApp em {datetime.now().strftime("%d/%m/%Y %H:%M")}'
+
+            # Marcar resposta no telefone
+            if telefone_obj:
+                telefone_obj.resposta = mensagem_texto
+                telefone_obj.data_resposta = datetime.now()
+                telefone_obj.tipo_resposta = 'rejeitado'
+
             db.session.commit()
             logger.info(f'Consulta {consulta.id} cancelada pelo paciente via telefone {telefone}')
 
@@ -5921,23 +5981,34 @@ def consultas_importar():
                 for idx, row in df.iterrows():
                     try:
                         # Obter valores com fallback para nomes antigos e novos de colunas
-                        telefone_cadas = row.get('TELEFONE CADASTRO') or row.get('TELEFONE CADAS')
-                        telefone_regist = row.get('TELEFONE REGISTRO') or row.get('TELEFONE REGIST')
+                        telefone_cadas_raw = row.get('TELEFONE CADASTRO') or row.get('TELEFONE CADAS')
+                        telefone_regist_raw = row.get('TELEFONE REGISTRO') or row.get('TELEFONE REGIST')
                         od_maste = row.get('COD MASTER') or row.get('OD MASTE')
                         codigo_agh = row.get('CODIGO AGHU') or row.get('CÓDIGO AGH')
                         grade = row.get('GRADE_AGHU') or row.get('GRADE')
                         profissional = row.get('MEDICO_SOLICITANTE') or row.get('PROFISSIONAL')
 
-                        # Limpar telefones - pegar apenas o primeiro se houver múltiplos (separados por / ou espaço)
-                        if pd.notna(telefone_cadas):
-                            telefone_cadas = str(telefone_cadas).split('/')[0].strip()
-                            # Remover espaços em branco
-                            telefone_cadas = ''.join(telefone_cadas.split())
-                        if pd.notna(telefone_regist):
-                            telefone_regist = str(telefone_regist).split('/')[0].strip()
-                            # Remover espaços em branco
-                            telefone_regist = ''.join(telefone_regist.split())
+                        # Extrair TODOS os telefones (separados por /)
+                        telefones_list = []
+                        if pd.notna(telefone_cadas_raw):
+                            for tel in str(telefone_cadas_raw).split('/'):
+                                tel_limpo = ''.join(tel.strip().split())  # Remove espaços
+                                if tel_limpo and len(tel_limpo) >= 10:  # Telefone válido
+                                    telefones_list.append(tel_limpo)
 
+                        if pd.notna(telefone_regist_raw):
+                            for tel in str(telefone_regist_raw).split('/'):
+                                tel_limpo = ''.join(tel.strip().split())  # Remove espaços
+                                if tel_limpo and len(tel_limpo) >= 10:  # Telefone válido
+                                    if tel_limpo not in telefones_list:  # Evitar duplicatas
+                                        telefones_list.append(tel_limpo)
+
+                        # Se não tem telefone válido, pular
+                        if not telefones_list:
+                            erros.append(f"Linha {idx + 2}: Paciente sem telefone válido")
+                            continue
+
+                        # Criar consulta (mantém campos antigos para compatibilidade)
                         consulta = AgendamentoConsulta(
                             usuario_id=current_user.id,
                             campanha_id=campanha.id,
@@ -5945,8 +6016,8 @@ def consultas_importar():
                             od_maste=str(od_maste) if pd.notna(od_maste) else None,
                             codigo_agh=str(codigo_agh) if pd.notna(codigo_agh) else None,
                             paciente=str(row['PACIENTE']),
-                            telefone_cadas=str(telefone_cadas) if pd.notna(telefone_cadas) else None,
-                            telefone_regist=str(telefone_regist) if pd.notna(telefone_regist) else None,
+                            telefone_cadas=telefones_list[0] if len(telefones_list) > 0 else None,  # Primeiro telefone
+                            telefone_regist=telefones_list[1] if len(telefones_list) > 1 else None,  # Segundo telefone
                             tipo=tipo,
                             sub_especialidade=str(row.get('SUB-ESPECIALIDADE', '')) if pd.notna(row.get('SUB-ESPECIALIDADE')) else None,
                             especialidade=str(row.get('ESPECIALIDADE', '')) if pd.notna(row.get('ESPECIALIDADE')) else None,
@@ -5967,6 +6038,17 @@ def consultas_importar():
                             consulta.status = 'AGUARDANDO_ENVIO'
 
                         db.session.add(consulta)
+                        db.session.flush()  # Para obter o ID da consulta
+
+                        # Criar registros de telefone (TODOS os telefones encontrados)
+                        for prioridade, numero in enumerate(telefones_list, start=1):
+                            tel_consulta = TelefoneConsulta(
+                                consulta_id=consulta.id,
+                                numero=numero,
+                                prioridade=prioridade
+                            )
+                            db.session.add(tel_consulta)
+
                         importados += 1
 
                     except Exception as e:

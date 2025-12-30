@@ -6079,27 +6079,27 @@ def api_consulta_cancelar(id):
     return jsonify({'sucesso': True, 'mensagem': 'Consulta cancelada'})
 
 
-@app.route('/consultas/lotes')
+@app.route('/consultas/campanhas')
 @login_required
 def campanhas_consultas():
-    """Lista todos os lotes de consultas do usuário"""
+    """Lista todas as campanhas de consultas do usuário"""
     if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
         flash('Você não tem permissão para acessar esta área.', 'danger')
         return redirect(url_for('dashboard'))
 
-    # Buscar todos os lotes do usuário
-    lotes = CampanhaConsulta.query.filter_by(criador_id=current_user.id).order_by(CampanhaConsulta.data_criacao.desc()).all()
+    # Buscar todas as campanhas do usuário
+    campanhas_lista = CampanhaConsulta.query.filter_by(criador_id=current_user.id).order_by(CampanhaConsulta.data_criacao.desc()).all()
 
     # Calcular estatísticas para cada campanha
-    lotes_com_stats = []
-    for campanha in lotes:
+    campanhas_com_stats = []
+    for campanha in campanhas_lista:
         total = campanha.consultas.count()
         aguardando_envio = campanha.consultas.filter_by(mensagem_enviada=False).count()
         enviados = campanha.consultas.filter_by(mensagem_enviada=True).count()
         confirmados = campanha.consultas.filter_by(status='CONFIRMADO').count()
         cancelados = campanha.consultas.filter_by(status='CANCELADO').count()
 
-        lotes_com_stats.append({
+        campanhas_com_stats.append({
             'campanha': campanha,
             'total': total,
             'aguardando_envio': aguardando_envio,
@@ -6109,7 +6109,7 @@ def campanhas_consultas():
             'percentual_enviado': (enviados / total * 100) if total > 0 else 0
         })
 
-    return render_template('campanhas_consultas.html', lotes=lotes_com_stats)
+    return render_template('campanhas_consultas.html', campanhas=campanhas_com_stats)
 
 
 @app.route('/consultas/campanha/<int:id>')

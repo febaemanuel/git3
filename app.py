@@ -834,8 +834,8 @@ class AgendamentoConsulta(db.Model):
     paciente_voltar_posto_sms = db.Column(db.String(10))  # SIM ou NÃO
 
     # Controle de status
-    status = db.Column(db.String(50), default='AGUARDANDO_CONFIRMACAO')
-    # Status: AGUARDANDO_CONFIRMACAO, AGUARDANDO_COMPROVANTE, CONFIRMADO, CANCELADO, REJEITADO
+    status = db.Column(db.String(50), default='AGUARDANDO_ENVIO')
+    # Status: AGUARDANDO_ENVIO, AGUARDANDO_CONFIRMACAO, AGUARDANDO_COMPROVANTE, CONFIRMADO, CANCELADO, REJEITADO
 
     # Controle de envio de mensagens (similar à Campanha)
     mensagem_enviada = db.Column(db.Boolean, default=False)  # Se já foi enviada a mensagem inicial
@@ -863,10 +863,11 @@ class AgendamentoConsulta(db.Model):
     def status_badge(self):
         """Retorna classe CSS do badge baseado no status"""
         badges = {
+            'AGUARDANDO_ENVIO': 'bg-secondary',
             'AGUARDANDO_CONFIRMACAO': 'bg-warning text-dark',
             'AGUARDANDO_COMPROVANTE': 'bg-info',
             'CONFIRMADO': 'bg-success',
-            'CANCELADO': 'bg-secondary',
+            'CANCELADO': 'bg-dark',
             'REJEITADO': 'bg-danger'
         }
         return badges.get(self.status, 'bg-light text-dark')
@@ -874,6 +875,7 @@ class AgendamentoConsulta(db.Model):
     def status_texto(self):
         """Retorna texto amigável do status"""
         textos = {
+            'AGUARDANDO_ENVIO': 'Aguardando Envio',
             'AGUARDANDO_CONFIRMACAO': 'Aguardando Confirmação',
             'AGUARDANDO_COMPROVANTE': 'Aguardando Comprovante',
             'CONFIRMADO': 'Confirmado',
@@ -5684,6 +5686,17 @@ def enviar_mensagem_consulta(consulta_id, usuario_id):
         sucesso, msg_id = ws.enviar(telefone, mensagem)
 
         if sucesso:
+            # Atualizar status da consulta
+            consulta.mensagem_enviada = True
+            consulta.data_envio_mensagem = datetime.now()
+
+            # Mudar status apenas se estiver AGUARDANDO_ENVIO
+            # REJEITADO continua REJEITADO (já foi enviada a mensagem de rejeição)
+            if consulta.status == 'AGUARDANDO_ENVIO':
+                consulta.status = 'AGUARDANDO_CONFIRMACAO'
+
+            db.session.commit()
+
             logger.info(f'Mensagem enviada para consulta {consulta_id}: {msg_id}')
             return True, msg_id
         else:
@@ -5925,7 +5938,7 @@ def consultas_importar():
                         if tipo == 'INTERCONSULTA' and consulta.paciente_voltar_posto_sms == 'SIM':
                             consulta.status = 'REJEITADO'
                         else:
-                            consulta.status = 'AGUARDANDO_CONFIRMACAO'
+                            consulta.status = 'AGUARDANDO_ENVIO'
 
                         db.session.add(consulta)
                         importados += 1
@@ -6138,7 +6151,7 @@ def campanha_consultas_detalhe(id):
 
     # Estatísticas da campanha
     total = campanha.total_consultas
-    aguardando_envio = campanha.consultas.filter_by(mensagem_enviada=False, status='AGUARDANDO_CONFIRMACAO').count()
+    aguardando_envio = campanha.consultas.filter_by(status='AGUARDANDO_ENVIO').count()
     enviados = campanha.total_enviados
     confirmados = campanha.total_confirmados
     rejeitados = campanha.total_rejeitados
@@ -6174,14 +6187,16 @@ def campanha_consultas_iniciar(id):
     campanha.meta_diaria = int(request.form.get('meta_diaria', campanha.meta_diaria))
     campanha.hora_inicio = int(request.form.get('hora_inicio', campanha.hora_inicio))
     campanha.hora_fim = int(request.form.get('hora_fim', campanha.hora_fim))
-    campanha.tempo_entre_envios = int(request.form.get('tempo_entre_envios', campanha.tempo_entre_envios))
+
+    # Calcular intervalo automaticamente
+    campanha.tempo_entre_envios = campanha.calcular_intervalo()
 
     campanha.status = 'enviando'
     campanha.data_inicio = datetime.utcnow()
     db.session.commit()
 
     # Iniciar envio em background (sem Celery por enquanto, vamos fazer síncrono controlado)
-    flash('Envio iniciado! As mensagens serão enviadas respeitando a meta diária e horário configurados.', 'success')
+    flash(f'Envio iniciado! Intervalo automático: {campanha.tempo_entre_envios}s. As mensagens serão enviadas respeitando a meta diária e horário configurados.', 'success')
 
     return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
 
@@ -6248,11 +6263,13 @@ def campanha_consultas_atualizar(id):
     campanha.meta_diaria = int(request.form.get('meta_diaria', campanha.meta_diaria))
     campanha.hora_inicio = int(request.form.get('hora_inicio', campanha.hora_inicio))
     campanha.hora_fim = int(request.form.get('hora_fim', campanha.hora_fim))
-    campanha.tempo_entre_envios = int(request.form.get('tempo_entre_envios', campanha.tempo_entre_envios))
+
+    # Calcular intervalo automaticamente
+    campanha.tempo_entre_envios = campanha.calcular_intervalo()
 
     db.session.commit()
 
-    flash('Configurações atualizadas com sucesso!', 'success')
+    flash('Configurações atualizadas com sucesso! Intervalo recalculado automaticamente.', 'success')
     return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
 
 

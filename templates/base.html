@@ -190,6 +190,31 @@
                             <i class="bi bi-speedometer2"></i> Dashboard
                         </a>
                     </li>
+
+                    {% if current_user.tipo_sistema == 'AGENDAMENTO_CONSULTA' %}
+                    <!-- Menu para Agendamento de Consultas -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">
+                            <i class="bi bi-calendar-check"></i> Consultas
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="{{ url_for('consultas_dashboard') }}">
+                                <i class="bi bi-speedometer2"></i> Dashboard Consultas
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('consultas_importar') }}">
+                                <i class="bi bi-upload"></i> Importar Planilha
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('consultas_listar', status='AGUARDANDO_CONFIRMACAO') }}">
+                                <i class="bi bi-list-check"></i> Listar Consultas
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('lotes_consultas') }}">
+                                <i class="bi bi-stack"></i> Gerenciar Lotes
+                            </a></li>
+                        </ul>
+                    </li>
+                    {% endif %}
+
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('relatorios') }}">
                             <i class="bi bi-bar-chart-line"></i> Relatórios

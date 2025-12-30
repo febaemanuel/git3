@@ -5599,9 +5599,13 @@ def processar_resposta_consulta(telefone, mensagem_texto):
             AgendamentoConsulta.status == 'AGUARDANDO_CONFIRMACAO'
         ).all()
 
-        # Filtrar por telefone
+        # Filtrar por telefone E validar usuario_id
         consulta_encontrada = None
         for consulta in consultas:
+            # Validar que a consulta tem usuario_id válido
+            if not consulta.usuario_id:
+                continue
+
             tel_cadas = ''.join(filter(str.isdigit, consulta.telefone_cadas or ''))
             tel_regist = ''.join(filter(str.isdigit, consulta.telefone_regist or ''))
 
@@ -5619,13 +5623,58 @@ def processar_resposta_consulta(telefone, mensagem_texto):
         # Verificar se é uma confirmação
         msg_upper = mensagem_texto.upper()
         confirmacoes = ['SIM', 'S', '1', 'CONFIRMO', 'QUERO', 'CONFIRMAR', 'OK', 'POSITIVO']
+        rejeicoes = ['NÃO', 'NAO', 'N', 'CANCELAR', 'CANCELA', 'DESMARCAR', 'DESMARCA', 'RECUSAR', 'RECUSO']
 
         if any(palavra in msg_upper for palavra in confirmacoes):
             # Paciente confirmou
             consulta.status = 'AGUARDANDO_COMPROVANTE'
+            consulta.data_confirmacao = datetime.now()
             db.session.commit()
             logger.info(f'Consulta {consulta.id} confirmada pelo paciente via telefone {telefone}')
+
+            # Enviar resposta automática confirmando o recebimento
+            try:
+                ws = WhatsApp(consulta.usuario_id)
+                if ws.ok():
+                    mensagem_resposta = f"""Agradecemos a confirmação!
+
+Agora precisamos que você envie um COMPROVANTE DE RESIDÊNCIA (conta de luz, água ou telefone) para validar seu agendamento.
+
+Por favor, tire uma foto ou envie o PDF do comprovante por este chat.
+
+⚠️ Sem o comprovante, sua consulta será cancelada automaticamente."""
+
+                    ws.enviar(telefone, mensagem_resposta)
+                    logger.info(f'Resposta automática enviada para consulta {consulta.id}')
+            except Exception as e:
+                logger.error(f'Erro ao enviar resposta automática para consulta {consulta.id}: {str(e)}')
+
             return True, 'Consulta confirmada - aguardando comprovante'
+
+        elif any(palavra in msg_upper for palavra in rejeicoes):
+            # Paciente rejeitou/cancelou
+            consulta.status = 'CANCELADO'
+            consulta.data_cancelamento = datetime.now()
+            consulta.observacoes = (consulta.observacoes or '') + f'\nCancelado pelo paciente via WhatsApp em {datetime.now().strftime("%d/%m/%Y %H:%M")}'
+            db.session.commit()
+            logger.info(f'Consulta {consulta.id} cancelada pelo paciente via telefone {telefone}')
+
+            # Enviar resposta automática confirmando o cancelamento
+            try:
+                ws = WhatsApp(consulta.usuario_id)
+                if ws.ok():
+                    mensagem_resposta = """Sua consulta foi cancelada conforme solicitado.
+
+Caso precise reagendar, entre em contato com o ambulatório.
+
+Obrigado!"""
+
+                    ws.enviar(telefone, mensagem_resposta)
+                    logger.info(f'Resposta de cancelamento enviada para consulta {consulta.id}')
+            except Exception as e:
+                logger.error(f'Erro ao enviar resposta de cancelamento para consulta {consulta.id}: {str(e)}')
+
+            return True, 'Consulta cancelada pelo paciente'
 
         return False, 'Resposta não reconhecida'
 

@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+
+{% block title %}Lote: {{ lote.nome }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2><i class="bi bi-stack"></i> {{ lote.nome }}</h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('consultas_dashboard') }}">Consultas</a></li>
+                    <li class="breadcrumb-item active">Lote</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Status e Estatísticas -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card stat-card total">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1">Total</h6>
+                    <h3 class="mb-0">{{ total }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card enviados">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1">Aguardando Envio</h6>
+                    <h3 class="mb-0">{{ aguardando_envio }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card confirmados">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1">Enviados</h6>
+                    <h3 class="mb-0">{{ enviados }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card stat-card rejeitados">
+                <div class="card-body">
+                    <h6 class="text-muted mb-1">Rejeitados</h6>
+                    <h3 class="mb-0">{{ rejeitados }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Configurações e Controle -->
+    <div class="row">
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-gear"></i> Configurações de Envio
+                </div>
+                <div class="card-body">
+                    <form method="POST" action="{{ url_for('lote_consultas_iniciar', id=lote.id) }}">
+                        <div class="mb-3">
+                            <label class="form-label">Meta Diária</label>
+                            <input type="number" class="form-control" name="meta_diaria" value="{{ lote.meta_diaria }}" min="1">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Horário (Início - Fim)</label>
+                            <div class="row">
+                                <div class="col-6">
+                                    <input type="number" class="form-control" name="hora_inicio" value="{{ lote.hora_inicio }}" min="0" max="23">
+                                </div>
+                                <div class="col-6">
+                                    <input type="number" class="form-control" name="hora_fim" value="{{ lote.hora_fim }}" min="0" max="23">
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Intervalo entre Envios (segundos)</label>
+                            <input type="number" class="form-control" name="tempo_entre_envios" value="{{ lote.tempo_entre_envios }}" min="5">
+                        </div>
+
+                        {% if lote.status == 'pendente' %}
+                        <button type="submit" class="btn btn-success w-100">
+                            <i class="bi bi-play-fill"></i> Iniciar Envio
+                        </button>
+                        {% elif lote.status == 'enviando' %}
+                        <button type="button" class="btn btn-primary w-100" onclick="enviarProximas()">
+                            <i class="bi bi-send"></i> Enviar Próximas Mensagens
+                        </button>
+                        {% else %}
+                        <div class="alert alert-success mb-0">
+                            <i class="bi bi-check-circle"></i> Envio Concluído!
+                        </div>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-info-circle"></i> Informações do Lote
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th width="40%">Tipo:</th>
+                            <td><span class="badge bg-secondary">{{ lote.tipo }}</span></td>
+                        </tr>
+                        <tr>
+                            <th>Status:</th>
+                            <td>
+                                {% if lote.status == 'pendente' %}
+                                <span class="badge bg-warning text-dark">Pendente</span>
+                                {% elif lote.status == 'enviando' %}
+                                <span class="badge bg-primary">Enviando</span>
+                                {% elif lote.status == 'pausado' %}
+                                <span class="badge bg-secondary">Pausado</span>
+                                {% else %}
+                                <span class="badge bg-success">Concluído</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        <tr>
+                            <th>Criado em:</th>
+                            <td>{{ lote.created_at.strftime('%d/%m/%Y %H:%M') if lote.created_at else '-' }}</td>
+                        </tr>
+                        {% if lote.data_inicio %}
+                        <tr>
+                            <th>Iniciado em:</th>
+                            <td>{{ lote.data_inicio.strftime('%d/%m/%Y %H:%M') }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if lote.data_fim %}
+                        <tr>
+                            <th>Concluído em:</th>
+                            <td>{{ lote.data_fim.strftime('%d/%m/%Y %H:%M') }}</td>
+                        </tr>
+                        {% endif %}
+                        <tr>
+                            <th>Enviados Hoje:</th>
+                            <td>{{ lote.enviados_hoje }} / {{ lote.meta_diaria }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Ações -->
+    <div class="row">
+        <div class="col-12">
+            <a href="{{ url_for('consultas_dashboard') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> Voltar ao Dashboard
+            </a>
+            <a href="{{ url_for('consultas_listar', status='AGUARDANDO_CONFIRMACAO') }}" class="btn btn-outline-primary">
+                <i class="bi bi-list"></i> Ver Consultas
+            </a>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function enviarProximas() {
+    if (!confirm('Enviar próximas mensagens respeitando a meta diária?')) {
+        return;
+    }
+
+    fetch(`/api/consultas/lote/{{ lote.id }}/enviar_proximas`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert(`${data.enviados} mensagens enviadas! Pendentes: ${data.pendentes}`);
+            location.reload();
+        } else {
+            alert('Erro: ' + data.mensagem);
+        }
+    })
+    .catch(error => {
+        alert('Erro ao enviar mensagens: ' + error);
+    });
+}
+</script>
+{% endblock %}

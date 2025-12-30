@@ -647,6 +647,51 @@ class ConfigTentativas(db.Model):
         return c
 
 
+class LoteConsultas(db.Model):
+    """Lote de consultas importadas com configurações de envio"""
+    __tablename__ = 'lotes_consultas'
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(200), nullable=False)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id', ondelete='SET NULL'))
+    tipo = db.Column(db.String(50))  # RETORNO ou INTERCONSULTA
+
+    # Configurações de envio
+    meta_diaria = db.Column(db.Integer, default=50)
+    hora_inicio = db.Column(db.Integer, default=8)
+    hora_fim = db.Column(db.Integer, default=18)
+    tempo_entre_envios = db.Column(db.Integer, default=15)  # segundos
+
+    # Controle diário
+    enviados_hoje = db.Column(db.Integer, default=0)
+    data_ultimo_envio = db.Column(db.Date)
+
+    # Status
+    status = db.Column(db.String(50), default='pendente')
+    # pendente, enviando, pausado, concluido
+
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    data_inicio = db.Column(db.DateTime)
+    data_fim = db.Column(db.DateTime)
+
+    # Relacionamentos
+    usuario = db.relationship('Usuario', backref='lotes_consultas')
+    consultas = db.relationship('AgendamentoConsulta', backref='lote', lazy='dynamic')
+
+    def pode_enviar_hoje(self):
+        hoje = date.today()
+        if self.data_ultimo_envio != hoje:
+            self.enviados_hoje = 0
+            self.data_ultimo_envio = hoje
+            db.session.commit()
+        return self.enviados_hoje < self.meta_diaria
+
+    def pode_enviar_agora(self):
+        from datetime import datetime
+        agora = datetime.now().hour
+        return self.hora_inicio <= agora < self.hora_fim
+
+
 class AgendamentoConsulta(db.Model):
     """Modelo para agendamento de consultas (RETORNO e INTERCONSULTA)"""
     __tablename__ = 'agendamentos_consultas'
@@ -654,6 +699,7 @@ class AgendamentoConsulta(db.Model):
 
     # Relacionamento com usuário que criou
     usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id', ondelete='SET NULL'))
+    lote_id = db.Column(db.Integer, db.ForeignKey('lotes_consultas.id', ondelete='SET NULL'))
 
     # Dados da planilha
     pasta = db.Column(db.String(50))
@@ -681,6 +727,10 @@ class AgendamentoConsulta(db.Model):
     # Controle de status
     status = db.Column(db.String(50), default='AGUARDANDO_CONFIRMACAO')
     # Status: AGUARDANDO_CONFIRMACAO, AGUARDANDO_COMPROVANTE, CONFIRMADO, CANCELADO, REJEITADO
+
+    # Controle de envio de mensagens (similar à Campanha)
+    mensagem_enviada = db.Column(db.Boolean, default=False)  # Se já foi enviada a mensagem inicial
+    data_envio_mensagem = db.Column(db.DateTime)  # Quando foi enviada
 
     # Comprovante
     comprovante_path = db.Column(db.String(255))
@@ -4491,6 +4541,12 @@ def webhook():
                 c = max(contatos_validos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
 
         if not c:
+            # Não encontrou contato de campanha, verificar se é consulta
+            sucesso_consulta, msg_consulta = processar_resposta_consulta(numero, texto)
+            if sucesso_consulta:
+                logger.info(f"Webhook: Resposta de consulta processada para {numero}")
+                return jsonify({'status': 'ok'}), 200
+
             # Verificar se existem contatos de outros usuários (para debug)
             todos_contatos = [t.contato for t in telefones if t.contato]
             if todos_contatos:
@@ -4498,7 +4554,7 @@ def webhook():
                 logger.warning(f"Webhook: Telefone {numero} não tem campanhas do usuário {usuario_id}. "
                              f"Campanhas existem para usuários: {outros_usuarios}")
             else:
-                logger.warning(f"Webhook: Telefone {numero} não encontrado em nenhuma campanha")
+                logger.warning(f"Webhook: Telefone {numero} não encontrado em nenhuma campanha ou consulta")
             return jsonify({'status': 'ok'}), 200
 
         logger.info(f"Webhook: [{instance_name}] Mensagem de {c.nome} ({numero}). "
@@ -5533,22 +5589,32 @@ def enviar_mensagem_consulta(consulta_id, usuario_id):
 def processar_resposta_consulta(telefone, mensagem_texto):
     """Processa resposta do paciente sobre agendamento de consulta"""
     try:
-        # Normalizar telefone
+        # Normalizar telefone (apenas dígitos)
         telefone_fmt = ''.join(filter(str.isdigit, telefone))
 
-        # Buscar consulta aguardando confirmação para este telefone
-        consulta = AgendamentoConsulta.query.filter(
+        # Buscar consulta aguardando confirmação ou mensagem enviada recentemente
+        # Busca pelos últimos 8-11 dígitos para cobrir variações (com/sem 9, com/sem DDD completo)
+        consultas = AgendamentoConsulta.query.filter(
+            AgendamentoConsulta.mensagem_enviada == True,
             AgendamentoConsulta.status == 'AGUARDANDO_CONFIRMACAO'
-        ).filter(
-            db.or_(
-                AgendamentoConsulta.telefone_cadas.contains(telefone_fmt[-8:]),
-                AgendamentoConsulta.telefone_regist.contains(telefone_fmt[-8:])
-            )
-        ).order_by(AgendamentoConsulta.created_at.desc()).first()
+        ).all()
 
-        if not consulta:
-            logger.warning(f'Nenhuma consulta aguardando confirmação encontrada para telefone {telefone}')
+        # Filtrar por telefone
+        consulta_encontrada = None
+        for consulta in consultas:
+            tel_cadas = ''.join(filter(str.isdigit, consulta.telefone_cadas or ''))
+            tel_regist = ''.join(filter(str.isdigit, consulta.telefone_regist or ''))
+
+            # Comparar últimos 8-9 dígitos
+            if (telefone_fmt[-9:] == tel_cadas[-9:] or telefone_fmt[-9:] == tel_regist[-9:] or
+                telefone_fmt[-8:] == tel_cadas[-8:] or telefone_fmt[-8:] == tel_regist[-8:]):
+                consulta_encontrada = consulta
+                break
+
+        if not consulta_encontrada:
             return False, 'Sem consulta pendente'
+
+        consulta = consulta_encontrada
 
         # Verificar se é uma confirmação
         msg_upper = mensagem_texto.upper()
@@ -5651,15 +5717,29 @@ def consultas_importar():
                 # Tipo de importação (RETORNO ou INTERCONSULTA)
                 tipo = request.form.get('tipo', 'RETORNO')
 
+                # Criar lote de consultas
+                nome_lote = request.form.get('nome_lote', f"Lote {tipo} - {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+                lote = LoteConsultas(
+                    nome=nome_lote,
+                    usuario_id=current_user.id,
+                    tipo=tipo,
+                    meta_diaria=int(request.form.get('meta_diaria', 50)),
+                    hora_inicio=int(request.form.get('hora_inicio', 8)),
+                    hora_fim=int(request.form.get('hora_fim', 18)),
+                    tempo_entre_envios=int(request.form.get('tempo_entre_envios', 15))
+                )
+                db.session.add(lote)
+                db.session.flush()  # Para pegar o ID do lote
+
                 # Contador de sucesso
                 importados = 0
                 erros = []
-                consultas_criadas = []
 
                 for idx, row in df.iterrows():
                     try:
                         consulta = AgendamentoConsulta(
                             usuario_id=current_user.id,
+                            lote_id=lote.id,
                             pasta=str(row.get('PASTA', '')) if pd.notna(row.get('PASTA')) else None,
                             od_maste=str(row.get('OD MASTE', '')) if pd.notna(row.get('OD MASTE')) else None,
                             codigo_agh=str(row.get('CÓDIGO AGH', '')) if pd.notna(row.get('CÓDIGO AGH')) else None,
@@ -5683,7 +5763,6 @@ def consultas_importar():
                             consulta.status = 'AGUARDANDO_CONFIRMACAO'
 
                         db.session.add(consulta)
-                        consultas_criadas.append(consulta)
                         importados += 1
 
                     except Exception as e:
@@ -5694,29 +5773,15 @@ def consultas_importar():
                 # Remover arquivo temporário
                 os.remove(filepath)
 
-                # Enviar mensagens automaticamente
-                enviados = 0
-                for consulta in consultas_criadas:
-                    try:
-                        # Enviar mensagem apenas para consultas que precisam
-                        if consulta.status in ['AGUARDANDO_CONFIRMACAO', 'REJEITADO']:
-                            sucesso, msg_id = enviar_mensagem_consulta(consulta.id, current_user.id)
-                            if sucesso:
-                                enviados += 1
-                                time.sleep(2)  # Delay entre mensagens
-                    except Exception as e:
-                        logger.error(f'Erro ao enviar mensagem para consulta {consulta.id}: {str(e)}')
-
                 if importados > 0:
-                    flash(f'{importados} consultas importadas com sucesso!', 'success')
-                if enviados > 0:
-                    flash(f'{enviados} mensagens WhatsApp enviadas!', 'success')
+                    flash(f'{importados} consultas importadas com sucesso no lote "{lote.nome}"!', 'success')
+                    flash('Configure as opções de envio e clique em "Iniciar Envio" quando estiver pronto.', 'info')
                 if erros:
                     flash(f'{len(erros)} erros encontrados. Verifique o log.', 'warning')
                     for erro in erros[:5]:  # Mostrar apenas os 5 primeiros erros
                         flash(erro, 'warning')
 
-                return redirect(url_for('consultas_listar', status='AGUARDANDO_CONFIRMACAO'))
+                return redirect(url_for('lote_consultas_detalhe', id=lote.id))
 
             except Exception as e:
                 flash(f'Erro ao processar planilha: {str(e)}', 'danger')
@@ -5850,6 +5915,123 @@ def api_consulta_cancelar(id):
     db.session.commit()
 
     return jsonify({'sucesso': True, 'mensagem': 'Consulta cancelada'})
+
+
+@app.route('/consultas/lote/<int:id>')
+@login_required
+def lote_consultas_detalhe(id):
+    """Detalhes e configuração de um lote de consultas"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        flash('Você não tem permissão para acessar esta área.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    lote = LoteConsultas.query.get_or_404(id)
+
+    if lote.usuario_id != current_user.id:
+        flash('Você não tem permissão para visualizar este lote.', 'danger')
+        return redirect(url_for('consultas_dashboard'))
+
+    # Estatísticas do lote
+    total = lote.consultas.count()
+    aguardando_envio = lote.consultas.filter_by(mensagem_enviada=False, status='AGUARDANDO_CONFIRMACAO').count()
+    enviados = lote.consultas.filter_by(mensagem_enviada=True).count()
+    rejeitados = lote.consultas.filter_by(status='REJEITADO').count()
+
+    return render_template('lote_consultas_detalhe.html',
+                         lote=lote,
+                         total=total,
+                         aguardando_envio=aguardando_envio,
+                         enviados=enviados,
+                         rejeitados=rejeitados)
+
+
+@app.route('/consultas/lote/<int:id>/iniciar', methods=['POST'])
+@login_required
+def lote_consultas_iniciar(id):
+    """Inicia envio controlado de mensagens do lote"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    lote = LoteConsultas.query.get_or_404(id)
+
+    if lote.usuario_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    if lote.status == 'enviando':
+        return jsonify({'sucesso': False, 'mensagem': 'Lote já está em envio'}), 400
+
+    # Atualizar configurações do lote se enviadas
+    lote.meta_diaria = int(request.form.get('meta_diaria', lote.meta_diaria))
+    lote.hora_inicio = int(request.form.get('hora_inicio', lote.hora_inicio))
+    lote.hora_fim = int(request.form.get('hora_fim', lote.hora_fim))
+    lote.tempo_entre_envios = int(request.form.get('tempo_entre_envios', lote.tempo_entre_envios))
+
+    lote.status = 'enviando'
+    lote.data_inicio = datetime.utcnow()
+    db.session.commit()
+
+    # Iniciar envio em background (sem Celery por enquanto, vamos fazer síncrono controlado)
+    flash('Envio iniciado! As mensagens serão enviadas respeitando a meta diária e horário configurados.', 'success')
+
+    return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+
+
+@app.route('/api/consultas/lote/<int:id>/enviar_proximas', methods=['POST'])
+@login_required
+def api_enviar_proximas_consultas(id):
+    """Envia próximas mensagens do lote respeitando limites"""
+    lote = LoteConsultas.query.get_or_404(id)
+
+    if lote.usuario_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    if lote.status != 'enviando':
+        return jsonify({'sucesso': False, 'mensagem': 'Lote não está em modo de envio'}), 400
+
+    # Verificar se pode enviar agora
+    if not lote.pode_enviar_agora():
+        return jsonify({'sucesso': False, 'mensagem': 'Fora do horário de envio'}), 400
+
+    if not lote.pode_enviar_hoje():
+        return jsonify({'sucesso': False, 'mensagem': 'Meta diária atingida'}), 400
+
+    # Buscar consultas pendentes de envio
+    consultas_pendentes = lote.consultas.filter_by(
+        mensagem_enviada=False
+    ).filter(
+        AgendamentoConsulta.status.in_(['AGUARDANDO_CONFIRMACAO', 'REJEITADO'])
+    ).limit(lote.meta_diaria - lote.enviados_hoje).all()
+
+    enviados = 0
+    for consulta in consultas_pendentes:
+        if not lote.pode_enviar_hoje():
+            break
+
+        sucesso, msg_id = enviar_mensagem_consulta(consulta.id, current_user.id)
+        if sucesso:
+            consulta.mensagem_enviada = True
+            consulta.data_envio_mensagem = datetime.utcnow()
+            lote.enviados_hoje += 1
+            enviados += 1
+            db.session.commit()
+            time.sleep(lote.tempo_entre_envios)
+        else:
+            logger.error(f'Erro ao enviar consulta {consulta.id}: {msg_id}')
+
+    # Verificar se terminou
+    pendentes = lote.consultas.filter_by(mensagem_enviada=False).count()
+    if pendentes == 0:
+        lote.status = 'concluido'
+        lote.data_fim = datetime.utcnow()
+        db.session.commit()
+
+    return jsonify({
+        'sucesso': True,
+        'enviados': enviados,
+        'pendentes': pendentes,
+        'meta_diaria': lote.meta_diaria,
+        'enviados_hoje': lote.enviados_hoje
+    })
 
 
 # =============================================================================

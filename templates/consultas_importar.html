@@ -41,11 +41,47 @@
                             </div>
                         </div>
 
+                        <!-- Nome do Lote -->
+                        <div class="mb-3">
+                            <label for="nome_lote" class="form-label">Nome do Lote</label>
+                            <input type="text" class="form-control" id="nome_lote" name="nome_lote"
+                                   placeholder="Ex: Consultas Janeiro 2026">
+                            <div class="form-text">Deixe vazio para gerar automaticamente</div>
+                        </div>
+
                         <!-- Upload de Arquivo -->
                         <div class="mb-4">
                             <label for="arquivo" class="form-label">Arquivo Excel</label>
                             <input type="file" class="form-control" id="arquivo" name="arquivo" accept=".xlsx,.xls" required>
                             <div class="form-text">Formato aceito: .xlsx ou .xls</div>
+                        </div>
+
+                        <!-- Configurações de Envio -->
+                        <h6 class="mt-4 mb-3">Configurações de Envio</h6>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label for="meta_diaria" class="form-label">Meta Diária (mensagens/dia)</label>
+                                <input type="number" class="form-control" id="meta_diaria" name="meta_diaria"
+                                       value="50" min="1" max="500">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="tempo_entre_envios" class="form-label">Intervalo entre envios (segundos)</label>
+                                <input type="number" class="form-control" id="tempo_entre_envios" name="tempo_entre_envios"
+                                       value="15" min="5" max="60">
+                            </div>
+                        </div>
+
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <label for="hora_inicio" class="form-label">Horário de Início</label>
+                                <input type="number" class="form-control" id="hora_inicio" name="hora_inicio"
+                                       value="8" min="0" max="23">
+                            </div>
+                            <div class="col-md-6">
+                                <label for="hora_fim" class="form-label">Horário de Término</label>
+                                <input type="number" class="form-control" id="hora_fim" name="hora_fim"
+                                       value="18" min="0" max="23">
+                            </div>
                         </div>
 
                         <!-- Instruções -->

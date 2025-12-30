@@ -687,7 +687,6 @@ class LoteConsultas(db.Model):
         return self.enviados_hoje < self.meta_diaria
 
     def pode_enviar_agora(self):
-        from datetime import datetime
         agora = datetime.now().hour
         return self.hora_inicio <= agora < self.hora_fim
 
@@ -5801,6 +5800,9 @@ def consultas_importar():
                             grade=str(row.get('GRADE', '')) if pd.notna(row.get('GRADE')) else None,
                             prioridade=str(row.get('PRIORIDADE', '')) if pd.notna(row.get('PRIORIDADE')) else None,
                             data_aghu=str(row.get('DATA AGHU', '')) if pd.notna(row.get('DATA AGHU')) else None,
+                            hora_consulta=str(row.get('HORA CONSULTA', '')) if pd.notna(row.get('HORA CONSULTA')) else None,
+                            dia_semana=str(row.get('DIA SEMANA', '')) if pd.notna(row.get('DIA SEMANA')) else None,
+                            unidade_funcional=str(row.get('UNIDADE FUNCIONAL', '')) if pd.notna(row.get('UNIDADE FUNCIONAL')) else None,
                             profissional=str(row.get('PROFISSIONAL', '')) if pd.notna(row.get('PROFISSIONAL')) else None,
                             paciente_voltar_posto_sms=str(row.get('PACIENTE_VOLTAR_POSTO_SMS', 'NÃO')) if tipo == 'INTERCONSULTA' else None
                         )
@@ -6055,6 +6057,76 @@ def lote_consultas_iniciar(id):
     # Iniciar envio em background (sem Celery por enquanto, vamos fazer síncrono controlado)
     flash('Envio iniciado! As mensagens serão enviadas respeitando a meta diária e horário configurados.', 'success')
 
+    return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+
+
+@app.route('/consultas/lote/<int:id>/pausar', methods=['POST'])
+@login_required
+def lote_consultas_pausar(id):
+    """Pausa o envio controlado de mensagens do lote"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    lote = LoteConsultas.query.get_or_404(id)
+
+    if lote.usuario_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    if lote.status != 'enviando':
+        flash('O lote não está em modo de envio.', 'warning')
+        return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+
+    lote.status = 'pausado'
+    db.session.commit()
+
+    flash('Envio pausado com sucesso!', 'success')
+    return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+
+
+@app.route('/consultas/lote/<int:id>/continuar', methods=['POST'])
+@login_required
+def lote_consultas_continuar(id):
+    """Continua o envio de um lote pausado"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    lote = LoteConsultas.query.get_or_404(id)
+
+    if lote.usuario_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    if lote.status != 'pausado':
+        flash('O lote não está pausado.', 'warning')
+        return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+
+    lote.status = 'enviando'
+    db.session.commit()
+
+    flash('Envio retomado com sucesso!', 'success')
+    return redirect(url_for('lote_consultas_detalhe', id=lote.id))
+
+
+@app.route('/consultas/lote/<int:id>/atualizar', methods=['POST'])
+@login_required
+def lote_consultas_atualizar(id):
+    """Atualiza configurações do lote (meta, horários, intervalo)"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    lote = LoteConsultas.query.get_or_404(id)
+
+    if lote.usuario_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    # Atualizar configurações
+    lote.meta_diaria = int(request.form.get('meta_diaria', lote.meta_diaria))
+    lote.hora_inicio = int(request.form.get('hora_inicio', lote.hora_inicio))
+    lote.hora_fim = int(request.form.get('hora_fim', lote.hora_fim))
+    lote.tempo_entre_envios = int(request.form.get('tempo_entre_envios', lote.tempo_entre_envios))
+
+    db.session.commit()
+
+    flash('Configurações atualizadas com sucesso!', 'success')
     return redirect(url_for('lote_consultas_detalhe', id=lote.id))
 
 

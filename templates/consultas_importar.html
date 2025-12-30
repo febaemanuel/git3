@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+
+{% block title %}Importar Consultas{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2><i class="bi bi-upload"></i> Importar Planilha de Consultas</h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('consultas_dashboard') }}">Consultas</a></li>
+                    <li class="breadcrumb-item active">Importar</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-file-earmark-excel"></i> Importar Planilha Excel
+                </div>
+                <div class="card-body">
+                    <form method="POST" enctype="multipart/form-data">
+                        <!-- Tipo de Consulta -->
+                        <div class="mb-4">
+                            <label class="form-label">Tipo de Consulta</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="tipo" id="retorno" value="RETORNO" checked>
+                                <label class="form-check-label" for="retorno">
+                                    <strong>RETORNO</strong> - Consulta de retorno
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="tipo" id="interconsulta" value="INTERCONSULTA">
+                                <label class="form-check-label" for="interconsulta">
+                                    <strong>INTERCONSULTA</strong> - Primeira consulta (possui campo PACIENTE_VOLTAR_POSTO_SMS)
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Upload de Arquivo -->
+                        <div class="mb-4">
+                            <label for="arquivo" class="form-label">Arquivo Excel</label>
+                            <input type="file" class="form-control" id="arquivo" name="arquivo" accept=".xlsx,.xls" required>
+                            <div class="form-text">Formato aceito: .xlsx ou .xls</div>
+                        </div>
+
+                        <!-- Instruções -->
+                        <div class="alert alert-info">
+                            <h6><i class="bi bi-info-circle"></i> Colunas esperadas na planilha:</h6>
+                            <ul class="mb-0">
+                                <li><strong>PACIENTE</strong> (obrigatório) - Nome do paciente</li>
+                                <li><strong>TELEFONE CADAS</strong> - Telefone cadastrado</li>
+                                <li><strong>TELEFONE REGIST</strong> - Telefone registrado</li>
+                                <li><strong>ESPECIALIDADE</strong> - Especialidade da consulta</li>
+                                <li><strong>DATA AGHU</strong> - Data da consulta</li>
+                                <li><strong>PROFISSIONAL</strong> - Nome do profissional</li>
+                                <li><strong>SUB-ESPECIALIDADE</strong> - Sub-especialidade (opcional)</li>
+                                <li><strong>GRADE</strong> - Grade (opcional)</li>
+                                <li><strong>PRIORIDADE</strong> - Prioridade (opcional)</li>
+                                <li><strong>PASTA</strong>, <strong>OD MASTE</strong>, <strong>CÓDIGO AGH</strong> (opcionais)</li>
+                            </ul>
+                            <hr>
+                            <p class="mb-0"><strong>Para INTERCONSULTA:</strong> adicione a coluna <strong>PACIENTE_VOLTAR_POSTO_SMS</strong> com valores "SIM" ou "NÃO"</p>
+                        </div>
+
+                        <!-- Botões -->
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-upload"></i> Importar
+                            </button>
+                            <a href="{{ url_for('consultas_dashboard') }}" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left"></i> Voltar
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

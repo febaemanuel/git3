@@ -6022,10 +6022,10 @@ def consultas_listar():
                          campanha_nome=campanha_nome)
 
 
-@app.route('/consultas/<int:id>')
+@app.route('/consulta/<int:id>/detalhes')
 @login_required
 def consulta_detalhe(id):
-    """Detalhes de uma consulta"""
+    """Detalhes de uma consulta (padrão igual a fila cirúrgica)"""
     if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
         flash('Você não tem permissão para acessar esta área.', 'danger')
         return redirect(url_for('dashboard'))

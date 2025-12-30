@@ -5804,7 +5804,15 @@ def consultas_dashboard():
         flash('Você não tem permissão para acessar esta área.', 'danger')
         return redirect(url_for('dashboard'))
 
-    # Estatísticas
+    # Buscar todas as campanhas do usuário
+    campanhas = CampanhaConsulta.query.filter_by(criador_id=current_user.id).order_by(CampanhaConsulta.data_criacao.desc()).all()
+
+    # Atualizar estatísticas de cada campanha
+    for campanha in campanhas:
+        campanha.atualizar_stats()
+    db.session.commit()
+
+    # Estatísticas gerais (todas as campanhas)
     aguardando_confirmacao = AgendamentoConsulta.query.filter_by(
         usuario_id=current_user.id,
         status='AGUARDANDO_CONFIRMACAO'
@@ -5830,18 +5838,13 @@ def consultas_dashboard():
         status='REJEITADO'
     ).count()
 
-    # Consultas recentes
-    consultas_recentes = AgendamentoConsulta.query.filter_by(
-        usuario_id=current_user.id
-    ).order_by(AgendamentoConsulta.created_at.desc()).limit(10).all()
-
     return render_template('consultas_dashboard.html',
+                         campanhas=campanhas,
                          aguardando_confirmacao=aguardando_confirmacao,
                          aguardando_comprovante=aguardando_comprovante,
                          confirmados=confirmados,
                          cancelados=cancelados,
-                         rejeitados=rejeitados,
-                         consultas_recentes=consultas_recentes)
+                         rejeitados=rejeitados)
 
 
 @app.route('/consultas/importar', methods=['GET', 'POST'])

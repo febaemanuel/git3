@@ -927,6 +927,22 @@ class TelefoneConsulta(db.Model):
     prioridade = db.Column(db.Integer, default=1)  # 1 = principal, 2 = secundário, etc.
 
 
+class LogMsgConsulta(db.Model):
+    """Histórico de mensagens de consultas (igual LogMsg da fila)"""
+    __tablename__ = 'logs_consultas'
+    id = db.Column(db.Integer, primary_key=True)
+    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas_consultas.id', ondelete='CASCADE'))
+    consulta_id = db.Column(db.Integer, db.ForeignKey('agendamentos_consultas.id', ondelete='CASCADE'))
+    direcao = db.Column(db.String(10))  # 'enviada' ou 'recebida'
+    telefone = db.Column(db.String(20))
+    mensagem = db.Column(db.Text)
+    status = db.Column(db.String(20))
+    erro = db.Column(db.Text)
+    sentimento = db.Column(db.String(20))  # neutro, urgente, insatisfeito, etc.
+    sentimento_score = db.Column(db.Float)
+    data = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 class Tutorial(db.Model):
     __tablename__ = 'tutoriais'
     id = db.Column(db.Integer, primary_key=True)
@@ -5742,10 +5758,35 @@ def enviar_mensagem_consulta(consulta_id, usuario_id):
                 tel_obj.msg_id = msg_id
                 algum_enviado = True
                 ultimo_msg_id = msg_id
+
+                # Registrar log de mensagem enviada
+                log = LogMsgConsulta(
+                    campanha_id=consulta.campanha_id,
+                    consulta_id=consulta.id,
+                    direcao='enviada',
+                    telefone=tel_obj.numero,
+                    mensagem=mensagem,
+                    status='sucesso',
+                    data=datetime.now()
+                )
+                db.session.add(log)
+
                 logger.info(f'Mensagem enviada para telefone {tel_obj.numero} da consulta {consulta_id}: {msg_id}')
                 # Enviar apenas para o primeiro telefone com sucesso (igual fila)
                 break
             else:
+                # Registrar log de erro
+                log = LogMsgConsulta(
+                    campanha_id=consulta.campanha_id,
+                    consulta_id=consulta.id,
+                    direcao='enviada',
+                    telefone=tel_obj.numero,
+                    mensagem=mensagem,
+                    status='erro',
+                    erro=str(msg_id),
+                    data=datetime.now()
+                )
+                db.session.add(log)
                 logger.warning(f'Falha ao enviar para {tel_obj.numero}: {msg_id}')
 
         if algum_enviado:
@@ -5796,6 +5837,18 @@ def processar_resposta_consulta(telefone, mensagem_texto):
         if not consulta:
             return False, 'Sem consulta pendente'
 
+        # Registrar log de mensagem recebida
+        log = LogMsgConsulta(
+            campanha_id=consulta.campanha_id,
+            consulta_id=consulta.id,
+            direcao='recebida',
+            telefone=telefone,
+            mensagem=mensagem_texto,
+            status='recebida',
+            data=datetime.now()
+        )
+        db.session.add(log)
+
         # Verificar se é uma confirmação
         msg_upper = mensagem_texto.upper()
         confirmacoes = ['SIM', 'S', '1', 'CONFIRMO', 'QUERO', 'CONFIRMAR', 'OK', 'POSITIVO']
@@ -5828,6 +5881,20 @@ Aguarde as próximas instruções em breve.
 Hospital Universitário Walter Cantídio."""
 
                     ws.enviar(telefone, mensagem_resposta)
+
+                    # Registrar log da resposta automática
+                    log_resp = LogMsgConsulta(
+                        campanha_id=consulta.campanha_id,
+                        consulta_id=consulta.id,
+                        direcao='enviada',
+                        telefone=telefone,
+                        mensagem=mensagem_resposta,
+                        status='sucesso',
+                        data=datetime.now()
+                    )
+                    db.session.add(log_resp)
+                    db.session.commit()
+
                     logger.info(f'Resposta automática enviada para consulta {consulta.id}')
             except Exception as e:
                 logger.error(f'Erro ao enviar resposta automática para consulta {consulta.id}: {str(e)}')
@@ -5860,6 +5927,20 @@ Caso precise reagendar, entre em contato com o ambulatório.
 Obrigado!"""
 
                     ws.enviar(telefone, mensagem_resposta)
+
+                    # Registrar log da resposta automática
+                    log_resp = LogMsgConsulta(
+                        campanha_id=consulta.campanha_id,
+                        consulta_id=consulta.id,
+                        direcao='enviada',
+                        telefone=telefone,
+                        mensagem=mensagem_resposta,
+                        status='sucesso',
+                        data=datetime.now()
+                    )
+                    db.session.add(log_resp)
+                    db.session.commit()
+
                     logger.info(f'Resposta de cancelamento enviada para consulta {consulta.id}')
             except Exception as e:
                 logger.error(f'Erro ao enviar resposta de cancelamento para consulta {consulta.id}: {str(e)}')
@@ -6136,7 +6217,16 @@ def consulta_detalhe(id):
         flash('Você não tem permissão para visualizar esta consulta.', 'danger')
         return redirect(url_for('consultas_dashboard'))
 
-    return render_template('consulta_detalhe.html', consulta=consulta)
+    # Buscar telefones da consulta
+    telefones = consulta.telefones.order_by(TelefoneConsulta.prioridade).all()
+
+    # Buscar histórico de mensagens
+    logs = LogMsgConsulta.query.filter_by(consulta_id=id).order_by(LogMsgConsulta.data).all()
+
+    return render_template('consulta_detalhe.html',
+                         consulta=consulta,
+                         telefones=telefones,
+                         logs=logs)
 
 
 @app.route('/consultas/<int:id>/comprovante', methods=['POST'])
@@ -6272,8 +6362,15 @@ def campanha_consultas_detalhe(id):
     campanha.atualizar_stats()
     db.session.commit()
 
+    # Aplicar filtro se fornecido
+    filtro = request.args.get('filtro', 'todos')
+    query = campanha.consultas
+
+    if filtro and filtro != 'todos':
+        query = query.filter_by(status=filtro)
+
     # Listar consultas da campanha
-    consultas = campanha.consultas.order_by(AgendamentoConsulta.created_at.desc()).all()
+    consultas = query.order_by(AgendamentoConsulta.created_at.desc()).all()
 
     # Estatísticas da campanha
     total = campanha.total_consultas

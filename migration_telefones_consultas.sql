@@ -61,7 +61,27 @@ WHERE telefone_regist IS NOT NULL
       AND tc.numero = agendamentos_consultas.telefone_regist
   );
 
--- 4. Mensagem de conclusão
+-- 4. Criar tabela logs_consultas (histórico de mensagens)
+CREATE TABLE IF NOT EXISTS logs_consultas (
+    id SERIAL PRIMARY KEY,
+    campanha_id INTEGER REFERENCES campanhas_consultas(id) ON DELETE CASCADE,
+    consulta_id INTEGER REFERENCES agendamentos_consultas(id) ON DELETE CASCADE,
+    direcao VARCHAR(10),
+    telefone VARCHAR(20),
+    mensagem TEXT,
+    status VARCHAR(20),
+    erro TEXT,
+    sentimento VARCHAR(20),
+    sentimento_score FLOAT,
+    data TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 5. Criar índices para logs_consultas
+CREATE INDEX IF NOT EXISTS idx_logs_consultas_consulta_id ON logs_consultas(consulta_id);
+CREATE INDEX IF NOT EXISTS idx_logs_consultas_campanha_id ON logs_consultas(campanha_id);
+CREATE INDEX IF NOT EXISTS idx_logs_consultas_data ON logs_consultas(data);
+
+-- 6. Mensagem de conclusão
 DO $$
 DECLARE
     total_telefones INTEGER;
@@ -73,4 +93,5 @@ BEGIN
     RAISE NOTICE 'Migração concluída com sucesso!';
     RAISE NOTICE 'Total de telefones cadastrados: %', total_telefones;
     RAISE NOTICE 'Total de consultas com telefones: %', total_consultas;
+    RAISE NOTICE 'Tabela logs_consultas criada para histórico de mensagens';
 END $$;

@@ -95,8 +95,8 @@
                                     <td>
                                         <div class="btn-group btn-group-sm" role="group">
                                             <a href="{{ url_for('consulta_detalhe', id=consulta.id) }}"
-                                               class="btn btn-outline-primary" title="Ver detalhes">
-                                                <i class="bi bi-eye"></i>
+                                               class="btn btn-outline-info" title="Ver detalhes e histórico">
+                                                <i class="bi bi-info-circle"></i>
                                             </a>
                                             {% if consulta.status == 'AGUARDANDO_COMPROVANTE' %}
                                             <button type="button" class="btn btn-outline-success"

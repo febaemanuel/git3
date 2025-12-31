@@ -128,6 +128,7 @@ class Usuario(UserMixin, db.Model):
     senha_hash = db.Column(db.String(255), nullable=False)
     ativo = db.Column(db.Boolean, default=True)
     is_admin = db.Column(db.Boolean, default=False)  # Flag de administrador
+    tipo_sistema = db.Column(db.String(50), default='BUSCA_ATIVA')  # BUSCA_ATIVA ou AGENDAMENTO_CONSULTA
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     ultimo_acesso = db.Column(db.DateTime)
 
@@ -731,6 +732,238 @@ class ProcedimentoNormalizado(db.Model):
             db.session.rollback()
             logging.error(f"Erro ao salvar normalização: {str(e)}")
             raise
+
+
+# =============================================================================
+# MODELOS - MODO CONSULTA (Agendamento de Consultas)
+# =============================================================================
+
+class CampanhaConsulta(db.Model):
+    """Campanha de agendamento de consultas - separado da fila cirúrgica"""
+    __tablename__ = 'campanhas_consultas'
+    id = db.Column(db.Integer, primary_key=True)
+    criador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    nome = db.Column(db.String(200), nullable=False)
+    descricao = db.Column(db.Text)
+    status = db.Column(db.String(50), default='pendente')  # pendente, enviando, pausado, concluido, erro
+
+    # Configurações de envio (mesmas da fila cirúrgica)
+    meta_diaria = db.Column(db.Integer, default=50)
+    hora_inicio = db.Column(db.Integer, default=8)
+    hora_fim = db.Column(db.Integer, default=23)
+    tempo_entre_envios = db.Column(db.Integer, default=15)
+    dias_duracao = db.Column(db.Integer, default=0)
+
+    # Controle diário
+    enviados_hoje = db.Column(db.Integer, default=0)
+    data_ultimo_envio = db.Column(db.Date)
+
+    # Estatísticas
+    total_consultas = db.Column(db.Integer, default=0)
+    total_enviados = db.Column(db.Integer, default=0)
+    total_confirmados = db.Column(db.Integer, default=0)
+    total_aguardando_comprovante = db.Column(db.Integer, default=0)
+    total_rejeitados = db.Column(db.Integer, default=0)
+
+    # Timestamps
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    data_inicio = db.Column(db.DateTime)
+    data_fim = db.Column(db.DateTime)
+
+    # Task ID do Celery
+    celery_task_id = db.Column(db.String(100))
+
+    # Relationships
+    criador = db.relationship('Usuario', backref='campanhas_consultas')
+
+    def pode_enviar_hoje(self):
+        """Verifica se pode enviar mais mensagens hoje (meta diária)"""
+        hoje = date.today()
+        if self.data_ultimo_envio != hoje:
+            self.enviados_hoje = 0
+            self.data_ultimo_envio = hoje
+            db.session.commit()
+        return self.enviados_hoje < self.meta_diaria
+
+    def pode_enviar_agora(self):
+        """Verifica se está dentro do horário permitido"""
+        hora_atual = datetime.now().hour
+        return self.hora_inicio <= hora_atual < self.hora_fim
+
+    def calcular_intervalo(self):
+        """Calcula intervalo entre envios baseado na meta diária e horário"""
+        if self.meta_diaria <= 0:
+            return self.tempo_entre_envios
+        horas_disponiveis = self.hora_fim - self.hora_inicio
+        if horas_disponiveis <= 0:
+            return self.tempo_entre_envios
+        minutos_disponiveis = horas_disponiveis * 60
+        intervalo = minutos_disponiveis // self.meta_diaria
+        return max(intervalo, 1)  # Mínimo 1 minuto
+
+    def atualizar_stats(self):
+        """Atualiza estatísticas da campanha"""
+        self.total_consultas = AgendamentoConsulta.query.filter_by(campanha_id=self.id).count()
+        self.total_enviados = AgendamentoConsulta.query.filter_by(campanha_id=self.id, mensagem_enviada=True).count()
+        self.total_confirmados = AgendamentoConsulta.query.filter_by(campanha_id=self.id, status='CONFIRMADO').count()
+        self.total_aguardando_comprovante = AgendamentoConsulta.query.filter_by(campanha_id=self.id, status='AGUARDANDO_COMPROVANTE').count()
+        self.total_rejeitados = AgendamentoConsulta.query.filter_by(campanha_id=self.id, status='REJEITADO').count()
+        db.session.commit()
+
+
+class AgendamentoConsulta(db.Model):
+    """Agendamento individual de consulta com dados da planilha"""
+    __tablename__ = 'agendamentos_consultas'
+    id = db.Column(db.Integer, primary_key=True)
+    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas_consultas.id', ondelete='CASCADE'))
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+
+    # Dados da planilha (TODAS as colunas)
+    posicao = db.Column(db.String(50))
+    cod_master = db.Column(db.String(50))
+    codigo_aghu = db.Column(db.String(50))
+    paciente = db.Column(db.String(200), nullable=False)
+    telefone_cadastro = db.Column(db.String(20))
+    telefone_registro = db.Column(db.String(20))
+    data_registro = db.Column(db.String(50))
+    procedencia = db.Column(db.String(200))
+    medico_solicitante = db.Column(db.String(200))
+    tipo = db.Column(db.String(50), nullable=False)  # RETORNO ou INTERCONSULTA
+    observacoes = db.Column(db.Text)
+    exames = db.Column(db.Text)
+    sub_especialidade = db.Column(db.String(200))
+    especialidade = db.Column(db.String(200))
+    grade_aghu = db.Column(db.String(50))
+    prioridade = db.Column(db.String(50))
+    indicacao_data = db.Column(db.String(50))
+    data_requisicao = db.Column(db.String(50))
+    data_exata_ou_dias = db.Column(db.String(50))
+    estimativa_agendamento = db.Column(db.String(50))
+    data_aghu = db.Column(db.String(50))  # Data da consulta
+
+    # Campo específico para INTERCONSULTA
+    paciente_voltar_posto_sms = db.Column(db.String(10))  # SIM ou NÃO
+
+    # Controle de status do fluxo
+    status = db.Column(db.String(50), default='AGUARDANDO_ENVIO')
+    # Fluxo: AGUARDANDO_ENVIO → AGUARDANDO_CONFIRMACAO → AGUARDANDO_COMPROVANTE → CONFIRMADO
+    #                                                   → AGUARDANDO_MOTIVO_REJEICAO → REJEITADO
+
+    mensagem_enviada = db.Column(db.Boolean, default=False)
+    data_envio_mensagem = db.Column(db.DateTime)
+
+    # Comprovante (PDF/JPG)
+    comprovante_path = db.Column(db.String(255))
+    comprovante_nome = db.Column(db.String(255))
+
+    # Rejeição
+    motivo_rejeicao = db.Column(db.Text)  # Armazena o motivo quando paciente rejeita
+
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    data_confirmacao = db.Column(db.DateTime)
+    data_rejeicao = db.Column(db.DateTime)
+
+    # Relationships
+    campanha = db.relationship('CampanhaConsulta', backref='agendamentos')
+    usuario = db.relationship('Usuario', backref='agendamentos_consultas')
+
+
+class TelefoneConsulta(db.Model):
+    """Telefones de cada consulta (cadastro e registro)"""
+    __tablename__ = 'telefones_consultas'
+    id = db.Column(db.Integer, primary_key=True)
+    consulta_id = db.Column(db.Integer, db.ForeignKey('agendamentos_consultas.id', ondelete='CASCADE'))
+    numero = db.Column(db.String(20), nullable=False)
+    prioridade = db.Column(db.Integer, default=1)  # 1 = telefone_cadastro, 2 = telefone_registro
+    enviado = db.Column(db.Boolean, default=False)
+    data_envio = db.Column(db.DateTime)
+    msg_id = db.Column(db.String(100))  # ID da mensagem na Evolution API
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships
+    consulta = db.relationship('AgendamentoConsulta', backref='telefones')
+
+
+class LogMsgConsulta(db.Model):
+    """Log de todas as mensagens enviadas e recebidas nas campanhas de consultas"""
+    __tablename__ = 'logs_msgs_consultas'
+    id = db.Column(db.Integer, primary_key=True)
+    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas_consultas.id', ondelete='CASCADE'))
+    consulta_id = db.Column(db.Integer, db.ForeignKey('agendamentos_consultas.id', ondelete='CASCADE'))
+    direcao = db.Column(db.String(20), nullable=False)  # 'enviada' ou 'recebida'
+    telefone = db.Column(db.String(20), nullable=False)
+    mensagem = db.Column(db.Text)
+    status = db.Column(db.String(20))  # 'sucesso' ou 'erro'
+    erro = db.Column(db.Text)
+    msg_id = db.Column(db.String(100))  # ID da mensagem na Evolution API
+    data = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships
+    campanha = db.relationship('CampanhaConsulta', backref='logs_msgs')
+    consulta = db.relationship('AgendamentoConsulta', backref='logs_msgs')
+
+
+# =============================================================================
+# FUNÇÕES DE MENSAGENS - MODO CONSULTA
+# =============================================================================
+
+def formatar_mensagem_consulta_inicial(consulta):
+    """
+    MSG 1: Mensagem inicial de confirmação de consulta (enviada automaticamente)
+    Enviada para: TODOS (RETORNO e INTERCONSULTA)
+    Status: AGUARDANDO_ENVIO → AGUARDANDO_CONFIRMACAO
+    """
+    return f"""Bom dia!
+Falamos do HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO.
+Estamos informando que a CONSULTA do paciente {consulta.paciente}, foi MARCADA para o dia {consulta.data_aghu}, com {consulta.medico_solicitante}, com especialidade em {consulta.especialidade}.
+
+Caso não haja confirmação em até 1 dia útil, sua consulta será cancelada!
+
+Posso confirmar o agendamento?"""
+
+
+def formatar_mensagem_comprovante():
+    """
+    MSG 2: Mensagem de comprovante (enviada manualmente com arquivo anexo)
+    Enviada para: Consultas com status AGUARDANDO_COMPROVANTE
+    Status: AGUARDANDO_COMPROVANTE → CONFIRMADO
+    """
+    return """O Hospital Walter Cantídio agradece seu contato. CONSULTA CONFIRMADA!
+
+Responda a pesquisa de satisfação: https://forms.gle/feteZxSNBRd5xfDUA
+
+O hospital entra em contato através do: (85) 992081534 / (85)996700783 / (85)991565903 / (85) 992614237 / (85) 992726080. É importante que atenda as ligações e responda as mensagens desses números. Por tanto, salve-os!
+
+Confira seu comprovante: data, horário e nome do(a) médico(a).
+
+Não fazemos marcação de exames, apenas consultas.
+
+Caso falte, procurar o ambulatório para ser colocado novamente no pré-agendamento.
+
+Você sabia que pode verificar sua consulta no app HU Digital? https://play.google.com/store/apps/details?id=br.gov.ebserh.hudigital&pcampaignid=web_share . Após 5 horas dessa mensagem, verifique sua consulta agendada no app.
+
+Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital."""
+
+
+def formatar_mensagem_perguntar_motivo():
+    """
+    MSG 3A: Pergunta motivo da rejeição (enviada automaticamente)
+    Enviada para: TODOS que respondem NÃO na MSG 1
+    Status: AGUARDANDO_CONFIRMACAO → AGUARDANDO_MOTIVO_REJEICAO
+    """
+    return "Qual o motivo?"
+
+
+def formatar_mensagem_voltar_posto(consulta):
+    """
+    MSG 3B: Orientação para voltar ao posto (enviada automaticamente)
+    Enviada para: INTERCONSULTA com PACIENTE_VOLTAR_POSTO_SMS = SIM
+    Status: AGUARDANDO_MOTIVO_REJEICAO → REJEITADO
+    """
+    return f"""HOSPITAL WALTER CANTIDIO
+Boa tarde! Falo com {consulta.paciente}? Sua consulta para o serviço de {consulta.especialidade} foi avaliada e por não se encaixar nos critérios do hospital, não foi possível seguir com o agendamento, portanto será necessário procurar um posto de saúde para realizar seu atendimento. Agradecemos a compreensão, tenha uma boa tarde!"""
 
 
 # =============================================================================
@@ -4418,6 +4651,106 @@ def webhook():
                 logger.warning(f"Webhook: Telefone {numero} não encontrado em nenhuma campanha")
             return jsonify({'status': 'ok'}), 200
 
+        # =====================================================================
+        # MODO CONSULTA - Processar respostas de agendamento de consultas
+        # =====================================================================
+        # Verificar se é uma resposta de consulta (antes de processar fila cirúrgica)
+        # Busca por telefone do usuário correto (mesmo filtro de instância)
+        consulta_telefone = TelefoneConsulta.query.filter_by(numero=numero).first()
+
+        if consulta_telefone:
+            consulta = consulta_telefone.consulta
+            # Verificar se pertence ao usuário correto (mesmo filtro de instância)
+            if consulta and consulta.campanha and consulta.campanha.criador_id == usuario_id:
+                logger.info(f"Webhook Consulta: [{instance_name}] Mensagem de {consulta.paciente} ({numero}). "
+                           f"Campanha: {consulta.campanha_id}. Status: {consulta.status}. Texto: {texto}")
+
+                ws = WhatsApp(consulta.campanha.criador_id)
+
+                # Log da mensagem recebida
+                log = LogMsgConsulta(
+                    campanha_id=consulta.campanha_id,
+                    consulta_id=consulta.id,
+                    direcao='recebida',
+                    telefone=numero,
+                    mensagem=texto[:500],
+                    status='sucesso'
+                )
+                db.session.add(log)
+                db.session.commit()
+
+                # ESTADO 1: AGUARDANDO_CONFIRMACAO (resposta à MSG 1)
+                if consulta.status == 'AGUARDANDO_CONFIRMACAO':
+                    # Verificar se é SIM ou NÃO
+                    if verificar_resposta_em_lista(texto_up, RESPOSTAS_SIM):
+                        # Paciente confirmou! → AGUARDANDO_COMPROVANTE
+                        consulta.status = 'AGUARDANDO_COMPROVANTE'
+                        db.session.commit()
+
+                        consulta.campanha.atualizar_stats()
+                        db.session.commit()
+
+                        ws.enviar(numero, "✅ Consulta confirmada! Aguarde o envio do comprovante.")
+                        logger.info(f"Consulta {consulta.id} confirmada por {consulta.paciente}")
+
+                    elif verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO):
+                        # Paciente rejeitou! → Perguntar motivo (MSG 3A)
+                        consulta.status = 'AGUARDANDO_MOTIVO_REJEICAO'
+                        db.session.commit()
+
+                        msg_perguntar_motivo = formatar_mensagem_perguntar_motivo()
+                        ws.enviar(numero, msg_perguntar_motivo)
+                        logger.info(f"Consulta {consulta.id} rejeitada por {consulta.paciente}, aguardando motivo")
+
+                    else:
+                        # Resposta não reconhecida
+                        ws.enviar(numero, "Por favor, responda com SIM ou NÃO.")
+
+                    return jsonify({'status': 'ok'}), 200
+
+                # ESTADO 2: AGUARDANDO_MOTIVO_REJEICAO (resposta à MSG 3A)
+                elif consulta.status == 'AGUARDANDO_MOTIVO_REJEICAO':
+                    # Armazenar motivo da rejeição
+                    consulta.motivo_rejeicao = texto
+                    consulta.status = 'REJEITADO'
+                    consulta.data_rejeicao = datetime.utcnow()
+                    db.session.commit()
+
+                    logger.info(f"Consulta {consulta.id} rejeitada. Motivo: {texto}")
+
+                    # Verificar se deve enviar MSG 3B (voltar ao posto)
+                    # Só envia se: INTERCONSULTA + PACIENTE_VOLTAR_POSTO_SMS = SIM
+                    if (consulta.tipo == 'INTERCONSULTA' and
+                        consulta.paciente_voltar_posto_sms and
+                        consulta.paciente_voltar_posto_sms.upper() == 'SIM'):
+
+                        msg_voltar_posto = formatar_mensagem_voltar_posto(consulta)
+                        ws.enviar(numero, msg_voltar_posto)
+                        logger.info(f"MSG 3B enviada para {consulta.paciente} (INTERCONSULTA + voltar posto)")
+
+                    consulta.campanha.atualizar_stats()
+                    db.session.commit()
+
+                    return jsonify({'status': 'ok'}), 200
+
+                # Outros status (CONFIRMADO, REJEITADO, etc.)
+                else:
+                    # Mensagem após conclusão
+                    if consulta.status == 'CONFIRMADO':
+                        ws.enviar(numero, "✅ Sua consulta já foi confirmada. Obrigado!")
+                    elif consulta.status == 'REJEITADO':
+                        ws.enviar(numero, "Sua consulta foi cancelada. Obrigado!")
+                    elif consulta.status == 'AGUARDANDO_COMPROVANTE':
+                        ws.enviar(numero, "✅ Sua consulta está confirmada! Aguarde o envio do comprovante.")
+                    else:
+                        ws.enviar(numero, "Recebemos sua mensagem. Obrigado!")
+
+                    return jsonify({'status': 'ok'}), 200
+
+        # =====================================================================
+        # FILA CIRÚRGICA - Processar respostas (código original)
+        # =====================================================================
+
         logger.info(f"Webhook: [{instance_name}] Mensagem de {c.nome} ({numero}). "
                    f"Campanha: {c.campanha_id} (User {usuario_id}). Status: {c.status}. Texto: {texto}")
 
@@ -5357,6 +5690,15 @@ def task_cancel(task_id):
         'task_id': task_id,
         'message': 'Task cancelada'
     })
+
+
+# =============================================================================
+# ROTAS - MODO CONSULTA
+# =============================================================================
+
+# Importar e inicializar rotas do modo consulta
+from consultas_routes import init_consultas_routes
+init_consultas_routes(app, db)
 
 
 # =============================================================================

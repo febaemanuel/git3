@@ -185,6 +185,16 @@
 
             <div class="collapse navbar-collapse" id="navbarNav">
                 <ul class="navbar-nav me-auto">
+                    <!-- Menu dinâmico baseado em tipo_sistema -->
+                    {% if current_user.tipo_sistema == 'AGENDAMENTO_CONSULTA' %}
+                    <!-- MODO CONSULTA -->
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('consultas_dashboard') }}">
+                            <i class="bi bi-calendar-check"></i> Consultas
+                        </a>
+                    </li>
+                    {% else %}
+                    <!-- FILA CIRÚRGICA (padrão) -->
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('dashboard') }}">
                             <i class="bi bi-speedometer2"></i> Dashboard
@@ -208,6 +218,7 @@
                             </a></li>
                         </ul>
                     </li>
+                    {% endif %}
                     <li class="nav-item">
                         <a class="nav-link" href="{{ url_for('gerenciar_faq') }}">
                             <i class="bi bi-chat-square-text"></i> FAQ

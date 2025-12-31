@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}{{ campanha.nome }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <h2>{{ campanha.nome }}</h2>
+        <p class="text-muted">{{ campanha.descricao }}</p>
+    </div>
+
+    <!-- Estatísticas -->
+    <div class="col-md-3 mb-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="text-muted">Total</h5>
+                <h2>{{ campanha.total_consultas }}</h2>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 mb-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="text-muted">Enviados</h5>
+                <h2 class="text-primary">{{ campanha.total_enviados }}</h2>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 mb-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="text-muted">Confirmados</h5>
+                <h2 class="text-success">{{ campanha.total_confirmados }}</h2>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 mb-4">
+        <div class="card">
+            <div class="card-body text-center">
+                <h5 class="text-muted">Rejeitados</h5>
+                <h2 class="text-danger">{{ campanha.total_rejeitados }}</h2>
+            </div>
+        </div>
+    </div>
+
+    <!-- Controles -->
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <strong>Status:</strong>
+                        <span class="badge bg-{% if campanha.status == 'enviando' %}primary{% elif campanha.status == 'concluido' %}success{% elif campanha.status == 'erro' %}danger{% else %}secondary{% endif %}">
+                            {{ campanha.status }}
+                        </span>
+                        {% if campanha.status_msg %}
+                        <small class="text-muted">{{ campanha.status_msg }}</small>
+                        {% endif %}
+                    </div>
+                    <div>
+                        {% if campanha.status in ['pendente', 'pronta', 'pausado'] %}
+                        <form method="POST" action="{{ url_for('consultas_campanha_iniciar', id=campanha.id) }}" class="d-inline">
+                            <button type="submit" class="btn btn-success">
+                                <i class="bi bi-play"></i> Iniciar Envio
+                            </button>
+                        </form>
+                        {% endif %}
+
+                        {% if campanha.status == 'enviando' %}
+                        <form method="POST" action="{{ url_for('consultas_campanha_pausar', id=campanha.id) }}" class="d-inline">
+                            <button type="submit" class="btn btn-warning">
+                                <i class="bi bi-pause"></i> Pausar
+                            </button>
+                        </form>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de Consultas -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Consultas ({{ consultas|length }})</h5>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>Paciente</th>
+                                <th>Tipo</th>
+                                <th>Data Consulta</th>
+                                <th>Médico</th>
+                                <th>Status</th>
+                                <th>Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for consulta in consultas %}
+                            <tr>
+                                <td>{{ consulta.paciente }}</td>
+                                <td><span class="badge bg-info">{{ consulta.tipo }}</span></td>
+                                <td>{{ consulta.data_aghu }}</td>
+                                <td>{{ consulta.medico_solicitante }}</td>
+                                <td>
+                                    {% if consulta.status == 'CONFIRMADO' %}
+                                    <span class="badge bg-success">Confirmado</span>
+                                    {% elif consulta.status == 'AGUARDANDO_COMPROVANTE' %}
+                                    <span class="badge bg-warning">Ag. Comprovante</span>
+                                    {% elif consulta.status == 'AGUARDANDO_CONFIRMACAO' %}
+                                    <span class="badge bg-info">Ag. Confirmação</span>
+                                    {% elif consulta.status == 'REJEITADO' %}
+                                    <span class="badge bg-danger">Rejeitado</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ consulta.status }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <a href="{{ url_for('consulta_detalhe', id=consulta.id) }}" class="btn btn-sm btn-primary">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -149,11 +149,19 @@ tail -50 busca_ativa.log
 
 ### Erro: "relation 'campanhas_consultas' does not exist"
 **Causa:** Tabelas do modo consulta não foram criadas
-**Solução:** Executar `python migrate_modo_consulta.py --apply`
+**Solução:** Executar `python3 migrate_modo_consulta.py --apply`
 
 ### Erro: "column 'tipo_sistema' does not exist"
 **Causa:** Campo tipo_sistema não foi adicionado em usuarios
-**Solução:** Executar `python migrate_modo_consulta.py --apply`
+**Solução:** Executar `python3 migrate_modo_consulta.py --apply`
+
+### Erro: "column 'celery_task_id' does not exist"
+**Causa:** Coluna celery_task_id faltando em campanhas_consultas
+**Solução:** Executar `python3 fix_celery_task_id.py`
+
+### Erro: "column 'posicao' does not exist" (ou outras colunas)
+**Causa:** Colunas faltando em agendamentos_consultas
+**Solução:** Executar `python3 fix_agendamentos_consultas_schema.py`
 
 ### Erro: "could not connect to server"
 **Causa:** Banco de dados PostgreSQL offline
@@ -235,22 +243,48 @@ Se o problema persistir:
 
 ## ✨ Resumo Rápido
 
-**Para resolver o erro do dashboard:**
+### **Para Instalações em Docker (Recomendado)**
+
+```bash
+# 1. Atualizar código
+cd ~/busca
+git pull origin claude/fix-dashboard-server-error-J4664
+
+# 2. Rebuild e restart
+docker-compose down
+docker-compose up -d --build
+
+# 3. Aplicar TODOS os fixes (dentro do container)
+docker exec -it busca-ativa-web python3 fix_celery_task_id.py
+docker exec -it busca-ativa-web python3 fix_agendamentos_consultas_schema.py
+
+# 4. Reiniciar
+docker restart busca-ativa-web
+
+# 5. Verificar logs
+docker logs -f busca-ativa-web
+```
+
+### **Para Instalações Tradicionais (sem Docker)**
 
 ```bash
 # 1. Ver o erro
 tail -50 busca_ativa.log
 
 # 2. Verificar migrations
-python migrate_modo_consulta.py --check
+python3 migrate_modo_consulta.py --check
 
 # 3. Aplicar se necessário
-python migrate_modo_consulta.py --apply
+python3 migrate_modo_consulta.py --apply
 
-# 4. Reiniciar a aplicação
+# 4. Aplicar fixes adicionais
+python3 fix_celery_task_id.py
+python3 fix_agendamentos_consultas_schema.py
+
+# 5. Reiniciar a aplicação
 sudo systemctl restart busca-ativa
 
-# 5. Testar
+# 6. Testar
 curl -I https://chsistemas.cloud/consultas/dashboard
 ```
 

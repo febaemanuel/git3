@@ -64,6 +64,13 @@ def init_consultas_routes(app, db):
             camp.atualizar_stats()
         db.session.commit()
 
+        # VALIDAÇÃO: Verificar se usuário tem WhatsApp configurado
+        from app import ConfigWhatsApp
+        config_whatsapp = ConfigWhatsApp.query.filter_by(usuario_id=current_user.id).first()
+        if not config_whatsapp and campanhas:
+            flash('⚠️ ATENÇÃO: Você possui campanhas mas não tem WhatsApp configurado! '
+                  'Configure o WhatsApp para poder enviar mensagens.', 'warning')
+
         return render_template('consultas_dashboard.html', campanhas=campanhas)
 
 
@@ -107,6 +114,18 @@ def init_consultas_routes(app, db):
                 if not nome:
                     flash('Nome da campanha é obrigatório', 'danger')
                     return redirect(request.url)
+
+                # VALIDAÇÃO CRÍTICA: Verificar se usuário tem WhatsApp configurado
+                from app import ConfigWhatsApp
+                config_whatsapp = ConfigWhatsApp.query.filter_by(usuario_id=current_user.id).first()
+                if not config_whatsapp:
+                    flash('❌ ERRO: Você precisa configurar o WhatsApp antes de criar campanhas de consulta!', 'danger')
+                    return redirect(url_for('config_whatsapp'))
+
+                ws_test = WhatsApp(current_user.id)
+                if not ws_test.ok():
+                    flash('❌ ERRO: WhatsApp não está configurado corretamente. Configure antes de continuar.', 'danger')
+                    return redirect(url_for('config_whatsapp'))
 
                 # Ler planilha
                 df = pd.read_excel(arquivo, dtype=str)
@@ -287,8 +306,22 @@ def init_consultas_routes(app, db):
             return redirect(url_for('consultas_campanha_detalhe', id=id))
 
         try:
-            # Verificar WhatsApp
-            ws = WhatsApp(current_user.id)
+            # VALIDAÇÃO CRÍTICA: Verificar se a campanha pertence a usuário com WhatsApp
+            from app import ConfigWhatsApp
+            config_whatsapp = ConfigWhatsApp.query.filter_by(usuario_id=campanha.criador_id).first()
+            if not config_whatsapp:
+                flash(f'❌ ERRO CRÍTICO: A campanha foi criada por um usuário (ID {campanha.criador_id}) que não tem WhatsApp configurado! '
+                      f'Não é possível enviar mensagens. Contate o administrador.', 'danger')
+                return redirect(url_for('consultas_campanha_detalhe', id=id))
+
+            # Verificar WhatsApp do usuário atual (se for diferente do criador)
+            if current_user.id != campanha.criador_id:
+                # Admin tentando iniciar campanha de outro usuário
+                # Usar o WhatsApp do criador da campanha
+                ws = WhatsApp(campanha.criador_id)
+            else:
+                ws = WhatsApp(current_user.id)
+
             if not ws.ok():
                 flash('Configure o WhatsApp antes de iniciar', 'warning')
                 return redirect(url_for('config_whatsapp'))

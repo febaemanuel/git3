@@ -6513,6 +6513,22 @@ def api_enviar_proximas_consultas(id):
     if campanha.status != 'enviando':
         return jsonify({'sucesso': False, 'mensagem': 'Lote não está em modo de envio'}), 400
 
+    # Verificar WhatsApp configurado PRIMEIRO (antes de outras validações)
+    ws = WhatsApp(current_user.id)
+    if not ws.ok():
+        return jsonify({
+            'sucesso': False,
+            'mensagem': 'WhatsApp não configurado! Verifique as configurações da API Evolution.'
+        }), 400
+
+    # Verificar se está conectado
+    conectado, estado = ws.conectado()
+    if not conectado:
+        return jsonify({
+            'sucesso': False,
+            'mensagem': f'WhatsApp desconectado! Estado: {estado}. Escaneie o QR Code nas configurações.'
+        }), 400
+
     # Verificar se pode enviar agora
     if not campanha.pode_enviar_agora():
         return jsonify({'sucesso': False, 'mensagem': 'Fora do horário de envio'}), 400
@@ -6525,7 +6541,16 @@ def api_enviar_proximas_consultas(id):
         status='AGUARDANDO_ENVIO'
     ).limit(campanha.meta_diaria - campanha.enviados_hoje).all()
 
+    if not consultas_pendentes:
+        return jsonify({
+            'sucesso': False,
+            'mensagem': 'Nenhuma consulta pendente de envio encontrada!'
+        }), 400
+
     enviados = 0
+    erros = 0
+    erros_detalhes = []
+
     for consulta in consultas_pendentes:
         if not campanha.pode_enviar_hoje():
             break
@@ -6539,6 +6564,9 @@ def api_enviar_proximas_consultas(id):
             db.session.commit()
             time.sleep(campanha.tempo_entre_envios)
         else:
+            erros += 1
+            erro_msg = f'{consulta.nome_paciente}: {msg_id}'
+            erros_detalhes.append(erro_msg)
             logger.error(f'Erro ao enviar consulta {consulta.id}: {msg_id}')
 
     # Verificar se terminou (contar consultas AGUARDANDO_ENVIO)
@@ -6548,12 +6576,21 @@ def api_enviar_proximas_consultas(id):
         campanha.data_fim = datetime.utcnow()
         db.session.commit()
 
+    # Preparar mensagem de retorno
+    mensagem = f'{enviados} mensagens enviadas!'
+    if erros > 0:
+        mensagem += f' {erros} falharam.'
+    mensagem += f' Pendentes: {pendentes}'
+
     return jsonify({
         'sucesso': True,
         'enviados': enviados,
+        'erros': erros,
+        'erros_detalhes': erros_detalhes[:5],  # Mostrar apenas os 5 primeiros erros
         'pendentes': pendentes,
         'meta_diaria': campanha.meta_diaria,
-        'enviados_hoje': campanha.enviados_hoje
+        'enviados_hoje': campanha.enviados_hoje,
+        'mensagem': mensagem
     })
 
 

@@ -366,19 +366,37 @@ function enviarProximas() {
         return;
     }
 
+    // Mostrar indicador de loading
+    const btnEnviar = event.target;
+    const textoOriginal = btnEnviar.innerHTML;
+    btnEnviar.disabled = true;
+    btnEnviar.innerHTML = '<i class="bi bi-hourglass-split"></i> Enviando...';
+
     fetch(`/api/consultas/campanha/{{ campanha.id }}/enviar_proximas`, {
         method: 'POST'
     })
     .then(response => response.json())
     .then(data => {
+        btnEnviar.disabled = false;
+        btnEnviar.innerHTML = textoOriginal;
+
         if (data.sucesso) {
-            alert(`${data.enviados} mensagens enviadas! Pendentes: ${data.pendentes}`);
+            let mensagem = data.mensagem || `${data.enviados} mensagens enviadas! Pendentes: ${data.pendentes}`;
+
+            // Mostrar erros se houver
+            if (data.erros > 0 && data.erros_detalhes && data.erros_detalhes.length > 0) {
+                mensagem += '\n\nErros:\n' + data.erros_detalhes.join('\n');
+            }
+
+            alert(mensagem);
             location.reload();
         } else {
             alert('Erro: ' + data.mensagem);
         }
     })
     .catch(error => {
+        btnEnviar.disabled = false;
+        btnEnviar.innerHTML = textoOriginal;
         alert('Erro ao enviar mensagens: ' + error);
     });
 }

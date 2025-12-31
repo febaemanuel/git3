@@ -50,7 +50,8 @@ def init_consultas_routes(app, db):
     @login_required
     def consultas_dashboard():
         """Dashboard principal - lista de campanhas de consultas"""
-        if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        tipo_sistema = getattr(current_user, 'tipo_sistema', 'BUSCA_ATIVA')
+        if tipo_sistema != 'AGENDAMENTO_CONSULTA':
             flash('Acesso negado. Usuário configurado para Fila Cirúrgica.', 'warning')
             return redirect(url_for('dashboard'))
 
@@ -74,7 +75,8 @@ def init_consultas_routes(app, db):
     @login_required
     def consultas_importar():
         """Importa planilha Excel com consultas"""
-        if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        tipo_sistema = getattr(current_user, 'tipo_sistema', 'BUSCA_ATIVA')
+        if tipo_sistema != 'AGENDAMENTO_CONSULTA':
             flash('Acesso negado. Usuário configurado para Fila Cirúrgica.', 'warning')
             return redirect(url_for('dashboard'))
 

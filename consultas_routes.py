@@ -119,13 +119,15 @@ def init_consultas_routes(app, db):
                 from app import ConfigWhatsApp
                 config_whatsapp = ConfigWhatsApp.query.filter_by(usuario_id=current_user.id).first()
                 if not config_whatsapp:
-                    flash('❌ ERRO: Você precisa configurar o WhatsApp antes de criar campanhas de consulta!', 'danger')
-                    return redirect(url_for('config_whatsapp'))
+                    flash('❌ ERRO: Você precisa configurar o WhatsApp antes de criar campanhas de consulta! '
+                          'Acesse Configurações no menu superior.', 'danger')
+                    return redirect(url_for('consultas_dashboard'))
 
                 ws_test = WhatsApp(current_user.id)
                 if not ws_test.ok():
-                    flash('❌ ERRO: WhatsApp não está configurado corretamente. Configure antes de continuar.', 'danger')
-                    return redirect(url_for('config_whatsapp'))
+                    flash('❌ ERRO: WhatsApp não está configurado corretamente. '
+                          'Acesse Configurações no menu superior e configure o WhatsApp.', 'danger')
+                    return redirect(url_for('consultas_dashboard'))
 
                 # Ler planilha
                 df = pd.read_excel(arquivo, dtype=str)
@@ -323,13 +325,13 @@ def init_consultas_routes(app, db):
                 ws = WhatsApp(current_user.id)
 
             if not ws.ok():
-                flash('Configure o WhatsApp antes de iniciar', 'warning')
-                return redirect(url_for('config_whatsapp'))
+                flash('Configure o WhatsApp antes de iniciar. Acesse Configurações no menu superior.', 'warning')
+                return redirect(url_for('consultas_dashboard'))
 
             conn, _ = ws.conectado()
             if not conn:
-                flash('WhatsApp desconectado. Conecte antes de iniciar.', 'warning')
-                return redirect(url_for('conectar_whatsapp'))
+                flash('WhatsApp desconectado. Acesse Configurações no menu superior para conectar.', 'warning')
+                return redirect(url_for('consultas_dashboard'))
 
             # Iniciar task
             task = enviar_campanha_consultas_task.delay(campanha.id)

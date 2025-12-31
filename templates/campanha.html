@@ -236,7 +236,26 @@
                         <tbody>
                             {% for contato in contatos.items %}
                             <tr>
-                                <td><strong>{{ contato.nome }}</strong></td>
+                                <td>
+                                    <div class="d-flex align-items-center gap-2">
+                                        <strong>{{ contato.nome }}</strong>
+                                        {% if contato.tem_mensagens_recentes() %}
+                                        <span class="badge bg-primary" title="Mensagem recente (últimas 24h)">
+                                            <i class="bi bi-chat-fill"></i>
+                                        </span>
+                                        {% endif %}
+                                        {% set sentimento = contato.sentimento_recente() %}
+                                        {% if sentimento == 'urgente' %}
+                                        <span class="badge bg-danger" title="Sentimento: URGENTE - Requer atenção imediata">
+                                            <i class="bi bi-exclamation-triangle-fill"></i> URGENTE
+                                        </span>
+                                        {% elif sentimento == 'insatisfeito' %}
+                                        <span class="badge bg-warning text-dark" title="Sentimento: Insatisfeito">
+                                            <i class="bi bi-emoji-neutral"></i> Insatisfeito
+                                        </span>
+                                        {% endif %}
+                                    </div>
+                                </td>
                                 <td>{{ contato.formatar_telefone() }}</td>
                                 <td>
                                     {% if contato.procedimento_normalizado and contato.procedimento_normalizado != contato.procedimento %}
@@ -271,6 +290,10 @@
                                 </td>
                                 <td class="text-center">
                                     <div class="btn-group btn-group-sm">
+                                        <a href="{{ url_for('contato_detalhes_pagina', id=contato.id) }}"
+                                           class="btn btn-outline-info" title="Ver detalhes e histórico">
+                                            <i class="bi bi-info-circle"></i>
+                                        </a>
                                         {% if not contato.confirmado and not contato.rejeitado %}
                                         <button class="btn btn-outline-success" title="Marcar como confirmado"
                                                 onclick="confirmarContato({{ contato.id }})">
@@ -340,6 +363,7 @@
         </div>
     </div>
 </div>
+
 {% endblock %}
 
 {% block extra_js %}
@@ -465,5 +489,6 @@ function atualizarStatus() {
 
 setInterval(atualizarStatus, 5000);
 {% endif %}
+
 </script>
 {% endblock %}

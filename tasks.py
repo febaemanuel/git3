@@ -587,6 +587,93 @@ def limpar_tasks_antigas():
 
 @celery.task(
     base=DatabaseTask,
+    name='tasks.retomar_campanhas_automaticas'
+)
+def retomar_campanhas_automaticas():
+    """
+    Retoma automaticamente campanhas pausadas que estão no horário correto
+    Executada a cada hora durante o dia
+
+    Verifica:
+    - Campanhas pausadas por "Fora do horário"
+    - Campanhas pausadas por "Meta diária atingida" (novo dia)
+    - Se agora está dentro do horário de funcionamento
+    - Se pode enviar hoje (meta diária resetada)
+
+    Retorna: número de campanhas retomadas
+    """
+    from app import db, Campanha
+    from datetime import datetime
+
+    logger.info("Verificando campanhas pausadas para retomada automática")
+
+    try:
+        # Buscar campanhas pausadas
+        campanhas_pausadas = Campanha.query.filter_by(status='pausada').all()
+
+        if not campanhas_pausadas:
+            logger.info("Nenhuma campanha pausada encontrada")
+            return {'sucesso': True, 'retomadas': 0}
+
+        retomadas = 0
+
+        for camp in campanhas_pausadas:
+            # Verificar se foi pausada por horário ou meta diária
+            motivo_horario = 'Fora do horário' in (camp.status_msg or '')
+            motivo_meta = 'Meta diária atingida' in (camp.status_msg or '')
+
+            if not (motivo_horario or motivo_meta):
+                # Foi pausada manualmente pelo usuário, não retomar
+                continue
+
+            # Verificar se tem contatos pendentes
+            from app import Contato
+            pendentes = camp.contatos.filter(
+                Contato.status.in_(['pendente', 'pronto_envio'])
+            ).count()
+
+            if pendentes == 0:
+                # Não tem mais nada para enviar, marcar como concluída
+                camp.status = 'concluida'
+                camp.status_msg = 'Todos os contatos foram processados'
+                db.session.commit()
+                logger.info(f"Campanha {camp.id} ({camp.nome}) marcada como concluída - sem pendentes")
+                continue
+
+            # Verificar se pode enviar agora
+            pode_enviar = camp.pode_enviar_agora()
+            pode_hoje = camp.pode_enviar_hoje()
+
+            if pode_enviar and pode_hoje:
+                # Retomar campanha automaticamente
+                logger.info(f"Retomando campanha {camp.id} ({camp.nome}) automaticamente")
+
+                # Chamar task de envio
+                enviar_campanha_task.delay(camp.id)
+
+                retomadas += 1
+                logger.info(f"Campanha {camp.id} retomada: horário OK, meta diária OK, {pendentes} pendentes")
+            else:
+                if not pode_enviar:
+                    logger.debug(f"Campanha {camp.id} ainda fora do horário ({camp.hora_inicio}h-{camp.hora_fim}h)")
+                if not pode_hoje:
+                    logger.debug(f"Campanha {camp.id} meta diária já atingida ({camp.enviados_hoje}/{camp.meta_diaria})")
+
+        logger.info(f"Retomada automática concluída: {retomadas} campanhas retomadas")
+
+        return {
+            'sucesso': True,
+            'retomadas': retomadas,
+            'verificadas': len(campanhas_pausadas)
+        }
+
+    except Exception as e:
+        logger.exception(f"Erro na retomada automática: {e}")
+        return {'sucesso': False, 'erro': str(e)}
+
+
+@celery.task(
+    base=DatabaseTask,
     bind=True,
     name='tasks.processar_planilha_task',
     max_retries=2,
@@ -653,6 +740,10 @@ def processar_planilha_task(self, arquivo_path, campanha_id):
         # Normalizar colunas
         df.columns = [str(c).strip().lower() for c in df.columns]
 
+        # Normalizar: substituir múltiplos espaços por um único
+        import re
+        df.columns = [re.sub(r'\s+', ' ', c) for c in df.columns]
+
         # Identificar colunas
         col_nome = col_tel = col_proc = col_nasc = None
         for c in df.columns:
@@ -701,11 +792,27 @@ def processar_planilha_task(self, arquivo_path, campanha_id):
                 if pd.notna(val):
                     try:
                         if isinstance(val, datetime):
+                            # Já é datetime do Excel
                             dt_nasc = val.date()
                         else:
-                            dt_nasc = pd.to_datetime(val, dayfirst=True).date()
+                            # Converter para string e limpar
+                            val_str = str(val).strip()
+
+                            # Extrair apenas a parte da data com regex (DD/MM/YYYY ou DD-MM-YYYY ou DD.MM.YYYY)
+                            import re
+                            match = re.search(r'(\d{1,2})[/\-\.](\d{1,2})[/\-\.](\d{4})', val_str)
+                            if match:
+                                dia, mes, ano = match.groups()
+                                # Criar data manualmente para garantir formato correto
+                                dt_nasc = datetime(int(ano), int(mes), int(dia)).date()
+                            else:
+                                # Fallback: tentar parsear com pandas
+                                dt_nasc = pd.to_datetime(val_str, dayfirst=True).date()
+
                         dt_nasc_str = dt_nasc.isoformat()
-                    except:
+                        logger.info(f"Data importada: {val} -> {dt_nasc}")
+                    except Exception as e:
+                        logger.warning(f"Erro ao parsear data '{val}': {e}")
                         pass
 
             chave = (nome, dt_nasc_str)

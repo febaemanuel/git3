@@ -54,11 +54,15 @@ Posso confirmar o agendamento?
 - Sistema aguarda usuário enviar comprovante
 
 **Opção 2: Paciente rejeita (NÃO / CANCELO)**
-- Status muda: AGUARDANDO_CONFIRMACAO → REJEITADO
+- Sistema pergunta: **"Qual o motivo?"**
+- Status muda: AGUARDANDO_CONFIRMACAO → AGUARDANDO_MOTIVO_REJEICAO
+- Aguarda resposta do paciente com o motivo
+- Armazena motivo no campo `motivo_rejeicao`
+- Status muda: AGUARDANDO_MOTIVO_REJEICAO → REJEITADO
 - **SE INTERCONSULTA E PACIENTE_VOLTAR_POSTO_SMS = SIM:**
   - Enviar MENSAGEM 3 (volta ao posto)
 - **SENÃO:**
-  - Apenas cancelar
+  - Apenas marca como REJEITADO
 
 ---
 
@@ -92,11 +96,25 @@ Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU D
 
 ---
 
-### MENSAGEM 3: Rejeitado - Voltar ao Posto (AUTOMÁTICA)
+### MENSAGEM 3A: Perguntar Motivo da Rejeição (AUTOMÁTICA)
+
+**Enviada para:** TODOS que respondem NÃO na MSG 1
+**Quando:** Paciente responde NÃO/CANCELO na MSG 1
+**Status:** AGUARDANDO_MOTIVO_REJEICAO
+
+```
+Qual o motivo?
+```
+
+**Ação:** Aguarda próxima mensagem do paciente e armazena no campo `motivo_rejeicao`
+
+---
+
+### MENSAGEM 3B: Rejeitado - Voltar ao Posto (AUTOMÁTICA)
 
 **Enviada para:** INTERCONSULTA com PACIENTE_VOLTAR_POSTO_SMS = SIM
-**Quando:** Paciente responde NÃO na MSG 1
-**Status:** REJEITADO (mantém)
+**Quando:** Após receber e armazenar o motivo
+**Status:** REJEITADO
 
 ```
 HOSPITAL WALTER CANTIDIO
@@ -264,13 +282,16 @@ CREATE TABLE agendamentos_consultas (
     -- Controle de status
     status VARCHAR(50) DEFAULT 'AGUARDANDO_ENVIO',
     -- AGUARDANDO_ENVIO → AGUARDANDO_CONFIRMACAO → AGUARDANDO_COMPROVANTE → CONFIRMADO
-    --                                           → REJEITADO
+    --                                           → AGUARDANDO_MOTIVO_REJEICAO → REJEITADO
 
     mensagem_enviada BOOLEAN DEFAULT FALSE,
     data_envio_mensagem TIMESTAMP,
 
     -- Comprovante
     comprovante_path VARCHAR(255),
+
+    -- Rejeição
+    motivo_rejeicao TEXT,  -- Armazena motivo quando paciente rejeita
 
     -- Timestamps
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -373,8 +394,12 @@ Você sabia que pode verificar sua consulta no app HU Digital? https://play.goog
 
 Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital."""
 
+def formatar_mensagem_perguntar_motivo():
+    """MSG 3A: Perguntar motivo da rejeição"""
+    return "Qual o motivo?"
+
 def formatar_mensagem_voltar_posto(consulta):
-    """MSG 3: Rejeitado - Voltar ao posto"""
+    """MSG 3B: Rejeitado - Voltar ao posto"""
     return f"""HOSPITAL WALTER CANTIDIO
 Boa tarde! Falo com {consulta.paciente}? Sua consulta para o serviço de {consulta.especialidade} foi avaliada e por não se encaixar nos critérios do hospital, não foi possível seguir com o agendamento, portanto será necessário procurar um posto de saúde para realizar seu atendimento. Agradecemos a compreensão, tenha uma boa tarde!"""
 ```
@@ -432,10 +457,16 @@ def processar_resposta_consulta(telefone, mensagem_texto):
     """
     Processa resposta do paciente
 
-    SIM/OK/CONFIRMO → Status: AGUARDANDO_COMPROVANTE
-    NÃO/CANCELO → Status: REJEITADO
-        → Se INTERCONSULTA e PACIENTE_VOLTAR_POSTO_SMS = SIM
-           → Enviar MSG 3 (voltar ao posto)
+    STATUS: AGUARDANDO_CONFIRMACAO
+        SIM/OK/CONFIRMO → Status: AGUARDANDO_COMPROVANTE
+        NÃO/CANCELO → Envia "Qual o motivo?"
+                   → Status: AGUARDANDO_MOTIVO_REJEICAO
+
+    STATUS: AGUARDANDO_MOTIVO_REJEICAO
+        Qualquer texto → Armazena em motivo_rejeicao
+                      → Status: REJEITADO
+                      → Se INTERCONSULTA e PACIENTE_VOLTAR_POSTO_SMS = SIM
+                         → Envia MSG 3B (voltar ao posto)
     """
 ```
 
@@ -456,6 +487,32 @@ Alterar menu em `base.html`:
 {% elif current_user.tipo_sistema == 'AGENDAMENTO_CONSULTA' %}
     <a href="/consultas/dashboard">Consultas</a>
 {% endif %}
+```
+
+---
+
+## 📊 DIAGRAMA DE FLUXO ATUALIZADO
+
+```
+AGUARDANDO_ENVIO
+    ↓ (Celery envia MSG 1)
+AGUARDANDO_CONFIRMACAO
+    ↓
+    ├─→ Paciente: "SIM" → AGUARDANDO_COMPROVANTE
+    │                      ↓ (Usuário envia comprovante + MSG 2)
+    │                      CONFIRMADO ✅
+    │
+    └─→ Paciente: "NÃO" → Sistema: "Qual o motivo?"
+                         → AGUARDANDO_MOTIVO_REJEICAO
+                         → Paciente responde motivo
+                         → Armazena em motivo_rejeicao
+                         → REJEITADO
+                            ↓
+                            ├─→ SE (INTERCONSULTA + VOLTAR_POSTO = SIM)
+                            │   → Envia MSG 3B (voltar ao posto)
+                            │
+                            └─→ SENÃO
+                                → Fim (sem MSG 3B)
 ```
 
 ---
@@ -494,13 +551,20 @@ Alterar menu em `base.html`:
 3. Status muda: AGUARDANDO_CONFIRMACAO
 4. Paciente responde: "NÃO"
    ↓
-5. Status muda: REJEITADO
-6. Sistema verifica:
+5. Sistema envia: "Qual o motivo?"
+   Status muda: AGUARDANDO_MOTIVO_REJEICAO
+   ↓
+6. Paciente responde: "Não posso ir porque trabalho nesse dia"
+   ↓
+7. Sistema armazena motivo no campo motivo_rejeicao
+   Status muda: REJEITADO
+   ↓
+8. Sistema verifica:
    - É INTERCONSULTA? SIM
    - PACIENTE_VOLTAR_POSTO_SMS = SIM? SIM
    ↓
-7. Sistema envia automaticamente MSG 3 (voltar ao posto)
-8. Fim ❌
+9. Sistema envia automaticamente MSG 3B (voltar ao posto)
+10. Fim ❌
 ```
 
 ### Cenário 3: RETORNO - Paciente Rejeita (Simples)
@@ -509,10 +573,18 @@ Alterar menu em `base.html`:
 1. Importar planilha → Cria consulta (TIPO: RETORNO)
 2. Iniciar envio → Celery envia MSG 1
    ↓
-3. Paciente responde: "NÃO"
+3. Status muda: AGUARDANDO_CONFIRMACAO
+4. Paciente responde: "NÃO"
    ↓
-4. Status muda: REJEITADO
-5. Fim (sem enviar MSG 3) ❌
+5. Sistema envia: "Qual o motivo?"
+   Status muda: AGUARDANDO_MOTIVO_REJEICAO
+   ↓
+6. Paciente responde: "Estou viajando"
+   ↓
+7. Sistema armazena motivo no campo motivo_rejeicao
+   Status muda: REJEITADO
+   ↓
+8. Fim (NÃO envia MSG 3B porque é RETORNO, não INTERCONSULTA) ❌
 ```
 
 ---
@@ -521,7 +593,7 @@ Alterar menu em `base.html`:
 
 ### Banco de Dados
 - [ ] Criar tabela `campanhas_consultas`
-- [ ] Criar tabela `agendamentos_consultas`
+- [ ] Criar tabela `agendamentos_consultas` (com campo `motivo_rejeicao`)
 - [ ] Criar tabela `telefones_consultas`
 - [ ] Criar tabela `logs_msgs_consultas`
 - [ ] Verificar campo `tipo_sistema` em `usuarios`
@@ -530,10 +602,11 @@ Alterar menu em `base.html`:
 - [ ] Modelos SQLAlchemy (4 classes)
 - [ ] Função `formatar_mensagem_consulta_inicial()`
 - [ ] Função `formatar_mensagem_comprovante()`
+- [ ] Função `formatar_mensagem_perguntar_motivo()` ← NOVO
 - [ ] Função `formatar_mensagem_voltar_posto()`
 - [ ] Task Celery `enviar_campanha_consultas_task()`
 - [ ] Endpoints Flask (8 rotas)
-- [ ] Webhook `processar_resposta_consulta()`
+- [ ] Webhook `processar_resposta_consulta()` (com lógica de 2 estados)
 - [ ] Importação de planilha Excel
 
 ### Frontend
@@ -550,7 +623,11 @@ Alterar menu em `base.html`:
 - [ ] Paciente confirmar (SIM)
 - [ ] Enviar comprovante
 - [ ] Paciente rejeitar (NÃO)
-- [ ] Verificar MSG 3 em INTERCONSULTA com VOLTAR_POSTO = SIM
+- [ ] Sistema perguntar motivo
+- [ ] Paciente responder motivo
+- [ ] Sistema armazenar motivo
+- [ ] Verificar MSG 3B em INTERCONSULTA com VOLTAR_POSTO = SIM
+- [ ] Verificar que NÃO envia MSG 3B em RETORNO
 
 ---
 
@@ -595,17 +672,21 @@ Alterar menu em `base.html`:
 
 ### O que será feito:
 1. **4 novas tabelas** no banco (não altera nada da fila)
-2. **3 funções de mensagens** (MSG 1, MSG 2, MSG 3)
+   - Campo `motivo_rejeicao` em `agendamentos_consultas`
+2. **4 funções de mensagens** (MSG 1, MSG 2, MSG 3A, MSG 3B)
+   - MSG 3A: "Qual o motivo?" (NOVA)
 3. **1 task Celery** (cópia da fila cirúrgica)
 4. **8 endpoints Flask** novos
 5. **3 templates HTML** novos
 6. **Menu dinâmico** (mostra Fila OU Consultas conforme usuário)
 7. **Upload de comprovante** (funcionalidade nova)
+8. **Webhook com máquina de estados** (trata AGUARDANDO_CONFIRMACAO e AGUARDANDO_MOTIVO_REJEICAO)
 
 ### Diferenciais da Fila Cirúrgica:
 - Fila: Envia e aguarda resposta (fim)
-- Consultas: Envia → Aguarda confirmação → Aguarda comprovante → Confirmado
-- Consultas: Tem MSG 3 específica para INTERCONSULTA rejeitada
+- Consultas: Envia → Aguarda confirmação → Se rejeitar, pergunta motivo → Aguarda comprovante → Confirmado
+- Consultas: Tem MSG 3A (pergunta motivo) e MSG 3B (volta ao posto) para INTERCONSULTA rejeitada
+- Consultas: Armazena motivo da rejeição em todos os casos
 
 ### Tecnologias:
 - Backend: Flask + SQLAlchemy (mesmas que a fila)
@@ -618,12 +699,16 @@ Alterar menu em `base.html`:
 
 Antes de implementar, confirme:
 
-1. ✅ As 3 mensagens estão corretas?
+1. ✅ As 4 mensagens estão corretas? (MSG 1, MSG 2, MSG 3A "Qual o motivo?", MSG 3B "Voltar ao posto")
 2. ✅ O fluxo de status está correto?
-3. ✅ A coluna `PACIENTE_VOLTAR_POSTO_SMS` só existe em INTERCONSULTA?
-4. ✅ O comprovante é sempre PDF/JPG?
-5. ✅ Após enviar comprovante, já marca como CONFIRMADO ou aguarda algo?
-6. ✅ A planilha terá TODAS as colunas listadas?
+   - AGUARDANDO_ENVIO → AGUARDANDO_CONFIRMACAO → AGUARDANDO_MOTIVO_REJEICAO → REJEITADO
+   - AGUARDANDO_ENVIO → AGUARDANDO_CONFIRMACAO → AGUARDANDO_COMPROVANTE → CONFIRMADO
+3. ✅ SEMPRE pergunta motivo quando paciente rejeita (independente de RETORNO ou INTERCONSULTA)?
+4. ✅ MSG 3B só envia se: INTERCONSULTA + PACIENTE_VOLTAR_POSTO_SMS = SIM?
+5. ✅ A coluna `PACIENTE_VOLTAR_POSTO_SMS` só existe em INTERCONSULTA?
+6. ✅ O comprovante é sempre PDF/JPG?
+7. ✅ Após enviar comprovante, já marca como CONFIRMADO ou aguarda algo?
+8. ✅ A planilha terá TODAS as colunas listadas?
 
 ---
 

@@ -568,7 +568,7 @@ def init_consultas_routes(app, db):
             return jsonify({'erro': 'Acesso negado'}), 403
 
         # Buscar logs de mensagens
-        logs = LogMsgConsulta.query.filter_by(consulta_id=consulta.id).order_by(LogMsgConsulta.data_criacao.asc()).all()
+        logs = LogMsgConsulta.query.filter_by(consulta_id=consulta.id).order_by(LogMsgConsulta.data.asc()).all()
 
         logs_data = []
         for log in logs:
@@ -579,7 +579,7 @@ def init_consultas_routes(app, db):
                 'telefone': log.telefone,
                 'status': log.status,
                 'erro': log.erro,
-                'data': log.data_criacao.strftime('%d/%m/%Y %H:%M:%S') if log.data_criacao else None
+                'data': log.data.strftime('%d/%m/%Y %H:%M:%S') if log.data else None
             })
 
         # Dados da consulta

@@ -1859,6 +1859,94 @@ class WhatsApp:
                 return True, ''
         return False, r.text[:100] if ok else r
 
+    def enviar_arquivo(self, numero, caminho_arquivo):
+        """
+        Envia arquivo (PDF, imagem, etc) via WhatsApp
+
+        Args:
+            numero: Número do destinatário
+            caminho_arquivo: Caminho completo do arquivo no servidor
+
+        Returns:
+            (sucesso: bool, mensagem_id ou erro: str)
+        """
+        if not self.ok():
+            return False, "Nao configurado"
+
+        import os
+        import base64
+
+        # Verificar se arquivo existe
+        if not os.path.exists(caminho_arquivo):
+            return False, f"Arquivo nao encontrado: {caminho_arquivo}"
+
+        # Determinar tipo de mídia baseado na extensão
+        ext = os.path.splitext(caminho_arquivo)[1].lower()
+        tipo_map = {
+            '.pdf': 'application/pdf',
+            '.jpg': 'image/jpeg',
+            '.jpeg': 'image/jpeg',
+            '.png': 'image/png',
+            '.mp4': 'video/mp4',
+            '.mp3': 'audio/mpeg',
+        }
+
+        mimetype = tipo_map.get(ext, 'application/octet-stream')
+
+        try:
+            # Ler arquivo e converter para base64
+            with open(caminho_arquivo, 'rb') as f:
+                arquivo_base64 = base64.b64encode(f.read()).decode('utf-8')
+
+            num = ''.join(filter(str.isdigit, str(numero)))
+            nome_arquivo = os.path.basename(caminho_arquivo)
+
+            # Montar payload dependendo do tipo
+            if ext in ['.jpg', '.jpeg', '.png']:
+                endpoint = f"/message/sendMedia/{self.instance}"
+                payload = {
+                    'number': num,
+                    'mediatype': 'image',
+                    'mimetype': mimetype,
+                    'media': arquivo_base64,
+                    'fileName': nome_arquivo
+                }
+            elif ext == '.pdf':
+                endpoint = f"/message/sendMedia/{self.instance}"
+                payload = {
+                    'number': num,
+                    'mediatype': 'document',
+                    'mimetype': mimetype,
+                    'media': arquivo_base64,
+                    'fileName': nome_arquivo
+                }
+            else:
+                endpoint = f"/message/sendMedia/{self.instance}"
+                payload = {
+                    'number': num,
+                    'mediatype': 'document',
+                    'mimetype': mimetype,
+                    'media': arquivo_base64,
+                    'fileName': nome_arquivo
+                }
+
+            ok, r = self._req('POST', endpoint, payload)
+
+            if ok and r.status_code in [200, 201]:
+                try:
+                    mid = r.json().get('key', {}).get('id', '')
+                    return True, mid
+                except:
+                    return True, ''
+            else:
+                erro = r.text[:200] if ok else str(r)
+                logger.error(f"Erro ao enviar arquivo: {erro}")
+                return False, erro
+
+        except Exception as e:
+            logger.exception(f"Exceção ao enviar arquivo: {e}")
+            return False, str(e)
+
 
 # =============================================================================
 # FUNCOES AUXILIARES
@@ -5400,6 +5488,7 @@ def cadastro_publico():
         email = request.form.get('email', '').strip().lower()
         senha = request.form.get('senha', '')
         senha_confirm = request.form.get('senha_confirm', '')
+        tipo_sistema = request.form.get('tipo_sistema', 'BUSCA_ATIVA').strip()
 
         # Validações
         if not nome or not email or not senha:
@@ -5414,13 +5503,17 @@ def cadastro_publico():
             flash('As senhas não coincidem', 'danger')
             return render_template('cadastro.html')
 
+        # Validar tipo_sistema
+        if tipo_sistema not in ['BUSCA_ATIVA', 'AGENDAMENTO_CONSULTA']:
+            tipo_sistema = 'BUSCA_ATIVA'
+
         # Verificar se email já existe
         if Usuario.query.filter_by(email=email).first():
             flash('Email já cadastrado', 'danger')
             return render_template('cadastro.html')
 
         # Criar usuário
-        usuario = Usuario(nome=nome, email=email, ativo=True)
+        usuario = Usuario(nome=nome, email=email, ativo=True, tipo_sistema=tipo_sistema)
         usuario.set_password(senha)
         db.session.add(usuario)
         db.session.commit()

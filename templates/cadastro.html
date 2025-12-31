@@ -70,9 +70,18 @@
                             <small class="text-muted">Mínimo 6 caracteres</small>
                         </div>
 
-                        <div class="mb-4">
+                        <div class="mb-3">
                             <label class="form-label">Confirmar Senha</label>
                             <input type="password" name="senha_confirm" class="form-control" required>
+                        </div>
+
+                        <div class="mb-4">
+                            <label class="form-label">Tipo de Sistema</label>
+                            <select name="tipo_sistema" class="form-select" required>
+                                <option value="BUSCA_ATIVA" selected>Fila Cirúrgica (Busca Ativa)</option>
+                                <option value="AGENDAMENTO_CONSULTA">Agendamento de Consultas</option>
+                            </select>
+                            <small class="text-muted">Escolha qual sistema você vai utilizar</small>
                         </div>
 
                         <button type="submit" class="btn btn-primary w-100 py-2 mb-3">

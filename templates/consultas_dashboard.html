@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+
+{% block title %}Consultas - Dashboard{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2><i class="bi bi-calendar-check"></i> Agendamento de Consultas</h2>
+                <p class="text-muted mb-0">Gerencie campanhas de agendamento de consultas</p>
+            </div>
+            <div>
+                <a href="{{ url_for('consultas_importar') }}" class="btn btn-primary">
+                    <i class="bi bi-file-earmark-excel"></i> Importar Planilha
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de Campanhas -->
+    <div class="col-12">
+        {% if campanhas %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Nome</th>
+                        <th>Status</th>
+                        <th class="text-center">Total</th>
+                        <th class="text-center">Enviados</th>
+                        <th class="text-center">Confirmados</th>
+                        <th class="text-center">Aguardando</th>
+                        <th class="text-center">Rejeitados</th>
+                        <th>Data Criação</th>
+                        <th class="text-center">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for camp in campanhas %}
+                    <tr>
+                        <td>
+                            <strong>{{ camp.nome }}</strong>
+                            {% if camp.descricao %}
+                            <br><small class="text-muted">{{ camp.descricao }}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if camp.status == 'pendente' %}
+                            <span class="badge bg-secondary">Pendente</span>
+                            {% elif camp.status == 'pronta' %}
+                            <span class="badge bg-info">Pronta</span>
+                            {% elif camp.status == 'enviando' %}
+                            <span class="badge bg-primary">Enviando</span>
+                            {% elif camp.status == 'pausado' %}
+                            <span class="badge bg-warning">Pausado</span>
+                            {% elif camp.status == 'concluido' %}
+                            <span class="badge bg-success">Concluído</span>
+                            {% elif camp.status == 'erro' %}
+                            <span class="badge bg-danger">Erro</span>
+                            {% endif %}
+                            {% if camp.status_msg %}
+                            <br><small class="text-muted">{{ camp.status_msg }}</small>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">{{ camp.total_consultas }}</td>
+                        <td class="text-center">{{ camp.total_enviados }}</td>
+                        <td class="text-center">
+                            <span class="badge bg-success">{{ camp.total_confirmados }}</span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-warning">{{ camp.total_aguardando_comprovante }}</span>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-danger">{{ camp.total_rejeitados }}</span>
+                        </td>
+                        <td>{{ camp.data_criacao.strftime('%d/%m/%Y %H:%M') if camp.data_criacao else '-' }}</td>
+                        <td class="text-center">
+                            <a href="{{ url_for('consultas_campanha_detalhe', id=camp.id) }}" class="btn btn-sm btn-primary">
+                                <i class="bi bi-eye"></i> Ver
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i>
+            <strong>Nenhuma campanha criada ainda.</strong>
+            <p class="mb-0">Clique em "Importar Planilha" para criar sua primeira campanha de consultas.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

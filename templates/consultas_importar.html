@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Importar Consultas{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <h2 class="mb-4"><i class="bi bi-file-earmark-excel"></i> Importar Planilha de Consultas</h2>
+
+        <div class="card">
+            <div class="card-body">
+                <form method="POST" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label">Nome da Campanha *</label>
+                        <input type="text" class="form-control" name="nome" required>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Descrição</label>
+                        <textarea class="form-control" name="descricao" rows="3"></textarea>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Arquivo Excel *</label>
+                        <input type="file" class="form-control" name="arquivo" accept=".xlsx,.xls" required>
+                        <small class="text-muted">Formato: .xlsx ou .xls</small>
+                    </div>
+
+                    <hr>
+
+                    <h5>Configurações de Envio</h5>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Meta Diária</label>
+                            <input type="number" class="form-control" name="meta_diaria" value="50" min="1">
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Tempo entre Envios (segundos)</label>
+                            <input type="number" class="form-control" name="tempo_entre_envios" value="15" min="5">
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Hora Início</label>
+                            <input type="number" class="form-control" name="hora_inicio" value="8" min="0" max="23">
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Hora Fim</label>
+                            <input type="number" class="form-control" name="hora_fim" value="23" min="0" max="23">
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info">
+                        <strong>Colunas obrigatórias na planilha:</strong>
+                        <ul class="mb-0">
+                            <li>PACIENTE</li>
+                            <li>TIPO (RETORNO ou INTERCONSULTA)</li>
+                            <li>TELEFONE CADASTRO ou TELEFONE REGISTRO</li>
+                            <li>DATA AGHU</li>
+                            <li>MEDICO_SOLICITANTE</li>
+                            <li>ESPECIALIDADE</li>
+                        </ul>
+                    </div>
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{{ url_for('consultas_dashboard') }}" class="btn btn-secondary">
+                            <i class="bi bi-arrow-left"></i> Voltar
+                        </a>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-upload"></i> Importar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

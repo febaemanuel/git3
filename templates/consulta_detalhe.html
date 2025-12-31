@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+
+{% block title %}Consulta - {{ consulta.paciente }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <h2>{{ consulta.paciente }}</h2>
+        <p class="text-muted">Consulta #{{ consulta.id }}</p>
+    </div>
+
+    <!-- Informações da Consulta -->
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Dados da Consulta</h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm">
+                    <tr>
+                        <th>Paciente:</th>
+                        <td>{{ consulta.paciente }}</td>
+                    </tr>
+                    <tr>
+                        <th>Tipo:</th>
+                        <td><span class="badge bg-info">{{ consulta.tipo }}</span></td>
+                    </tr>
+                    <tr>
+                        <th>Data Consulta:</th>
+                        <td>{{ consulta.data_aghu }}</td>
+                    </tr>
+                    <tr>
+                        <th>Médico:</th>
+                        <td>{{ consulta.medico_solicitante }}</td>
+                    </tr>
+                    <tr>
+                        <th>Especialidade:</th>
+                        <td>{{ consulta.especialidade }}</td>
+                    </tr>
+                    <tr>
+                        <th>Telefone Cadastro:</th>
+                        <td>{{ consulta.telefone_cadastro }}</td>
+                    </tr>
+                    {% if consulta.telefone_registro %}
+                    <tr>
+                        <th>Telefone Registro:</th>
+                        <td>{{ consulta.telefone_registro }}</td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status e Ações -->
+    <div class="col-md-6">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Status</h5>
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <strong>Status atual:</strong>
+                    {% if consulta.status == 'CONFIRMADO' %}
+                    <span class="badge bg-success fs-6">✅ CONFIRMADO</span>
+                    {% elif consulta.status == 'AGUARDANDO_COMPROVANTE' %}
+                    <span class="badge bg-warning fs-6">⏳ AGUARDANDO COMPROVANTE</span>
+                    {% elif consulta.status == 'AGUARDANDO_CONFIRMACAO' %}
+                    <span class="badge bg-info fs-6">📲 AGUARDANDO CONFIRMAÇÃO</span>
+                    {% elif consulta.status == 'REJEITADO' %}
+                    <span class="badge bg-danger fs-6">❌ REJEITADO</span>
+                    {% else %}
+                    <span class="badge bg-secondary fs-6">{{ consulta.status }}</span>
+                    {% endif %}
+                </div>
+
+                <!-- Upload de Comprovante -->
+                {% if consulta.status == 'AGUARDANDO_COMPROVANTE' %}
+                <div class="alert alert-warning">
+                    <strong>Ação necessária:</strong> Enviar comprovante para o paciente
+                </div>
+
+                <form id="formComprovante" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label class="form-label">Comprovante (PDF/JPG/PNG)</label>
+                        <input type="file" class="form-control" id="inputComprovante" accept=".pdf,.jpg,.jpeg,.png" required>
+                    </div>
+                    <button type="submit" class="btn btn-success w-100">
+                        <i class="bi bi-send"></i> Enviar Comprovante para Paciente
+                    </button>
+                </form>
+
+                <script>
+                document.getElementById('formComprovante').addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const formData = new FormData();
+                    formData.append('comprovante', document.getElementById('inputComprovante').files[0]);
+
+                    fetch('/api/consulta/{{ consulta.id }}/enviar_comprovante', {
+                        method: 'POST',
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.sucesso) {
+                            alert('Comprovante enviado com sucesso!');
+                            location.reload();
+                        } else {
+                            alert('Erro: ' + data.erro);
+                        }
+                    })
+                    .catch(error => {
+                        alert('Erro ao enviar: ' + error);
+                    });
+                });
+                </script>
+                {% endif %}
+
+                <!-- Motivo de Rejeição -->
+                {% if consulta.status == 'REJEITADO' and consulta.motivo_rejeicao %}
+                <div class="alert alert-danger">
+                    <strong>Motivo da rejeição:</strong><br>
+                    {{ consulta.motivo_rejeicao }}
+                </div>
+                {% endif %}
+
+                <!-- Comprovante Enviado -->
+                {% if consulta.comprovante_path %}
+                <div class="alert alert-success">
+                    <strong>✅ Comprovante enviado:</strong><br>
+                    {{ consulta.comprovante_nome }}
+                    <br>
+                    <small class="text-muted">{{ consulta.data_confirmacao.strftime('%d/%m/%Y %H:%M') if consulta.data_confirmacao else '' }}</small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Voltar -->
+    <div class="col-12">
+        <a href="{{ url_for('consultas_campanha_detalhe', id=consulta.campanha_id) }}" class="btn btn-secondary">
+            <i class="bi bi-arrow-left"></i> Voltar para Campanha
+        </a>
+    </div>
+</div>
+{% endblock %}

@@ -1979,6 +1979,19 @@ def verificar_acesso_contato(contato_id):
         abort(403)  # Forbidden
     return contato
 
+def get_dashboard_route():
+    """
+    Retorna a rota correta do dashboard baseado no tipo_sistema do usuário
+    IMPORTANTE: Use isso em TODOS os redirecionamentos para dashboard
+    """
+    if current_user.is_authenticated:
+        tipo = getattr(current_user, 'tipo_sistema', 'BUSCA_ATIVA')
+        if tipo == 'AGENDAMENTO_CONSULTA':
+            return 'consultas_dashboard'
+        # Aceita tanto BUSCA_ATIVA quanto FILA_CIRURGICA (compatibilidade)
+        return 'dashboard'
+    return 'login'
+
 def formatar_numero(num):
     if not num:
         return None
@@ -3636,7 +3649,7 @@ def admin_required(f):
             return redirect(url_for('login'))
         if not current_user.is_admin:
             flash('❌ Acesso negado. Apenas administradores podem acessar esta página.', 'danger')
-            return redirect(url_for('dashboard'))
+            return redirect(url_for(get_dashboard_route()))
         return f(*args, **kwargs)
     return decorated_function
 
@@ -3647,13 +3660,15 @@ def admin_required(f):
 
 @app.route('/')
 def index():
-    return redirect(url_for('dashboard') if current_user.is_authenticated else url_for('login'))
+    if current_user.is_authenticated:
+        return redirect(url_for(get_dashboard_route()))
+    return redirect(url_for('login'))
 
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
+        return redirect(url_for(get_dashboard_route()))
 
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
@@ -3664,7 +3679,8 @@ def login():
             login_user(u)
             u.ultimo_acesso = datetime.utcnow()
             db.session.commit()
-            return redirect(url_for('dashboard'))
+            # Redirecionar para dashboard correto baseado no tipo_sistema
+            return redirect(url_for(get_dashboard_route()))
         flash('Email ou senha incorretos', 'danger')
 
     return render_template('login.html')
@@ -3723,16 +3739,16 @@ def criar_campanha():
 
     if not nome:
         flash('Nome obrigatorio', 'danger')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for(get_dashboard_route()))
 
     if 'arquivo' not in request.files or not request.files['arquivo'].filename:
         flash('Selecione arquivo Excel', 'danger')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for(get_dashboard_route()))
 
     arq = request.files['arquivo']
     if not arq.filename.lower().endswith(('.xlsx', '.xls')):
         flash('Arquivo deve ser Excel', 'danger')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for(get_dashboard_route()))
 
     camp = Campanha(
         nome=nome,
@@ -3780,7 +3796,7 @@ def criar_campanha():
         camp.status_msg = f'Erro ao salvar arquivo: {str(e)}'
         db.session.commit()
         flash(f'Erro ao salvar arquivo: {e}', 'danger')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for(get_dashboard_route()))
 
     # Processar planilha de forma ASSÍNCRONA com Celery
     from tasks import processar_planilha_task
@@ -3805,7 +3821,7 @@ def progresso_campanha(id):
 
     if not task_id:
         flash('Task ID não encontrado', 'warning')
-        return redirect(url_for('dashboard'))
+        return redirect(url_for(get_dashboard_route()))
 
     return render_template('progresso_campanha.html', campanha=camp, task_id=task_id)
 
@@ -3996,7 +4012,7 @@ def excluir_campanha(id):
     db.session.delete(camp)
     db.session.commit()
     flash('Excluida', 'success')
-    return redirect(url_for('dashboard'))
+    return redirect(url_for(get_dashboard_route()))
 
 
 @app.route('/campanha/<int:id>/exportar')
@@ -5481,7 +5497,7 @@ def excluir_faq(id):
 @app.route('/cadastro', methods=['GET', 'POST'])
 def cadastro_publico():
     if current_user.is_authenticated:
-        return redirect(url_for('dashboard'))
+        return redirect(url_for(get_dashboard_route()))
 
     if request.method == 'POST':
         nome = request.form.get('nome', '').strip()
@@ -5576,7 +5592,7 @@ def processar_followup_manual():
     from tasks import follow_up_automatico_task
     task = follow_up_automatico_task.delay()
     flash(f'Follow-up iniciado (Task ID: {task.id})', 'info')
-    return redirect(url_for('dashboard'))
+    return redirect(url_for(get_dashboard_route()))
 
 
 # =============================================================================

@@ -4781,13 +4781,26 @@ def webhook():
             ]
 
             if consultas_validas:
+                # IMPORTANTE: Filtrar apenas consultas enviadas recentemente (últimas 24h)
+                # Isso evita processar consultas antigas quando o mesmo telefone está em múltiplas campanhas/usuários
+                from datetime import timedelta
+                vinte_quatro_horas_atras = datetime.utcnow() - timedelta(hours=24)
+                consultas_recentes = [
+                    tel for tel in consultas_validas
+                    if tel.consulta.data_envio_mensagem and tel.consulta.data_envio_mensagem >= vinte_quatro_horas_atras
+                ]
+
+                # Se não há consultas recentes, usar todas (fallback para casos onde data_envio não está setada)
+                if not consultas_recentes:
+                    consultas_recentes = consultas_validas
+
                 # Separar por status
                 em_fluxo = [
-                    tel for tel in consultas_validas
+                    tel for tel in consultas_recentes
                     if tel.consulta.status in ['AGUARDANDO_CONFIRMACAO', 'AGUARDANDO_MOTIVO_REJEICAO']
                 ]
                 outras = [
-                    tel for tel in consultas_validas
+                    tel for tel in consultas_recentes
                     if tel.consulta.status not in ['AGUARDANDO_CONFIRMACAO', 'AGUARDANDO_MOTIVO_REJEICAO']
                 ]
 

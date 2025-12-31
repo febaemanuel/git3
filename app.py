@@ -4838,23 +4838,38 @@ def webhook():
         # =====================================================================
         # Verificar se é uma resposta de consulta (antes de processar fila cirúrgica)
         # Busca por telefone do usuário correto (mesmo filtro de instância)
+        # IMPORTANTE: Tentar variações do número (com/sem 9º dígito)
         consulta_telefone = TelefoneConsulta.query.filter_by(numero=numero).first()
+
+        if not consulta_telefone:
+            # Tenta variação 9º dígito (mesmo código usado para fila cirúrgica)
+            if len(numero) == 12:
+                # Número sem 9, tentar com 9
+                num9 = numero[:4] + '9' + numero[4:]
+                consulta_telefone = TelefoneConsulta.query.filter_by(numero=num9).first()
+            elif len(numero) == 13:
+                # Número com 9, tentar sem 9
+                num_sem9 = numero[:4] + numero[5:]
+                consulta_telefone = TelefoneConsulta.query.filter_by(numero=num_sem9).first()
 
         if consulta_telefone:
             consulta = consulta_telefone.consulta
             # Verificar se pertence ao usuário correto (mesmo filtro de instância)
             if consulta and consulta.campanha and consulta.campanha.criador_id == usuario_id:
-                logger.info(f"Webhook Consulta: [{instance_name}] Mensagem de {consulta.paciente} ({numero}). "
+                logger.info(f"Webhook Consulta: [{instance_name}] Mensagem de {consulta.paciente} ({numero} → {consulta_telefone.numero}). "
                            f"Campanha: {consulta.campanha_id}. Status: {consulta.status}. Texto: {texto}")
 
                 ws = WhatsApp(consulta.campanha.criador_id)
+
+                # IMPORTANTE: Usar o número cadastrado na consulta para garantir que respondemos no formato correto
+                numero_resposta = consulta_telefone.numero
 
                 # Log da mensagem recebida
                 log = LogMsgConsulta(
                     campanha_id=consulta.campanha_id,
                     consulta_id=consulta.id,
                     direcao='recebida',
-                    telefone=numero,
+                    telefone=numero_resposta,
                     mensagem=texto[:500],
                     status='sucesso'
                 )
@@ -4873,7 +4888,7 @@ def webhook():
                         consulta.campanha.atualizar_stats()
                         db.session.commit()
 
-                        ws.enviar(numero, "✅ Consulta confirmada! Aguarde o envio do comprovante.")
+                        ws.enviar(numero_resposta, "✅ Consulta confirmada! Aguarde o envio do comprovante.")
                         logger.info(f"Consulta {consulta.id} confirmada por {consulta.paciente}")
 
                     elif verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO):
@@ -4882,7 +4897,7 @@ def webhook():
                         db.session.commit()
 
                         msg_perguntar_motivo = formatar_mensagem_perguntar_motivo()
-                        ws.enviar(numero, msg_perguntar_motivo)
+                        ws.enviar(numero_resposta, msg_perguntar_motivo)
                         logger.info(f"Consulta {consulta.id} rejeitada por {consulta.paciente}, aguardando motivo")
 
                     elif verificar_resposta_em_lista(texto_up, RESPOSTAS_DESCONHECO):
@@ -4895,7 +4910,7 @@ def webhook():
                         consulta.campanha.atualizar_stats()
                         db.session.commit()
 
-                        ws.enviar(numero, """✅ *Obrigado pela informação!*
+                        ws.enviar(numero_resposta, """✅ *Obrigado pela informação!*
 
 Vamos atualizar nossos registros e remover seu contato da nossa lista.
 
@@ -4906,7 +4921,7 @@ _Hospital Universitário Walter Cantídio_""")
 
                     else:
                         # Resposta não reconhecida
-                        ws.enviar(numero, """Por favor, responda com uma das opções:
+                        ws.enviar(numero_resposta, """Por favor, responda com uma das opções:
 
 1️⃣ *SIM* - Tenho interesse
 2️⃣ *NÃO* - Não tenho mais interesse
@@ -4931,7 +4946,7 @@ _Hospital Universitário Walter Cantídio_""")
                         consulta.paciente_voltar_posto_sms.upper() == 'SIM'):
 
                         msg_voltar_posto = formatar_mensagem_voltar_posto(consulta)
-                        ws.enviar(numero, msg_voltar_posto)
+                        ws.enviar(numero_resposta, msg_voltar_posto)
                         logger.info(f"MSG 3B enviada para {consulta.paciente} (INTERCONSULTA + voltar posto)")
 
                     consulta.campanha.atualizar_stats()
@@ -4943,13 +4958,13 @@ _Hospital Universitário Walter Cantídio_""")
                 else:
                     # Mensagem após conclusão
                     if consulta.status == 'CONFIRMADO':
-                        ws.enviar(numero, "✅ Sua consulta já foi confirmada. Obrigado!")
+                        ws.enviar(numero_resposta, "✅ Sua consulta já foi confirmada. Obrigado!")
                     elif consulta.status == 'REJEITADO':
-                        ws.enviar(numero, "Sua consulta foi cancelada. Obrigado!")
+                        ws.enviar(numero_resposta, "Sua consulta foi cancelada. Obrigado!")
                     elif consulta.status == 'AGUARDANDO_COMPROVANTE':
-                        ws.enviar(numero, "✅ Sua consulta está confirmada! Aguarde o envio do comprovante.")
+                        ws.enviar(numero_resposta, "✅ Sua consulta está confirmada! Aguarde o envio do comprovante.")
                     else:
-                        ws.enviar(numero, "Recebemos sua mensagem. Obrigado!")
+                        ws.enviar(numero_resposta, "Recebemos sua mensagem. Obrigado!")
 
                     return jsonify({'status': 'ok'}), 200
 

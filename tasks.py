@@ -996,7 +996,7 @@ def enviar_campanha_consultas_task(self, campanha_id):
     """
     from app import (
         db, CampanhaConsulta, AgendamentoConsulta, TelefoneConsulta,
-        LogMsgConsulta, WhatsApp, formatar_mensagem_consulta_inicial
+        LogMsgConsulta, WhatsApp, formatar_numero, formatar_mensagem_consulta_inicial
     )
     from datetime import datetime
 
@@ -1077,26 +1077,30 @@ def enviar_campanha_consultas_task(self, campanha_id):
                 }
             )
 
-            # Criar telefones se não existirem
+            # Criar telefones se não existirem (com formatação)
             if not consulta.telefones:
                 telefones_criados = []
                 if consulta.telefone_cadastro:
-                    tel1 = TelefoneConsulta(
-                        consulta_id=consulta.id,
-                        numero=consulta.telefone_cadastro,
-                        prioridade=1
-                    )
-                    db.session.add(tel1)
-                    telefones_criados.append(tel1)
+                    numero_formatado = formatar_numero(consulta.telefone_cadastro)
+                    if numero_formatado:
+                        tel1 = TelefoneConsulta(
+                            consulta_id=consulta.id,
+                            numero=numero_formatado,
+                            prioridade=1
+                        )
+                        db.session.add(tel1)
+                        telefones_criados.append(tel1)
 
                 if consulta.telefone_registro and consulta.telefone_registro != consulta.telefone_cadastro:
-                    tel2 = TelefoneConsulta(
-                        consulta_id=consulta.id,
-                        numero=consulta.telefone_registro,
-                        prioridade=2
-                    )
-                    db.session.add(tel2)
-                    telefones_criados.append(tel2)
+                    numero_formatado = formatar_numero(consulta.telefone_registro)
+                    if numero_formatado:
+                        tel2 = TelefoneConsulta(
+                            consulta_id=consulta.id,
+                            numero=numero_formatado,
+                            prioridade=2
+                        )
+                        db.session.add(tel2)
+                        telefones_criados.append(tel2)
 
                 db.session.commit()
                 db.session.refresh(consulta)
@@ -1152,8 +1156,8 @@ def enviar_campanha_consultas_task(self, campanha_id):
                 consulta.data_envio_mensagem = datetime.utcnow()
                 enviados += 1
 
-                # Atualizar contadores da campanha
-                camp.enviados_hoje += 1
+                # Registrar envio na campanha (incrementa contadores)
+                camp.registrar_envio()
                 camp.total_enviados += 1
             else:
                 erros += 1

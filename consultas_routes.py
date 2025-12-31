@@ -29,7 +29,7 @@ def init_consultas_routes(app, db):
     # Importar modelos e funções (evita circular import)
     from app import (
         CampanhaConsulta, AgendamentoConsulta, TelefoneConsulta,
-        LogMsgConsulta, WhatsApp,
+        LogMsgConsulta, WhatsApp, formatar_numero,
         formatar_mensagem_comprovante, formatar_mensagem_voltar_posto
     )
 
@@ -178,22 +178,26 @@ def init_consultas_routes(app, db):
                         db.session.add(consulta)
                         db.session.flush()  # Para obter ID da consulta
 
-                        # Criar telefones
+                        # Criar telefones (com formatação)
                         if consulta.telefone_cadastro:
-                            tel1 = TelefoneConsulta(
-                                consulta_id=consulta.id,
-                                numero=consulta.telefone_cadastro,
-                                prioridade=1
-                            )
-                            db.session.add(tel1)
+                            numero_formatado = formatar_numero(consulta.telefone_cadastro)
+                            if numero_formatado:
+                                tel1 = TelefoneConsulta(
+                                    consulta_id=consulta.id,
+                                    numero=numero_formatado,
+                                    prioridade=1
+                                )
+                                db.session.add(tel1)
 
                         if consulta.telefone_registro and consulta.telefone_registro != consulta.telefone_cadastro:
-                            tel2 = TelefoneConsulta(
-                                consulta_id=consulta.id,
-                                numero=consulta.telefone_registro,
-                                prioridade=2
-                            )
-                            db.session.add(tel2)
+                            numero_formatado = formatar_numero(consulta.telefone_registro)
+                            if numero_formatado:
+                                tel2 = TelefoneConsulta(
+                                    consulta_id=consulta.id,
+                                    numero=numero_formatado,
+                                    prioridade=2
+                                )
+                                db.session.add(tel2)
 
                         consultas_criadas += 1
 
@@ -524,6 +528,147 @@ def init_consultas_routes(app, db):
         except Exception as e:
             db.session.rollback()
             logger.exception(f"Erro ao cancelar consulta: {e}")
+            return jsonify({'erro': str(e)}), 500
+
+
+    # =========================================================================
+    # PROGRESSO E MONITORAMENTO
+    # =========================================================================
+
+    @app.route('/consultas/campanha/<int:id>/progresso')
+    @login_required
+    def consultas_campanha_progresso(id):
+        """Página de progresso do envio da campanha"""
+        campanha = CampanhaConsulta.query.get_or_404(id)
+
+        if campanha.criador_id != current_user.id and not current_user.is_admin:
+            flash('Acesso negado', 'danger')
+            return redirect(url_for('consultas_dashboard'))
+
+        task_id = request.args.get('task_id') or campanha.celery_task_id
+
+        if not task_id:
+            flash('Task ID não encontrado', 'warning')
+            return redirect(url_for('consultas_dashboard'))
+
+        return render_template('progresso_campanha_consultas.html', campanha=campanha, task_id=task_id)
+
+
+    # =========================================================================
+    # APIs PARA DETALHES E CHAT
+    # =========================================================================
+
+    @app.route('/api/consulta/<int:id>/detalhes', methods=['GET'])
+    @login_required
+    def consulta_detalhes_api(id):
+        """API: Retorna detalhes e histórico de mensagens de uma consulta"""
+        consulta = AgendamentoConsulta.query.get_or_404(id)
+
+        if consulta.usuario_id != current_user.id and not current_user.is_admin:
+            return jsonify({'erro': 'Acesso negado'}), 403
+
+        # Buscar logs de mensagens
+        logs = LogMsgConsulta.query.filter_by(consulta_id=consulta.id).order_by(LogMsgConsulta.data.asc()).all()
+
+        logs_data = []
+        for log in logs:
+            logs_data.append({
+                'id': log.id,
+                'direcao': log.direcao,
+                'mensagem': log.mensagem,
+                'telefone': log.telefone,
+                'status': log.status,
+                'erro': log.erro,
+                'data': log.data.strftime('%d/%m/%Y %H:%M:%S') if log.data else None
+            })
+
+        # Dados da consulta
+        consulta_data = {
+            'id': consulta.id,
+            'paciente': consulta.paciente,
+            'tipo': consulta.tipo,
+            'status': consulta.status,
+            'telefones': [t.numero for t in consulta.telefones],
+            'medico_solicitante': consulta.medico_solicitante,
+            'especialidade': consulta.especialidade,
+            'data_consulta': consulta.data_consulta.strftime('%d/%m/%Y') if consulta.data_consulta else None,
+            'observacoes': consulta.observacoes,
+            'motivo_rejeicao': consulta.motivo_rejeicao,
+            'data_envio': consulta.data_envio_mensagem.strftime('%d/%m/%Y %H:%M:%S') if consulta.data_envio_mensagem else None,
+            'logs': logs_data
+        }
+
+        return jsonify(consulta_data)
+
+
+    @app.route('/api/consulta/<int:id>/enviar_mensagem', methods=['POST'])
+    @login_required
+    def consulta_enviar_mensagem_manual(id):
+        """API: Envia mensagem manual para uma consulta"""
+        consulta = AgendamentoConsulta.query.get_or_404(id)
+
+        if consulta.usuario_id != current_user.id and not current_user.is_admin:
+            return jsonify({'erro': 'Acesso negado'}), 403
+
+        try:
+            mensagem = request.json.get('mensagem', '').strip()
+            if not mensagem:
+                return jsonify({'erro': 'Mensagem vazia'}), 400
+
+            # Buscar WhatsApp do usuário
+            ws = WhatsApp(current_user.id)
+            if not ws.ok():
+                return jsonify({'erro': 'WhatsApp não configurado'}), 400
+
+            conn, _ = ws.conectado()
+            if not conn:
+                return jsonify({'erro': 'WhatsApp desconectado'}), 400
+
+            # Pegar primeiro telefone disponível
+            if not consulta.telefones:
+                return jsonify({'erro': 'Nenhum telefone disponível'}), 400
+
+            telefone = consulta.telefones[0].numero
+
+            # Enviar mensagem
+            ok, result = ws.enviar(telefone, mensagem)
+
+            if ok:
+                # Log de sucesso
+                log = LogMsgConsulta(
+                    campanha_id=consulta.campanha_id,
+                    consulta_id=consulta.id,
+                    direcao='enviada',
+                    telefone=telefone,
+                    mensagem=mensagem[:500],
+                    status='sucesso',
+                    msg_id=result
+                )
+                db.session.add(log)
+                db.session.commit()
+
+                return jsonify({
+                    'sucesso': True,
+                    'mensagem': 'Mensagem enviada com sucesso'
+                })
+            else:
+                # Log de erro
+                log = LogMsgConsulta(
+                    campanha_id=consulta.campanha_id,
+                    consulta_id=consulta.id,
+                    direcao='enviada',
+                    telefone=telefone,
+                    mensagem=mensagem[:500],
+                    status='erro',
+                    erro=str(result)[:200]
+                )
+                db.session.add(log)
+                db.session.commit()
+
+                return jsonify({'erro': f'Erro ao enviar: {result}'}), 500
+
+        except Exception as e:
+            logger.exception(f"Erro ao enviar mensagem manual: {e}")
             return jsonify({'erro': str(e)}), 500
 
 

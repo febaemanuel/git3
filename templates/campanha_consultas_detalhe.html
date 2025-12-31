@@ -373,14 +373,37 @@ function enviarProximas() {
     btnEnviar.innerHTML = '<i class="bi bi-hourglass-split"></i> Enviando...';
 
     fetch(`/api/consultas/campanha/{{ campanha.id }}/enviar_proximas`, {
-        method: 'POST'
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
     })
-    .then(response => response.json())
-    .then(data => {
+    .then(async response => {
+        // Capturar o texto da resposta primeiro
+        const responseText = await response.text();
+
         btnEnviar.disabled = false;
         btnEnviar.innerHTML = textoOriginal;
 
-        if (data.sucesso) {
+        // Verificar se é JSON válido
+        let data;
+        try {
+            data = JSON.parse(responseText);
+        } catch (e) {
+            // Não é JSON, provavelmente um erro HTML
+            console.error('Resposta não é JSON:', responseText.substring(0, 500));
+
+            // Tentar extrair mensagem de erro do HTML
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(responseText, 'text/html');
+            const errorMsg = doc.querySelector('title')?.textContent || 'Erro desconhecido';
+
+            alert(`Erro no servidor (${response.status}):\n${errorMsg}\n\nVeja o console do navegador (F12) para mais detalhes.`);
+            return;
+        }
+
+        // Processar resposta JSON
+        if (response.ok && data.sucesso) {
             let mensagem = data.mensagem || `${data.enviados} mensagens enviadas! Pendentes: ${data.pendentes}`;
 
             // Mostrar erros se houver
@@ -391,13 +414,14 @@ function enviarProximas() {
             alert(mensagem);
             location.reload();
         } else {
-            alert('Erro: ' + data.mensagem);
+            alert('Erro: ' + (data.mensagem || 'Erro desconhecido'));
         }
     })
     .catch(error => {
         btnEnviar.disabled = false;
         btnEnviar.innerHTML = textoOriginal;
-        alert('Erro ao enviar mensagens: ' + error);
+        console.error('Erro completo:', error);
+        alert('Erro ao enviar mensagens:\n' + error.message + '\n\nVeja o console do navegador (F12) para mais detalhes.');
     });
 }
 </script>

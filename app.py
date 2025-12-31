@@ -6505,93 +6505,119 @@ def campanha_consultas_atualizar(id):
 @login_required
 def api_enviar_proximas_consultas(id):
     """Envia próximas mensagens do campanha respeitando limites"""
-    campanha = CampanhaConsulta.query.get_or_404(id)
+    try:
+        campanha = CampanhaConsulta.query.get_or_404(id)
 
-    if campanha.criador_id != current_user.id:
-        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+        if campanha.criador_id != current_user.id:
+            return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
-    if campanha.status != 'enviando':
-        return jsonify({'sucesso': False, 'mensagem': 'Lote não está em modo de envio'}), 400
+        if campanha.status != 'enviando':
+            return jsonify({'sucesso': False, 'mensagem': 'Lote não está em modo de envio'}), 400
 
-    # Verificar WhatsApp configurado PRIMEIRO (antes de outras validações)
-    ws = WhatsApp(current_user.id)
-    if not ws.ok():
-        return jsonify({
-            'sucesso': False,
-            'mensagem': 'WhatsApp não configurado! Verifique as configurações da API Evolution.'
-        }), 400
+        # Verificar WhatsApp configurado PRIMEIRO (antes de outras validações)
+        try:
+            ws = WhatsApp(current_user.id)
+        except Exception as e:
+            logger.error(f'Erro ao inicializar WhatsApp: {str(e)}')
+            return jsonify({
+                'sucesso': False,
+                'mensagem': f'Erro ao inicializar WhatsApp: {str(e)}'
+            }), 500
 
-    # Verificar se está conectado
-    conectado, estado = ws.conectado()
-    if not conectado:
-        return jsonify({
-            'sucesso': False,
-            'mensagem': f'WhatsApp desconectado! Estado: {estado}. Escaneie o QR Code nas configurações.'
-        }), 400
+        if not ws.ok():
+            return jsonify({
+                'sucesso': False,
+                'mensagem': 'WhatsApp não configurado! Verifique as configurações da API Evolution.'
+            }), 400
 
-    # Verificar se pode enviar agora
-    if not campanha.pode_enviar_agora():
-        return jsonify({'sucesso': False, 'mensagem': 'Fora do horário de envio'}), 400
+        # Verificar se está conectado
+        try:
+            conectado, estado = ws.conectado()
+        except Exception as e:
+            logger.error(f'Erro ao verificar conexão WhatsApp: {str(e)}')
+            return jsonify({
+                'sucesso': False,
+                'mensagem': f'Erro ao verificar conexão WhatsApp: {str(e)}'
+            }), 500
 
-    if not campanha.pode_enviar_hoje():
-        return jsonify({'sucesso': False, 'mensagem': 'Meta diária atingida'}), 400
+        if not conectado:
+            return jsonify({
+                'sucesso': False,
+                'mensagem': f'WhatsApp desconectado! Estado: {estado}. Escaneie o QR Code nas configurações.'
+            }), 400
 
-    # Buscar consultas pendentes de envio (status AGUARDANDO_ENVIO)
-    consultas_pendentes = campanha.consultas.filter_by(
-        status='AGUARDANDO_ENVIO'
-    ).limit(campanha.meta_diaria - campanha.enviados_hoje).all()
+        # Verificar se pode enviar agora
+        if not campanha.pode_enviar_agora():
+            return jsonify({'sucesso': False, 'mensagem': 'Fora do horário de envio'}), 400
 
-    if not consultas_pendentes:
-        return jsonify({
-            'sucesso': False,
-            'mensagem': 'Nenhuma consulta pendente de envio encontrada!'
-        }), 400
-
-    enviados = 0
-    erros = 0
-    erros_detalhes = []
-
-    for consulta in consultas_pendentes:
         if not campanha.pode_enviar_hoje():
-            break
+            return jsonify({'sucesso': False, 'mensagem': 'Meta diária atingida'}), 400
 
-        sucesso, msg_id = enviar_mensagem_consulta(consulta.id, current_user.id)
-        if sucesso:
-            consulta.mensagem_enviada = True
-            consulta.data_envio_mensagem = datetime.utcnow()
-            campanha.enviados_hoje += 1
-            enviados += 1
+        # Buscar consultas pendentes de envio (status AGUARDANDO_ENVIO)
+        consultas_pendentes = campanha.consultas.filter_by(
+            status='AGUARDANDO_ENVIO'
+        ).limit(campanha.meta_diaria - campanha.enviados_hoje).all()
+
+        if not consultas_pendentes:
+            return jsonify({
+                'sucesso': False,
+                'mensagem': 'Nenhuma consulta pendente de envio encontrada!'
+            }), 400
+
+        enviados = 0
+        erros = 0
+        erros_detalhes = []
+
+        for consulta in consultas_pendentes:
+            if not campanha.pode_enviar_hoje():
+                break
+
+            sucesso, msg_id = enviar_mensagem_consulta(consulta.id, current_user.id)
+            if sucesso:
+                consulta.mensagem_enviada = True
+                consulta.data_envio_mensagem = datetime.utcnow()
+                campanha.enviados_hoje += 1
+                enviados += 1
+                db.session.commit()
+                time.sleep(campanha.tempo_entre_envios)
+            else:
+                erros += 1
+                erro_msg = f'{consulta.nome_paciente}: {msg_id}'
+                erros_detalhes.append(erro_msg)
+                logger.error(f'Erro ao enviar consulta {consulta.id}: {msg_id}')
+
+        # Verificar se terminou (contar consultas AGUARDANDO_ENVIO)
+        pendentes = campanha.consultas.filter_by(status='AGUARDANDO_ENVIO').count()
+        if pendentes == 0:
+            campanha.status = 'concluido'
+            campanha.data_fim = datetime.utcnow()
             db.session.commit()
-            time.sleep(campanha.tempo_entre_envios)
-        else:
-            erros += 1
-            erro_msg = f'{consulta.nome_paciente}: {msg_id}'
-            erros_detalhes.append(erro_msg)
-            logger.error(f'Erro ao enviar consulta {consulta.id}: {msg_id}')
 
-    # Verificar se terminou (contar consultas AGUARDANDO_ENVIO)
-    pendentes = campanha.consultas.filter_by(status='AGUARDANDO_ENVIO').count()
-    if pendentes == 0:
-        campanha.status = 'concluido'
-        campanha.data_fim = datetime.utcnow()
-        db.session.commit()
+        # Preparar mensagem de retorno
+        mensagem = f'{enviados} mensagens enviadas!'
+        if erros > 0:
+            mensagem += f' {erros} falharam.'
+        mensagem += f' Pendentes: {pendentes}'
 
-    # Preparar mensagem de retorno
-    mensagem = f'{enviados} mensagens enviadas!'
-    if erros > 0:
-        mensagem += f' {erros} falharam.'
-    mensagem += f' Pendentes: {pendentes}'
+        return jsonify({
+            'sucesso': True,
+            'enviados': enviados,
+            'erros': erros,
+            'erros_detalhes': erros_detalhes[:5],  # Mostrar apenas os 5 primeiros erros
+            'pendentes': pendentes,
+            'meta_diaria': campanha.meta_diaria,
+            'enviados_hoje': campanha.enviados_hoje,
+            'mensagem': mensagem
+        })
 
-    return jsonify({
-        'sucesso': True,
-        'enviados': enviados,
-        'erros': erros,
-        'erros_detalhes': erros_detalhes[:5],  # Mostrar apenas os 5 primeiros erros
-        'pendentes': pendentes,
-        'meta_diaria': campanha.meta_diaria,
-        'enviados_hoje': campanha.enviados_hoje,
-        'mensagem': mensagem
-    })
+    except Exception as e:
+        logger.error(f'Erro fatal em api_enviar_proximas_consultas: {str(e)}')
+        import traceback
+        logger.error(traceback.format_exc())
+        return jsonify({
+            'sucesso': False,
+            'mensagem': f'Erro interno do servidor: {str(e)}'
+        }), 500
 
 
 # =============================================================================

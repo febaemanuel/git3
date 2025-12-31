@@ -190,12 +190,13 @@
                         <div class="d-flex gap-2">
                             {% if campanha.status == 'pendente' %}
                             <button type="submit" class="btn btn-success">
-                                <i class="bi bi-play-fill"></i> Iniciar Envio
+                                <i class="bi bi-play-fill"></i> Iniciar Envio Automático
                             </button>
                             {% elif campanha.status == 'enviando' %}
-                            <button type="button" class="btn btn-primary" onclick="enviarProximas()">
-                                <i class="bi bi-send"></i> Enviar Próximas Mensagens
-                            </button>
+                            <div class="alert alert-info mb-0">
+                                <i class="bi bi-hourglass-split"></i> <strong>Enviando automaticamente...</strong>
+                                O sistema está enviando as mensagens em background.
+                            </div>
                             <form method="POST" action="{{ url_for('campanha_consultas_pausar', id=campanha.id) }}" style="margin: 0; display: inline;">
                                 <button type="submit" class="btn btn-warning">
                                     <i class="bi bi-pause-fill"></i> Pausar Envio
@@ -360,69 +361,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script>
-function enviarProximas() {
-    if (!confirm('Enviar próximas mensagens respeitando a meta diária?')) {
-        return;
-    }
-
-    // Mostrar indicador de loading
-    const btnEnviar = event.target;
-    const textoOriginal = btnEnviar.innerHTML;
-    btnEnviar.disabled = true;
-    btnEnviar.innerHTML = '<i class="bi bi-hourglass-split"></i> Enviando...';
-
-    fetch(`/api/consultas/campanha/{{ campanha.id }}/enviar_proximas`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    })
-    .then(async response => {
-        // Capturar o texto da resposta primeiro
-        const responseText = await response.text();
-
-        btnEnviar.disabled = false;
-        btnEnviar.innerHTML = textoOriginal;
-
-        // Verificar se é JSON válido
-        let data;
-        try {
-            data = JSON.parse(responseText);
-        } catch (e) {
-            // Não é JSON, provavelmente um erro HTML
-            console.error('Resposta não é JSON:', responseText.substring(0, 500));
-
-            // Tentar extrair mensagem de erro do HTML
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(responseText, 'text/html');
-            const errorMsg = doc.querySelector('title')?.textContent || 'Erro desconhecido';
-
-            alert(`Erro no servidor (${response.status}):\n${errorMsg}\n\nVeja o console do navegador (F12) para mais detalhes.`);
-            return;
-        }
-
-        // Processar resposta JSON
-        if (response.ok && data.sucesso) {
-            let mensagem = data.mensagem || `${data.enviados} mensagens enviadas! Pendentes: ${data.pendentes}`;
-
-            // Mostrar erros se houver
-            if (data.erros > 0 && data.erros_detalhes && data.erros_detalhes.length > 0) {
-                mensagem += '\n\nErros:\n' + data.erros_detalhes.join('\n');
-            }
-
-            alert(mensagem);
-            location.reload();
-        } else {
-            alert('Erro: ' + (data.mensagem || 'Erro desconhecido'));
-        }
-    })
-    .catch(error => {
-        btnEnviar.disabled = false;
-        btnEnviar.innerHTML = textoOriginal;
-        console.error('Erro completo:', error);
-        alert('Erro ao enviar mensagens:\n' + error.message + '\n\nVeja o console do navegador (F12) para mais detalhes.');
-    });
-}
-</script>
+<!-- Envio automático via Celery - Não precisa de JavaScript manual -->
 {% endblock %}

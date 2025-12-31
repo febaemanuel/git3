@@ -963,4 +963,208 @@ def processar_planilha_task(self, arquivo_path, campanha_id):
             except Exception as e2:
                 logger.warning(f"Erro ao remover arquivo temporário: {e2}")
 
+
+@celery.task(
+    base=DatabaseTask,
+    bind=True,
+    name='tasks.enviar_campanha_consultas_task'
+)
+def enviar_campanha_consultas_task(self, campanha_id):
+    """
+    Envia mensagens WhatsApp de uma campanha de CONSULTAS
+    COPIADO DA LÓGICA DA FILA CIRÚRGICA (enviar_campanha_task)
+
+    Args:
+        campanha_id: ID da campanha de consultas
+
+    Raises:
+        Retry: Se houver erro temporário (API indisponível, etc)
+    """
+    from app import db, CampanhaConsulta, AgendamentoConsulta, TelefoneConsulta, LogMsgConsulta, WhatsApp
+    from datetime import datetime
+
+    logger.info(f"Iniciando envio da campanha de consultas {campanha_id}")
+
+    try:
+        camp = db.session.get(CampanhaConsulta, campanha_id)
+        if not camp:
+            logger.error(f"Campanha de consultas {campanha_id} não encontrada")
+            return {'erro': 'Campanha não encontrada'}
+
+        ws = WhatsApp(camp.criador_id)
+        if not ws.ok():
+            camp.status = 'erro'
+            camp.status_msg = 'WhatsApp nao configurado'
+            db.session.commit()
+            return {'erro': 'WhatsApp não configurado'}
+
+        conn, _ = ws.conectado()
+        if not conn:
+            camp.status = 'erro'
+            camp.status_msg = 'WhatsApp desconectado'
+            db.session.commit()
+            return {'erro': 'WhatsApp desconectado'}
+
+        camp.status = 'enviando'
+        camp.data_inicio = datetime.utcnow()
+        db.session.commit()
+
+        # Buscar consultas AGUARDANDO_ENVIO
+        consultas = camp.consultas.filter_by(
+            status='AGUARDANDO_ENVIO'
+        ).order_by(AgendamentoConsulta.id).all()
+
+        total = len(consultas)
+        enviados_pessoas = 0
+        erros = 0
+
+        logger.info(f"Total de consultas para enviar: {total}")
+
+        for i, consulta in enumerate(consultas):
+            # Refresh campanha para verificar status
+            db.session.refresh(camp)
+            if camp.status != 'enviando':
+                logger.info(f"Campanha pausada/cancelada, parando...")
+                break
+
+            # Verificar limites (IGUAL À FILA CIRÚRGICA)
+            if camp.atingiu_duracao():
+                camp.status = 'concluido'
+                camp.status_msg = f'Duração de {camp.dias_duracao} dias atingida'
+                db.session.commit()
+                break
+
+            if not camp.pode_enviar_agora():
+                camp.status = 'pausado'
+                camp.status_msg = f'Fora do horário ({camp.hora_inicio}h-{camp.hora_fim}h)'
+                db.session.commit()
+                break
+
+            if not camp.pode_enviar_hoje():
+                camp.status = 'pausado'
+                camp.status_msg = f'Meta diária atingida ({camp.meta_diaria} consultas)'
+                db.session.commit()
+                break
+
+            # Atualizar progresso
+            progresso = int((i / total) * 100) if total > 0 else 0
+            self.update_state(
+                state='PROGRESS',
+                meta={
+                    'current': i + 1,
+                    'total': total,
+                    'percent': progresso,
+                    'enviados': enviados_pessoas,
+                    'erros': erros,
+                    'status': f'Enviando para {consulta.paciente}...'
+                }
+            )
+
+            camp.status_msg = f'Processando {i+1}/{total}: {consulta.paciente}'
+            db.session.commit()
+
+            # ENVIO DA CONSULTA
+            # Buscar telefones da consulta
+            telefones = consulta.telefones.order_by(TelefoneConsulta.prioridade).all()
+
+            if not telefones:
+                logger.warning(f"Consulta {consulta.id} sem telefones, pulando...")
+                erros += 1
+                continue
+
+            # Formatar mensagem
+            from app import formatar_mensagem_consulta
+            mensagem = formatar_mensagem_consulta(consulta)
+            if not mensagem:
+                logger.error(f"Erro ao formatar mensagem para consulta {consulta.id}")
+                erros += 1
+                continue
+
+            sucesso_pessoa = False
+
+            # Tentar enviar para cada telefone (ordem de prioridade)
+            for tel in telefones:
+                if tel.enviado:  # Já foi enviado para este telefone
+                    continue
+
+                ok, result = ws.enviar(tel.numero, mensagem)
+
+                if ok:
+                    tel.enviado = True
+                    tel.data_envio = datetime.utcnow()
+                    tel.msg_id = result
+                    sucesso_pessoa = True
+
+                    log = LogMsgConsulta(
+                        campanha_id=camp.id,
+                        consulta_id=consulta.id,
+                        direcao='enviada',
+                        telefone=tel.numero,
+                        mensagem=mensagem[:500],
+                        status='sucesso'
+                    )
+                    db.session.add(log)
+
+                    logger.info(f"Mensagem enviada para {tel.numero} da consulta {consulta.id}")
+                    # Enviar apenas para o primeiro telefone com sucesso (IGUAL FILA)
+                    break
+                else:
+                    log = LogMsgConsulta(
+                        campanha_id=camp.id,
+                        consulta_id=consulta.id,
+                        direcao='enviada',
+                        telefone=tel.numero,
+                        mensagem=mensagem[:500],
+                        status='erro',
+                        erro=result
+                    )
+                    db.session.add(log)
+                    logger.warning(f"Falha ao enviar para {tel.numero}: {result}")
+
+            if sucesso_pessoa:
+                # Mudar status da consulta
+                consulta.status = 'AGUARDANDO_CONFIRMACAO'
+                consulta.mensagem_enviada = True
+                consulta.data_envio_mensagem = datetime.utcnow()
+                camp.registrar_envio()
+                enviados_pessoas += 1
+            else:
+                erros += 1
+
+            db.session.commit()
+            camp.atualizar_stats()
+            db.session.commit()
+
+            # Aguardar intervalo calculado (IGUAL FILA)
+            if i < total - 1:
+                intervalo = camp.calcular_intervalo()
+                logger.info(f"Aguardando {intervalo}s até próximo envio")
+                time.sleep(intervalo)
+
+        # Verificar se acabou
+        restantes = camp.consultas.filter_by(status='AGUARDANDO_ENVIO').count()
+
+        if restantes == 0 and camp.status == 'enviando':
+            camp.status = 'concluido'
+            camp.data_fim = datetime.utcnow()
+            camp.status_msg = f'{enviados_pessoas} consultas contactadas'
+
+        camp.atualizar_stats()
+        db.session.commit()
+
+        logger.info(f"Envio concluído: {enviados_pessoas} enviados, {erros} erros")
+
+        return {
+            'sucesso': True,
+            'total': total,
+            'enviados': enviados_pessoas,
+            'erros': erros
+        }
+
+    except Exception as e:
+        logger.exception(f"Erro no envio: {e}")
+        if camp:
+            camp.status = 'erro'
+            camp.status_msg = str(e)[:200]
+            db.session.commit()
         raise

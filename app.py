@@ -6399,7 +6399,7 @@ def campanha_consultas_detalhe(id):
 @app.route('/consultas/campanha/<int:id>/iniciar', methods=['POST'])
 @login_required
 def campanha_consultas_iniciar(id):
-    """Inicia envio controlado de mensagens do campanha"""
+    """Inicia envio de mensagens da campanha - IGUAL À FILA CIRÚRGICA"""
     if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
@@ -6409,22 +6409,36 @@ def campanha_consultas_iniciar(id):
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
     if campanha.status == 'enviando':
-        return jsonify({'sucesso': False, 'mensagem': 'Lote já está em envio'}), 400
+        return jsonify({'erro': 'Já em andamento'}), 400
 
-    # Atualizar configurações do campanha se enviadas
-    campanha.meta_diaria = int(request.form.get('meta_diaria', campanha.meta_diaria))
-    campanha.hora_inicio = int(request.form.get('hora_inicio', campanha.hora_inicio))
-    campanha.hora_fim = int(request.form.get('hora_fim', campanha.hora_fim))
+    # Verificar se tem consultas pendentes
+    pendentes = campanha.consultas.filter_by(status='AGUARDANDO_ENVIO').count()
+    if pendentes == 0:
+        return jsonify({'erro': 'Nenhuma consulta para enviar'}), 400
+
+    # Verificar WhatsApp conectado
+    ws = WhatsApp(campanha.criador_id)
+    conn, _ = ws.conectado()
+    if not conn:
+        return jsonify({'erro': 'WhatsApp desconectado'}), 400
+
+    # Atualizar configurações se enviadas
+    if request.form.get('meta_diaria'):
+        campanha.meta_diaria = int(request.form.get('meta_diaria', campanha.meta_diaria))
+    if request.form.get('hora_inicio'):
+        campanha.hora_inicio = int(request.form.get('hora_inicio', campanha.hora_inicio))
+    if request.form.get('hora_fim'):
+        campanha.hora_fim = int(request.form.get('hora_fim', campanha.hora_fim))
 
     # Calcular intervalo automaticamente
     campanha.tempo_entre_envios = campanha.calcular_intervalo()
-
-    campanha.status = 'enviando'
-    campanha.data_inicio = datetime.utcnow()
     db.session.commit()
 
-    # Iniciar envio em background (sem Celery por enquanto, vamos fazer síncrono controlado)
-    flash(f'Envio iniciado! Intervalo automático: {campanha.tempo_entre_envios}s. As mensagens serão enviadas respeitando a meta diária e horário configurados.', 'success')
+    # Iniciar task Celery (IGUAL À FILA CIRÚRGICA)
+    from tasks import enviar_campanha_consultas_task
+    task = enviar_campanha_consultas_task.delay(id)
+
+    flash(f'Envio iniciado em background! As mensagens serão enviadas automaticamente respeitando a meta diária e horário configurados.', 'success')
 
     return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
 
@@ -6432,7 +6446,7 @@ def campanha_consultas_iniciar(id):
 @app.route('/consultas/campanha/<int:id>/pausar', methods=['POST'])
 @login_required
 def campanha_consultas_pausar(id):
-    """Pausa o envio controlado de mensagens do campanha"""
+    """Pausa o envio da campanha - IGUAL À FILA CIRÚRGICA"""
     if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
@@ -6441,11 +6455,8 @@ def campanha_consultas_pausar(id):
     if campanha.criador_id != current_user.id:
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
-    if campanha.status != 'enviando':
-        flash('O campanha não está em modo de envio.', 'warning')
-        return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
-
     campanha.status = 'pausado'
+    campanha.status_msg = 'Pausada'
     db.session.commit()
 
     flash('Envio pausado com sucesso!', 'success')
@@ -6455,7 +6466,7 @@ def campanha_consultas_pausar(id):
 @app.route('/consultas/campanha/<int:id>/continuar', methods=['POST'])
 @login_required
 def campanha_consultas_continuar(id):
-    """Continua o envio de um campanha pausado"""
+    """Retoma o envio de uma campanha pausada - IGUAL À FILA CIRÚRGICA"""
     if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
@@ -6464,12 +6475,15 @@ def campanha_consultas_continuar(id):
     if campanha.criador_id != current_user.id:
         return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
 
-    if campanha.status != 'pausado':
-        flash('O campanha não está pausado.', 'warning')
+    # Verificar se tem consultas pendentes
+    pendentes = campanha.consultas.filter_by(status='AGUARDANDO_ENVIO').count()
+    if pendentes == 0:
+        flash('Nenhuma consulta pendente', 'warning')
         return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
 
-    campanha.status = 'enviando'
-    db.session.commit()
+    # Iniciar task Celery novamente (IGUAL À FILA CIRÚRGICA)
+    from tasks import enviar_campanha_consultas_task
+    task = enviar_campanha_consultas_task.delay(id)
 
     flash('Envio retomado com sucesso!', 'success')
     return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
@@ -6499,125 +6513,6 @@ def campanha_consultas_atualizar(id):
 
     flash('Configurações atualizadas com sucesso! Intervalo recalculado automaticamente.', 'success')
     return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
-
-
-@app.route('/api/consultas/campanha/<int:id>/enviar_proximas', methods=['POST'])
-@login_required
-def api_enviar_proximas_consultas(id):
-    """Envia próximas mensagens do campanha respeitando limites"""
-    try:
-        campanha = CampanhaConsulta.query.get_or_404(id)
-
-        if campanha.criador_id != current_user.id:
-            return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
-
-        if campanha.status != 'enviando':
-            return jsonify({'sucesso': False, 'mensagem': 'Lote não está em modo de envio'}), 400
-
-        # Verificar WhatsApp configurado PRIMEIRO (antes de outras validações)
-        try:
-            ws = WhatsApp(current_user.id)
-        except Exception as e:
-            logger.error(f'Erro ao inicializar WhatsApp: {str(e)}')
-            return jsonify({
-                'sucesso': False,
-                'mensagem': f'Erro ao inicializar WhatsApp: {str(e)}'
-            }), 500
-
-        if not ws.ok():
-            return jsonify({
-                'sucesso': False,
-                'mensagem': 'WhatsApp não configurado! Verifique as configurações da API Evolution.'
-            }), 400
-
-        # Verificar se está conectado
-        try:
-            conectado, estado = ws.conectado()
-        except Exception as e:
-            logger.error(f'Erro ao verificar conexão WhatsApp: {str(e)}')
-            return jsonify({
-                'sucesso': False,
-                'mensagem': f'Erro ao verificar conexão WhatsApp: {str(e)}'
-            }), 500
-
-        if not conectado:
-            return jsonify({
-                'sucesso': False,
-                'mensagem': f'WhatsApp desconectado! Estado: {estado}. Escaneie o QR Code nas configurações.'
-            }), 400
-
-        # Verificar se pode enviar agora
-        if not campanha.pode_enviar_agora():
-            return jsonify({'sucesso': False, 'mensagem': 'Fora do horário de envio'}), 400
-
-        if not campanha.pode_enviar_hoje():
-            return jsonify({'sucesso': False, 'mensagem': 'Meta diária atingida'}), 400
-
-        # Buscar consultas pendentes de envio (status AGUARDANDO_ENVIO)
-        consultas_pendentes = campanha.consultas.filter_by(
-            status='AGUARDANDO_ENVIO'
-        ).limit(campanha.meta_diaria - campanha.enviados_hoje).all()
-
-        if not consultas_pendentes:
-            return jsonify({
-                'sucesso': False,
-                'mensagem': 'Nenhuma consulta pendente de envio encontrada!'
-            }), 400
-
-        enviados = 0
-        erros = 0
-        erros_detalhes = []
-
-        for consulta in consultas_pendentes:
-            if not campanha.pode_enviar_hoje():
-                break
-
-            sucesso, msg_id = enviar_mensagem_consulta(consulta.id, current_user.id)
-            if sucesso:
-                consulta.mensagem_enviada = True
-                consulta.data_envio_mensagem = datetime.utcnow()
-                campanha.enviados_hoje += 1
-                enviados += 1
-                db.session.commit()
-                time.sleep(campanha.tempo_entre_envios)
-            else:
-                erros += 1
-                erro_msg = f'{consulta.paciente}: {msg_id}'
-                erros_detalhes.append(erro_msg)
-                logger.error(f'Erro ao enviar consulta {consulta.id}: {msg_id}')
-
-        # Verificar se terminou (contar consultas AGUARDANDO_ENVIO)
-        pendentes = campanha.consultas.filter_by(status='AGUARDANDO_ENVIO').count()
-        if pendentes == 0:
-            campanha.status = 'concluido'
-            campanha.data_fim = datetime.utcnow()
-            db.session.commit()
-
-        # Preparar mensagem de retorno
-        mensagem = f'{enviados} mensagens enviadas!'
-        if erros > 0:
-            mensagem += f' {erros} falharam.'
-        mensagem += f' Pendentes: {pendentes}'
-
-        return jsonify({
-            'sucesso': True,
-            'enviados': enviados,
-            'erros': erros,
-            'erros_detalhes': erros_detalhes[:5],  # Mostrar apenas os 5 primeiros erros
-            'pendentes': pendentes,
-            'meta_diaria': campanha.meta_diaria,
-            'enviados_hoje': campanha.enviados_hoje,
-            'mensagem': mensagem
-        })
-
-    except Exception as e:
-        logger.error(f'Erro fatal em api_enviar_proximas_consultas: {str(e)}')
-        import traceback
-        logger.error(traceback.format_exc())
-        return jsonify({
-            'sucesso': False,
-            'mensagem': f'Erro interno do servidor: {str(e)}'
-        }), 500
 
 
 # =============================================================================

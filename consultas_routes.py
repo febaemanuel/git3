@@ -591,7 +591,7 @@ def init_consultas_routes(app, db):
             'telefones': [t.numero for t in consulta.telefones],
             'medico_solicitante': consulta.medico_solicitante,
             'especialidade': consulta.especialidade,
-            'data_consulta': consulta.data_consulta.strftime('%d/%m/%Y') if consulta.data_consulta else None,
+            'data_aghu': consulta.data_aghu,  # Data da consulta (string)
             'observacoes': consulta.observacoes,
             'motivo_rejeicao': consulta.motivo_rejeicao,
             'data_envio': consulta.data_envio_mensagem.strftime('%d/%m/%Y %H:%M:%S') if consulta.data_envio_mensagem else None,

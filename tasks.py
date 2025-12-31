@@ -966,6 +966,94 @@ def processar_planilha_task(self, arquivo_path, campanha_id):
         raise
 
 
+@celery.task(
+    base=DatabaseTask,
+    name='tasks.retomar_campanhas_consultas_automaticas'
+)
+def retomar_campanhas_consultas_automaticas():
+    """
+    Retoma automaticamente campanhas de CONSULTAS pausadas que estão no horário correto
+    Executada a cada hora durante o dia
+
+    Verifica:
+    - Campanhas pausadas por "Fora do horário"
+    - Campanhas pausadas por "Meta diária atingida" (novo dia)
+    - Se agora está dentro do horário de funcionamento
+    - Se pode enviar hoje (meta diária resetada)
+
+    Retorna: número de campanhas retomadas
+    """
+    from app import db, CampanhaConsulta, AgendamentoConsulta
+    from datetime import datetime
+
+    logger.info("Verificando campanhas de CONSULTAS pausadas para retomada automática")
+
+    try:
+        # Buscar campanhas de consultas pausadas
+        campanhas_pausadas = CampanhaConsulta.query.filter_by(status='pausado').all()
+
+        if not campanhas_pausadas:
+            logger.info("Nenhuma campanha de consulta pausada encontrada")
+            return {'sucesso': True, 'retomadas': 0}
+
+        retomadas = 0
+
+        for camp in campanhas_pausadas:
+            # Verificar se foi pausada por horário ou meta diária
+            motivo_horario = 'Fora do horário' in (camp.status_msg or '')
+            motivo_meta = 'Meta diária atingida' in (camp.status_msg or '')
+
+            if not (motivo_horario or motivo_meta):
+                # Foi pausada manualmente pelo usuário, não retomar
+                logger.debug(f"Campanha consulta {camp.id} pausada manualmente, não retomando")
+                continue
+
+            # Verificar se tem consultas pendentes
+            pendentes = AgendamentoConsulta.query.filter_by(
+                campanha_id=camp.id,
+                status='AGUARDANDO_ENVIO'
+            ).count()
+
+            if pendentes == 0:
+                # Não tem mais nada para enviar, marcar como concluída
+                camp.status = 'concluido'
+                camp.status_msg = 'Todas as consultas foram processadas'
+                db.session.commit()
+                logger.info(f"Campanha consulta {camp.id} ({camp.nome}) marcada como concluída - sem pendentes")
+                continue
+
+            # Verificar se pode enviar agora
+            pode_enviar = camp.pode_enviar_agora()
+            pode_hoje = camp.pode_enviar_hoje()
+
+            if pode_enviar and pode_hoje:
+                # Retomar campanha automaticamente
+                logger.info(f"Retomando campanha consulta {camp.id} ({camp.nome}) automaticamente")
+
+                # Chamar task de envio de consultas
+                enviar_campanha_consultas_task.delay(camp.id)
+
+                retomadas += 1
+                logger.info(f"Campanha consulta {camp.id} retomada: horário OK, meta diária OK, {pendentes} pendentes")
+            else:
+                if not pode_enviar:
+                    logger.debug(f"Campanha consulta {camp.id} ainda fora do horário ({camp.hora_inicio}h-{camp.hora_fim}h)")
+                if not pode_hoje:
+                    logger.debug(f"Campanha consulta {camp.id} meta diária já atingida ({camp.enviados_hoje}/{camp.meta_diaria})")
+
+        logger.info(f"Retomada automática de consultas concluída: {retomadas} campanhas retomadas")
+
+        return {
+            'sucesso': True,
+            'retomadas': retomadas,
+            'verificadas': len(campanhas_pausadas)
+        }
+
+    except Exception as e:
+        logger.exception(f"Erro na retomada automática de consultas: {e}")
+        return {'sucesso': False, 'erro': str(e)}
+
+
 # =============================================================================
 # TASKS - MODO CONSULTA (Agendamento de Consultas)
 # =============================================================================

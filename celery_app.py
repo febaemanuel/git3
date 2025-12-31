@@ -66,6 +66,13 @@ celery.conf.beat_schedule = {
         'options': {'expires': 1800}  # Task expira em 30min se não executar
     },
 
+    # Retomar campanhas de CONSULTAS pausadas a cada hora (durante horário comercial)
+    'retomar-campanhas-consultas-automaticas': {
+        'task': 'tasks.retomar_campanhas_consultas_automaticas',
+        'schedule': crontab(minute=0, hour='8-21'),  # De hora em hora, das 8h às 21h
+        'options': {'expires': 1800}  # Task expira em 30min se não executar
+    },
+
     # Limpar tasks antigas a cada 6 horas
     'limpar-tasks-antigas': {
         'task': 'tasks.limpar_tasks_antigas',

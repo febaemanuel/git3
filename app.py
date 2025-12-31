@@ -808,7 +808,6 @@ class CampanhaConsulta(db.Model):
         self.total_confirmados = AgendamentoConsulta.query.filter_by(campanha_id=self.id, status='CONFIRMADO').count()
         self.total_aguardando_comprovante = AgendamentoConsulta.query.filter_by(campanha_id=self.id, status='AGUARDANDO_COMPROVANTE').count()
         self.total_rejeitados = AgendamentoConsulta.query.filter_by(campanha_id=self.id, status='REJEITADO').count()
-        db.session.commit()
 
 
 class AgendamentoConsulta(db.Model):

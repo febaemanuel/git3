@@ -786,20 +786,47 @@ class CampanhaConsulta(db.Model):
         return self.enviados_hoje < self.meta_diaria
 
     def pode_enviar_agora(self):
-        """Verifica se está dentro do horário permitido"""
-        hora_atual = datetime.now().hour
-        return self.hora_inicio <= hora_atual < self.hora_fim
+        """Verifica se está dentro do horário de funcionamento"""
+        agora = datetime.now()
+        hora_atual = agora.hour
+
+        # Verificar horário
+        if self.hora_inicio <= self.hora_fim:
+            # Horário normal (ex: 8h às 18h)
+            dentro_horario = self.hora_inicio <= hora_atual < self.hora_fim
+        else:
+            # Horário overnight (ex: 22h às 6h)
+            dentro_horario = hora_atual >= self.hora_inicio or hora_atual < self.hora_fim
+
+        return dentro_horario
 
     def calcular_intervalo(self):
-        """Calcula intervalo entre envios baseado na meta diária e horário"""
+        """Calcula intervalo entre envios baseado na meta diária e horário de funcionamento"""
+        # Validação da meta
         if self.meta_diaria <= 0:
             return self.tempo_entre_envios
-        horas_disponiveis = self.hora_fim - self.hora_inicio
-        if horas_disponiveis <= 0:
+
+        # Calcular horas disponíveis
+        if self.hora_inicio <= self.hora_fim:
+            # Horário normal (ex: 8h às 18h)
+            horas_trabalho = self.hora_fim - self.hora_inicio
+        else:
+            # Horário overnight (ex: 22h às 6h)
+            horas_trabalho = (24 - self.hora_inicio) + self.hora_fim
+
+        if horas_trabalho <= 0:
             return self.tempo_entre_envios
-        minutos_disponiveis = horas_disponiveis * 60
-        intervalo = minutos_disponiveis // self.meta_diaria
-        return max(intervalo, 1)  # Mínimo 1 minuto
+
+        # Converter para segundos
+        segundos_disponiveis = horas_trabalho * 3600
+
+        # Calcular intervalo
+        intervalo = segundos_disponiveis / self.meta_diaria
+
+        # Garantir mínimo de 5 segundos (evitar flood)
+        intervalo = max(5, int(intervalo))
+
+        return intervalo
 
     def atualizar_stats(self):
         """Atualiza estatísticas da campanha"""

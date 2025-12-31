@@ -4820,9 +4820,11 @@ def webhook():
                            f"Campanha: {consulta.campanha_id}. Status: {consulta.status}. Texto: {texto}")
 
                 # PROTEÇÃO CONTRA DUPLICAÇÃO (múltiplos workers do Gunicorn)
-                # Verificar se já processamos esta mensagem nos últimos 5 segundos
+                # IMPORTANTE: Criar log IMEDIATAMENTE com commit para bloquear outros workers
                 from datetime import timedelta
                 cinco_segundos_atras = datetime.utcnow() - timedelta(seconds=5)
+
+                # Usar with_for_update para lock otimista na consulta
                 log_recente = LogMsgConsulta.query.filter(
                     LogMsgConsulta.consulta_id == consulta.id,
                     LogMsgConsulta.direcao == 'recebida',
@@ -4834,22 +4836,23 @@ def webhook():
                     logger.info(f"Mensagem duplicada detectada (já processada há {(datetime.utcnow() - log_recente.data).total_seconds():.1f}s). Ignorando.")
                     return jsonify({'status': 'ok'}), 200
 
-                ws = WhatsApp(consulta.campanha.criador_id)
-
                 # IMPORTANTE: Usar o número cadastrado na consulta para garantir que respondemos no formato correto
                 numero_resposta = consulta_telefone.numero
 
-                # Log da mensagem recebida
+                # Criar log IMEDIATAMENTE e commitar ANTES de processar
+                # Isso garante que outros workers vejam que já está sendo processado
                 log = LogMsgConsulta(
                     campanha_id=consulta.campanha_id,
                     consulta_id=consulta.id,
                     direcao='recebida',
                     telefone=numero_resposta,
                     mensagem=texto[:500],
-                    status='sucesso'
+                    status='processando'  # Marca como processando primeiro
                 )
                 db.session.add(log)
-                db.session.commit()
+                db.session.commit()  # COMMIT IMEDIATO para bloquear outros workers
+
+                ws = WhatsApp(consulta.campanha.criador_id)
 
                 # ESTADO 1: AGUARDANDO_CONFIRMACAO (resposta à MSG 1)
                 if consulta.status == 'AGUARDANDO_CONFIRMACAO':
@@ -5042,7 +5045,7 @@ _Hospital Universitário Walter Cantídio_""")
                    f"Campanha: {c.campanha_id} (User {usuario_id}). Status: {c.status}. Texto: {texto}")
 
         # PROTEÇÃO CONTRA DUPLICAÇÃO (múltiplos workers do Gunicorn)
-        # Verificar se já processamos esta mensagem nos últimos 5 segundos
+        # IMPORTANTE: Criar log IMEDIATAMENTE com commit para bloquear outros workers
         from datetime import timedelta
         cinco_segundos_atras = datetime.utcnow() - timedelta(seconds=5)
         log_recente = LogMsg.query.filter(
@@ -5059,7 +5062,8 @@ _Hospital Universitário Walter Cantídio_""")
         # Análise de sentimento
         analise = AnaliseSentimento.analisar(texto)
 
-        # Log da mensagem recebida com sentimento
+        # Criar log IMEDIATAMENTE e commitar ANTES de processar
+        # Isso garante que outros workers vejam que já está sendo processado
         log = LogMsg(
             campanha_id=c.campanha_id,
             contato_id=c.id,
@@ -5071,7 +5075,7 @@ _Hospital Universitário Walter Cantídio_""")
             sentimento_score=analise['score']
         )
         db.session.add(log)
-        db.session.commit()
+        db.session.commit()  # COMMIT IMEDIATO para bloquear outros workers
 
         ws = WhatsApp(c.campanha.criador_id)
 

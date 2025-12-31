@@ -31,27 +31,29 @@
                     <h5>Configurações de Envio</h5>
 
                     <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">Meta Diária</label>
                             <input type="number" class="form-control" name="meta_diaria" value="50" min="1">
+                            <small class="text-muted">Mensagens por dia</small>
                         </div>
 
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Tempo entre Envios (segundos)</label>
-                            <input type="number" class="form-control" name="tempo_entre_envios" value="15" min="5">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Hora Início</label>
+                            <input type="number" class="form-control" name="hora_inicio" value="8" min="0" max="23">
+                            <small class="text-muted">Horário de início</small>
+                        </div>
+
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Hora Fim</label>
+                            <input type="number" class="form-control" name="hora_fim" value="23" min="0" max="23">
+                            <small class="text-muted">Horário de fim</small>
                         </div>
                     </div>
 
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Hora Início</label>
-                            <input type="number" class="form-control" name="hora_inicio" value="8" min="0" max="23">
-                        </div>
-
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">Hora Fim</label>
-                            <input type="number" class="form-control" name="hora_fim" value="23" min="0" max="23">
-                        </div>
+                    <div class="alert alert-success">
+                        <i class="bi bi-info-circle"></i>
+                        <strong>Intervalo calculado automaticamente:</strong>
+                        O sistema distribui as mensagens uniformemente ao longo do horário de funcionamento.
                     </div>
 
                     <div class="alert alert-info">

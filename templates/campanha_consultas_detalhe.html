@@ -122,9 +122,29 @@
                                     {% endif %}
                                 </td>
                                 <td>
-                                    <a href="{{ url_for('consulta_detalhe', id=consulta.id) }}" class="btn btn-sm btn-primary">
-                                        <i class="bi bi-eye"></i>
-                                    </a>
+                                    <div class="btn-group btn-group-sm">
+                                        <!-- Botão de Chat/Histórico -->
+                                        <button class="btn btn-outline-info" title="Ver histórico de mensagens"
+                                                onclick="verHistoricoConsulta({{ consulta.id }})">
+                                            <i class="bi bi-chat-dots"></i>
+                                        </button>
+                                        <!-- Botão de Detalhes -->
+                                        <a href="{{ url_for('consulta_detalhe', id=consulta.id) }}"
+                                           class="btn btn-outline-primary" title="Ver todos os detalhes">
+                                            <i class="bi bi-info-circle"></i>
+                                        </a>
+                                        <!-- Botões de Ação -->
+                                        {% if consulta.status == 'AGUARDANDO_CONFIRMACAO' %}
+                                        <button class="btn btn-outline-success" title="Confirmar manualmente"
+                                                onclick="confirmarConsulta({{ consulta.id }})">
+                                            <i class="bi bi-check-lg"></i>
+                                        </button>
+                                        <button class="btn btn-outline-danger" title="Cancelar consulta"
+                                                onclick="cancelarConsulta({{ consulta.id }})">
+                                            <i class="bi bi-x-lg"></i>
+                                        </button>
+                                        {% endif %}
+                                    </div>
                                 </td>
                             </tr>
                             {% endfor %}
@@ -135,4 +155,173 @@
         </div>
     </div>
 </div>
+
+<!-- Modal de Histórico de Mensagens -->
+<div class="modal fade" id="modalHistorico" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Histórico de Mensagens</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body" id="historicoContent">
+                <div class="text-center">
+                    <div class="spinner-border" role="status">
+                        <span class="visually-hidden">Carregando...</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <div class="flex-grow-1">
+                    <div class="input-group">
+                        <input type="text" class="form-control" id="novaMensagem"
+                               placeholder="Digite uma mensagem...">
+                        <button class="btn btn-primary" onclick="enviarMensagemManual()">
+                            <i class="bi bi-send"></i> Enviar
+                        </button>
+                    </div>
+                </div>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let consultaAtualId = null;
+
+function verHistoricoConsulta(consultaId) {
+    consultaAtualId = consultaId;
+    const modal = new bootstrap.Modal(document.getElementById('modalHistorico'));
+    modal.show();
+
+    // Carregar histórico
+    document.getElementById('historicoContent').innerHTML = `
+        <div class="text-center">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Carregando...</span>
+            </div>
+        </div>
+    `;
+
+    fetch(`/api/consulta/${consultaId}/detalhes`)
+        .then(r => r.json())
+        .then(data => {
+            let html = `
+                <div class="mb-3">
+                    <h6><strong>Paciente:</strong> ${data.paciente}</h6>
+                    <p class="mb-1"><strong>Tipo:</strong> ${data.tipo}</p>
+                    <p class="mb-1"><strong>Status:</strong> <span class="badge bg-primary">${data.status}</span></p>
+                    ${data.motivo_rejeicao ? `<p class="mb-1"><strong>Motivo:</strong> ${data.motivo_rejeicao}</p>` : ''}
+                </div>
+                <hr>
+                <h6>Mensagens:</h6>
+                <div class="list-group">
+            `;
+
+            if (data.logs && data.logs.length > 0) {
+                data.logs.forEach(log => {
+                    const isEnviada = log.direcao === 'enviada';
+                    const bgClass = isEnviada ? 'bg-light' : 'bg-primary text-white';
+                    const align = isEnviada ? 'text-end' : 'text-start';
+
+                    html += `
+                        <div class="list-group-item ${bgClass} ${align}">
+                            <div class="d-flex justify-content-between">
+                                <small class="text-muted">
+                                    ${isEnviada ? '📤 Enviada' : '📥 Recebida'}
+                                </small>
+                                <small class="text-muted">${log.data || ''}</small>
+                            </div>
+                            <div class="mt-1">${log.mensagem || ''}</div>
+                            ${log.erro ? `<small class="text-danger">Erro: ${log.erro}</small>` : ''}
+                        </div>
+                    `;
+                });
+            } else {
+                html += '<div class="alert alert-info">Nenhuma mensagem ainda</div>';
+            }
+
+            html += '</div>';
+            document.getElementById('historicoContent').innerHTML = html;
+        })
+        .catch(err => {
+            document.getElementById('historicoContent').innerHTML =
+                '<div class="alert alert-danger">Erro ao carregar histórico</div>';
+        });
+}
+
+function enviarMensagemManual() {
+    const mensagem = document.getElementById('novaMensagem').value.trim();
+    if (!mensagem) {
+        alert('Digite uma mensagem');
+        return;
+    }
+
+    if (!consultaAtualId) {
+        alert('Erro: Consulta não identificada');
+        return;
+    }
+
+    fetch(`/api/consulta/${consultaAtualId}/enviar_mensagem`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({mensagem: mensagem})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.sucesso) {
+            document.getElementById('novaMensagem').value = '';
+            verHistoricoConsulta(consultaAtualId); // Recarregar histórico
+            alert('Mensagem enviada!');
+        } else {
+            alert('Erro: ' + (data.erro || 'Desconhecido'));
+        }
+    })
+    .catch(err => alert('Erro ao enviar mensagem'));
+}
+
+function confirmarConsulta(consultaId) {
+    if (!confirm('Confirmar esta consulta manualmente?')) return;
+
+    fetch(`/api/consulta/${consultaId}/confirmar`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'}
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert('Consulta confirmada!');
+            location.reload();
+        } else {
+            alert('Erro: ' + (data.erro || 'Desconhecido'));
+        }
+    })
+    .catch(err => alert('Erro ao confirmar'));
+}
+
+function cancelarConsulta(consultaId) {
+    const motivo = prompt('Motivo do cancelamento:');
+    if (!motivo) return;
+
+    fetch(`/api/consulta/${consultaId}/cancelar`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({motivo: motivo})
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert('Consulta cancelada!');
+            location.reload();
+        } else {
+            alert('Erro: ' + (data.erro || 'Desconhecido'));
+        }
+    })
+    .catch(err => alert('Erro ao cancelar'));
+}
+</script>
 {% endblock %}

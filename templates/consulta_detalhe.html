@@ -1,0 +1,384 @@
+{% extends "base.html" %}
+
+{% block title %}Detalhes da Consulta #{{ consulta.id }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2><i class="bi bi-file-text"></i> Detalhes da Consulta #{{ consulta.id }}</h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('consultas_dashboard') }}">Consultas</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('consultas_listar', status=consulta.status) }}">{{ consulta.status }}</a></li>
+                    <li class="breadcrumb-item active">Detalhes</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Informações do Paciente -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-person"></i> Informações do Paciente
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th width="40%">Nome:</th>
+                            <td>{{ consulta.paciente }}</td>
+                        </tr>
+                        <tr>
+                            <th>Telefone Cadastrado:</th>
+                            <td>{{ consulta.telefone_cadas or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Telefone Registrado:</th>
+                            <td>{{ consulta.telefone_regist or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Pasta:</th>
+                            <td>{{ consulta.pasta or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>OD MASTE:</th>
+                            <td>{{ consulta.od_maste or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Código AGH:</th>
+                            <td>{{ consulta.codigo_agh or '-' }}</td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Informações da Consulta -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-calendar-check"></i> Informações da Consulta
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th width="40%">Tipo:</th>
+                            <td><span class="badge bg-secondary">{{ consulta.tipo }}</span></td>
+                        </tr>
+                        <tr>
+                            <th>Especialidade:</th>
+                            <td>{{ consulta.especialidade or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Sub-Especialidade:</th>
+                            <td>{{ consulta.sub_especialidade or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Profissional:</th>
+                            <td>{{ consulta.profissional or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Data da Consulta:</th>
+                            <td>{{ consulta.data_aghu or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Hora da Consulta:</th>
+                            <td>{{ consulta.hora_consulta or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Dia da Semana:</th>
+                            <td>{{ consulta.dia_semana or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Unidade Funcional:</th>
+                            <td>{{ consulta.unidade_funcional or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Grade:</th>
+                            <td>{{ consulta.grade or '-' }}</td>
+                        </tr>
+                        <tr>
+                            <th>Prioridade:</th>
+                            <td>{{ consulta.prioridade or '-' }}</td>
+                        </tr>
+                        {% if consulta.tipo == 'INTERCONSULTA' %}
+                        <tr>
+                            <th>Voltar ao Posto:</th>
+                            <td>
+                                {% if consulta.paciente_voltar_posto_sms == 'SIM' %}
+                                    <span class="badge bg-danger">SIM</span>
+                                {% else %}
+                                    <span class="badge bg-success">NÃO</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endif %}
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status e Controle -->
+        <div class="col-lg-12 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-info-circle"></i> Status e Controle
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <tr>
+                            <th width="20%">Status Atual:</th>
+                            <td><span class="badge {{ consulta.status_badge() }}">{{ consulta.status_texto() }}</span></td>
+                        </tr>
+                        <tr>
+                            <th>Data de Criação:</th>
+                            <td>{{ consulta.created_at.strftime('%d/%m/%Y %H:%M') if consulta.created_at else '-' }}</td>
+                        </tr>
+                        {% if consulta.data_confirmacao %}
+                        <tr>
+                            <th>Data de Confirmação:</th>
+                            <td>{{ consulta.data_confirmacao.strftime('%d/%m/%Y %H:%M') }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if consulta.data_cancelamento %}
+                        <tr>
+                            <th>Data de Cancelamento:</th>
+                            <td>{{ consulta.data_cancelamento.strftime('%d/%m/%Y %H:%M') }}</td>
+                        </tr>
+                        {% endif %}
+                        {% if consulta.comprovante_path %}
+                        <tr>
+                            <th>Comprovante:</th>
+                            <td>
+                                <a href="{{ url_for('static', filename='uploads/' + consulta.comprovante_path) }}" target="_blank" class="btn btn-sm btn-outline-primary">
+                                    <i class="bi bi-file-earmark-pdf"></i> Visualizar Comprovante
+                                </a>
+                            </td>
+                        </tr>
+                        {% endif %}
+                        {% if consulta.observacoes %}
+                        <tr>
+                            <th>Observações:</th>
+                            <td>{{ consulta.observacoes }}</td>
+                        </tr>
+                        {% endif %}
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Telefones -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-telephone"></i> Telefones
+                </div>
+                <div class="card-body p-0">
+                    {% if telefones %}
+                    <div class="list-group list-group-flush">
+                        {% for tel in telefones %}
+                        <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>{{ tel.numero }}</strong>
+                                {% if tel.whatsapp_valido %}
+                                <span class="badge bg-success"><i class="bi bi-whatsapp"></i></span>
+                                {% endif %}
+                                {% if tel.prioridade == 1 %}
+                                <span class="badge bg-primary">Principal</span>
+                                {% endif %}
+                            </div>
+                            <div>
+                                {% if tel.enviado %}
+                                <span class="badge bg-success" title="Enviado em {{ tel.data_envio.strftime('%d/%m %H:%M') if tel.data_envio else '' }}">
+                                    <i class="bi bi-check"></i> {{ tel.prioridade }}
+                                </span>
+                                {% if tel.data_envio %}
+                                <small class="text-muted ms-2">{{ tel.data_envio.strftime('%d/%m às %H:%M') }}</small>
+                                {% endif %}
+                                {% else %}
+                                <span class="badge bg-secondary">Não enviado</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="card-body text-center text-muted">
+                        <i class="bi bi-telephone-x"></i> Nenhum telefone cadastrado
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Histórico de Mensagens -->
+        <div class="col-lg-6 mb-4">
+            <div class="card">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-chat-dots"></i> Conversa</span>
+                    <span class="badge bg-secondary">{{ logs|length }} mensagens</span>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    {% if logs %}
+                    <div class="chat-container">
+                        {% for log in logs %}
+                        <div class="mb-3 {% if log.direcao == 'enviada' %}text-start{% else %}text-end{% endif %}">
+                            <div class="d-inline-block" style="max-width: 80%;">
+                                <div class="p-2 rounded {% if log.direcao == 'enviada' %}bg-light text-dark{% else %}bg-primary text-white{% endif %}">
+                                    {% if log.direcao == 'enviada' %}
+                                    <i class="bi bi-clipboard"></i>
+                                    {% endif %}
+                                    {{ log.mensagem }}
+                                    {% if log.sentimento %}
+                                    <span class="badge {% if log.sentimento == 'urgente' %}bg-danger{% else %}bg-secondary{% endif %} ms-2">
+                                        {{ log.sentimento }}
+                                    </span>
+                                    {% endif %}
+                                </div>
+                                <small class="text-muted d-block mt-1">
+                                    {{ log.data.strftime('%d/%m/%Y %H:%M:%S') }}
+                                </small>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted">
+                        <i class="bi bi-chat-x"></i> Nenhuma mensagem ainda
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Ações -->
+        <div class="col-lg-12 mb-4">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-tools"></i> Ações
+                </div>
+                <div class="card-body">
+                    <div class="d-flex gap-2">
+                        {% if consulta.status == 'AGUARDANDO_CONFIRMACAO' %}
+                        <button type="button" class="btn btn-success" onclick="confirmarConsulta({{ consulta.id }})">
+                            <i class="bi bi-check-circle"></i> Marcar como Confirmada
+                        </button>
+                        {% endif %}
+
+                        {% if consulta.status == 'AGUARDANDO_COMPROVANTE' %}
+                        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#modalComprovante">
+                            <i class="bi bi-upload"></i> Enviar Comprovante
+                        </button>
+                        {% endif %}
+
+                        {% if consulta.status not in ['CANCELADO', 'CONFIRMADO', 'REJEITADO'] %}
+                        <button type="button" class="btn btn-danger" onclick="cancelarConsulta({{ consulta.id }})">
+                            <i class="bi bi-x-circle"></i> Cancelar Consulta
+                        </button>
+                        {% endif %}
+
+                        <a href="{{ url_for('consultas_listar', status=consulta.status) }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left"></i> Voltar
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Upload Comprovante -->
+<div class="modal fade" id="modalComprovante" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Enviar Comprovante</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formComprovante" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="comprovante" class="form-label">Arquivo do Comprovante (PDF/JPG)</label>
+                        <input type="file" class="form-control" id="comprovante" name="comprovante"
+                               accept=".pdf,.jpg,.jpeg,.png" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" onclick="enviarComprovante()">
+                    <i class="bi bi-upload"></i> Enviar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function confirmarConsulta(consultaId) {
+    if (confirm('Marcar esta consulta como confirmada?')) {
+        fetch(`/api/consulta/${consultaId}/confirmar`, {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.sucesso) {
+                alert(data.mensagem);
+                location.reload();
+            } else {
+                alert('Erro: ' + data.mensagem);
+            }
+        })
+        .catch(error => {
+            alert('Erro ao confirmar consulta: ' + error);
+        });
+    }
+}
+
+function cancelarConsulta(consultaId) {
+    if (confirm('Tem certeza que deseja cancelar esta consulta?')) {
+        fetch(`/api/consulta/${consultaId}/cancelar`, {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.sucesso) {
+                alert(data.mensagem);
+                location.reload();
+            } else {
+                alert('Erro: ' + data.mensagem);
+            }
+        })
+        .catch(error => {
+            alert('Erro ao cancelar consulta: ' + error);
+        });
+    }
+}
+
+function enviarComprovante() {
+    const formData = new FormData(document.getElementById('formComprovante'));
+
+    fetch(`/consultas/{{ consulta.id }}/comprovante`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert(data.mensagem);
+            location.reload();
+        } else {
+            alert('Erro: ' + data.mensagem);
+        }
+    })
+    .catch(error => {
+        alert('Erro ao enviar comprovante: ' + error);
+    });
+}
+</script>
+{% endblock %}

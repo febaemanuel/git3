@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+
+{% block title %}Campanhas de Consultas{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <h2><i class="bi bi-folder-open"></i> Campanhas de Consultas</h2>
+                <a href="{{ url_for('consultas_importar') }}" class="btn btn-success">
+                    <i class="bi bi-plus-circle"></i> Nova Campanha
+                </a>
+            </div>
+        </div>
+    </div>
+
+    {% if campanhas %}
+    <div class="row">
+        {% for item in campanhas %}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">{{ item.campanha.nome }}</h5>
+                    <span class="badge bg-primary">{{ item.campanha.tipo }}</span>
+                </div>
+                <div class="card-body">
+                    <!-- Estatísticas -->
+                    <div class="mb-3">
+                        <div class="row text-center mb-2">
+                            <div class="col-6">
+                                <div class="border rounded p-2">
+                                    <h4 class="mb-0 text-primary">{{ item.total }}</h4>
+                                    <small class="text-muted">Total</small>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="border rounded p-2">
+                                    <h4 class="mb-0 text-info">{{ item.enviados }}</h4>
+                                    <small class="text-muted">Enviados</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row text-center">
+                            <div class="col-4">
+                                <div class="border rounded p-2">
+                                    <h6 class="mb-0 text-warning">{{ item.aguardando_envio }}</h6>
+                                    <small class="text-muted" style="font-size: 0.7rem;">Pendentes</small>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="border rounded p-2">
+                                    <h6 class="mb-0 text-success">{{ item.confirmados }}</h6>
+                                    <small class="text-muted" style="font-size: 0.7rem;">Confirmados</small>
+                                </div>
+                            </div>
+                            <div class="col-4">
+                                <div class="border rounded p-2">
+                                    <h6 class="mb-0 text-secondary">{{ item.cancelados }}</h6>
+                                    <small class="text-muted" style="font-size: 0.7rem;">Cancelados</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Barra de progresso -->
+                    <div class="mb-3">
+                        <small class="text-muted">Progresso de envio</small>
+                        <div class="progress" style="height: 20px;">
+                            <div class="progress-bar" role="progressbar"
+                                 style="width: {{ item.percentual_enviado }}%"
+                                 aria-valuenow="{{ item.percentual_enviado }}"
+                                 aria-valuemin="0" aria-valuemax="100">
+                                {{ "%.1f"|format(item.percentual_enviado) }}%
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Configurações de envio -->
+                    <div class="mb-3">
+                        <small class="text-muted d-block"><i class="bi bi-gear"></i> Configurações:</small>
+                        <small class="d-block">
+                            <i class="bi bi-clock"></i> {{ item.campanha.hora_inicio }}h - {{ item.campanha.hora_fim }}h
+                        </small>
+                        <small class="d-block">
+                            <i class="bi bi-speedometer2"></i> Meta: {{ item.campanha.meta_diaria }}/dia
+                        </small>
+                        <small class="d-block">
+                            <i class="bi bi-hourglass-split"></i> Intervalo: {{ item.campanha.tempo_entre_envios }}s
+                        </small>
+                    </div>
+
+                    <!-- Contador diário -->
+                    {% if item.campanha.enviados_hoje > 0 %}
+                    <div class="alert alert-info py-2 mb-3">
+                        <small>
+                            <i class="bi bi-calendar-check"></i>
+                            Hoje: {{ item.campanha.enviados_hoje }}/{{ item.campanha.meta_diaria }} enviados
+                        </small>
+                    </div>
+                    {% endif %}
+
+                    <!-- Data de criação -->
+                    <small class="text-muted d-block mb-3">
+                        <i class="bi bi-calendar"></i> Criada em {{ item.campanha.data_criacao.strftime('%d/%m/%Y %H:%M') if item.campanha.data_criacao else '-' }}
+                    </small>
+                </div>
+                <div class="card-footer">
+                    <a href="{{ url_for('campanha_consultas_detalhe', id=item.campanha.id) }}"
+                       class="btn btn-primary btn-sm w-100">
+                        <i class="bi bi-gear"></i> Gerenciar Campanha
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+
+    {% else %}
+    <!-- Sem campanhas -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body text-center py-5">
+                    <i class="bi bi-inbox" style="font-size: 4rem; color: #ccc;"></i>
+                    <h4 class="mt-3 mb-2">Nenhuma campanha de consultas encontrada</h4>
+                    <p class="text-muted mb-4">Comece importando uma planilha de consultas para criar sua primeira campanha.</p>
+                    <a href="{{ url_for('consultas_importar') }}" class="btn btn-success">
+                        <i class="bi bi-upload"></i> Importar Planilha
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}Importar Consultas{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2><i class="bi bi-upload"></i> Importar Planilha de Consultas</h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('consultas_dashboard') }}">Consultas</a></li>
+                    <li class="breadcrumb-item active">Importar</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-file-earmark-excel"></i> Importar Planilha Excel
+                </div>
+                <div class="card-body">
+                    <form method="POST" enctype="multipart/form-data">
+                        <!-- Tipo de Consulta -->
+                        <div class="mb-4">
+                            <label class="form-label">Tipo de Consulta</label>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="tipo" id="retorno" value="RETORNO" checked>
+                                <label class="form-check-label" for="retorno">
+                                    <strong>RETORNO</strong> - Consulta de retorno
+                                </label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" name="tipo" id="interconsulta" value="INTERCONSULTA">
+                                <label class="form-check-label" for="interconsulta">
+                                    <strong>INTERCONSULTA</strong> - Primeira consulta (possui campo PACIENTE_VOLTAR_POSTO_SMS)
+                                </label>
+                            </div>
+                        </div>
+
+                        <!-- Nome da Campanha -->
+                        <div class="mb-3">
+                            <label for="nome_lote" class="form-label">Nome da Campanha</label>
+                            <input type="text" class="form-control" id="nome_lote" name="nome_lote"
+                                   placeholder="Ex: Consultas Janeiro 2026">
+                            <div class="form-text">Deixe vazio para gerar automaticamente</div>
+                        </div>
+
+                        <!-- Upload de Arquivo -->
+                        <div class="mb-4">
+                            <label for="arquivo" class="form-label">Arquivo Excel</label>
+                            <input type="file" class="form-control" id="arquivo" name="arquivo" accept=".xlsx,.xls" required>
+                            <div class="form-text">Formato aceito: .xlsx ou .xls</div>
+                        </div>
+
+                        <!-- Configurações de Envio -->
+                        <h6 class="mt-4 mb-3">Configurações de Envio</h6>
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label for="meta_diaria" class="form-label">Meta Diária</label>
+                                <input type="number" class="form-control" id="meta_diaria" name="meta_diaria"
+                                       value="50" min="1" max="500">
+                                <small class="form-text text-muted">Consultas por dia</small>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="hora_inicio" class="form-label">Horário de Início</label>
+                                <input type="number" class="form-control" id="hora_inicio" name="hora_inicio"
+                                       value="8" min="0" max="23">
+                                <small class="form-text text-muted">Hora de início (0-23)</small>
+                            </div>
+                            <div class="col-md-4">
+                                <label for="hora_fim" class="form-label">Horário de Término</label>
+                                <input type="number" class="form-control" id="hora_fim" name="hora_fim"
+                                       value="18" min="0" max="23">
+                                <small class="form-text text-muted">Hora de término (0-23)</small>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-success mb-4">
+                            <i class="bi bi-check-circle"></i> <strong>Intervalo automático:</strong> O intervalo entre envios será calculado automaticamente com base na meta diária e horário de funcionamento.
+                        </div>
+
+                        <!-- Instruções -->
+                        <div class="alert alert-info">
+                            <h6><i class="bi bi-info-circle"></i> Colunas esperadas na planilha:</h6>
+                            <ul class="mb-0">
+                                <li><strong>PACIENTE</strong> (obrigatório) - Nome do paciente</li>
+                                <li><strong>TELEFONE CADASTRO</strong> - Telefone cadastrado</li>
+                                <li><strong>TELEFONE REGISTRO</strong> - Telefone registrado</li>
+                                <li><strong>ESPECIALIDADE</strong> - Especialidade da consulta</li>
+                                <li><strong>SUB-ESPECIALIDADE</strong> - Sub-especialidade (opcional)</li>
+                                <li><strong>DATA AGHU</strong> - Data da consulta</li>
+                                <li><strong>MEDICO_SOLICITANTE</strong> - Nome do médico/profissional</li>
+                                <li><strong>GRADE_AGHU</strong> - Grade (opcional)</li>
+                                <li><strong>PRIORIDADE</strong> - Prioridade (opcional)</li>
+                                <li><strong>COD MASTER</strong>, <strong>CODIGO AGHU</strong>, <strong>PASTA</strong> (opcionais)</li>
+                            </ul>
+                            <hr>
+                            <p class="mb-0"><strong>Para INTERCONSULTA:</strong> adicione a coluna <strong>PACIENTE_VOLTAR_POSTO_SMS</strong> com valores "SIM" ou "NÃO"</p>
+                        </div>
+
+                        <!-- Botões -->
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-upload"></i> Importar
+                            </button>
+                            <a href="{{ url_for('consultas_dashboard') }}" class="btn btn-outline-secondary">
+                                <i class="bi bi-arrow-left"></i> Voltar
+                            </a>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

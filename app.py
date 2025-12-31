@@ -128,6 +128,7 @@ class Usuario(UserMixin, db.Model):
     senha_hash = db.Column(db.String(255), nullable=False)
     ativo = db.Column(db.Boolean, default=True)
     is_admin = db.Column(db.Boolean, default=False)  # Flag de administrador
+    tipo_sistema = db.Column(db.String(50), default='FILA_CIRURGICA')  # FILA_CIRURGICA ou AGENDAMENTO_CONSULTA
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     ultimo_acesso = db.Column(db.DateTime)
 
@@ -644,6 +645,303 @@ class ConfigTentativas(db.Model):
             db.session.add(c)
             db.session.commit()
         return c
+
+
+class CampanhaConsulta(db.Model):
+    """Campanha de consultas (RETORNO e INTERCONSULTA) com controle de envio"""
+    __tablename__ = 'campanhas_consultas'
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(200), nullable=False)
+    descricao = db.Column(db.Text)
+    tipo = db.Column(db.String(50))  # RETORNO ou INTERCONSULTA
+    arquivo = db.Column(db.String(255))  # Nome do arquivo importado
+
+    # Status e controle de task
+    status = db.Column(db.String(50), default='pendente')
+    # pendente, enviando, pausado, concluido
+    status_msg = db.Column(db.String(255))
+    task_id = db.Column(db.String(100))  # ID da task Celery
+
+    # Estatísticas
+    total_consultas = db.Column(db.Integer, default=0)
+    total_enviados = db.Column(db.Integer, default=0)
+    total_confirmados = db.Column(db.Integer, default=0)
+    total_aguardando_comprovante = db.Column(db.Integer, default=0)
+    total_cancelados = db.Column(db.Integer, default=0)
+    total_rejeitados = db.Column(db.Integer, default=0)
+
+    # Configurações de envio (IGUAL à fila)
+    limite_diario = db.Column(db.Integer, default=50)
+    tempo_entre_envios = db.Column(db.Integer, default=15)
+    meta_diaria = db.Column(db.Integer, default=50)  # Meta de consultas por dia
+    hora_inicio = db.Column(db.Integer, default=8)   # Hora de início (0-23)
+    hora_fim = db.Column(db.Integer, default=18)     # Hora de fim (0-23)
+    dias_duracao = db.Column(db.Integer, default=0)  # 0 = até acabar, >0 = quantidade de dias
+
+    # Controle diário
+    enviados_hoje = db.Column(db.Integer, default=0)
+    data_ultimo_envio = db.Column(db.Date)
+
+    # Relacionamentos
+    criador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id', ondelete='SET NULL'))
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    data_inicio = db.Column(db.DateTime)
+    data_fim = db.Column(db.DateTime)
+
+    criador = db.relationship('Usuario', backref='campanhas_consultas')
+    consultas = db.relationship('AgendamentoConsulta', backref='campanha', lazy='dynamic')
+
+    def atualizar_stats(self):
+        """Atualiza estatísticas da campanha - IGUAL à fila"""
+        self.total_consultas = self.consultas.count()
+        # Conta enviados como todas que NÃO estão em AGUARDANDO_ENVIO
+        self.total_enviados = self.consultas.filter(AgendamentoConsulta.status != 'AGUARDANDO_ENVIO').count()
+        self.total_confirmados = self.consultas.filter_by(status='CONFIRMADO').count()
+        self.total_aguardando_comprovante = self.consultas.filter_by(status='AGUARDANDO_COMPROVANTE').count()
+        self.total_cancelados = self.consultas.filter_by(status='CANCELADO').count()
+        self.total_rejeitados = self.consultas.filter_by(status='REJEITADO').count()
+        # NÃO faz commit - deixa para o chamador (igual à fila)
+
+    def pct_validacao(self):
+        """Percentual de consultas enviadas - COPIADO da fila"""
+        if self.total_consultas == 0:
+            return 0
+        return round((self.total_enviados / self.total_consultas) * 100, 1)
+
+    def pct_envio(self):
+        """Percentual de envio - COPIADO da fila"""
+        return self.pct_validacao()
+
+    def pct_confirmacao(self):
+        """Percentual de confirmação - COPIADO da fila"""
+        if self.total_enviados == 0:
+            return 0
+        return round((self.total_confirmados / self.total_enviados) * 100, 1)
+
+    def percentual_conclusao(self):
+        """Percentual geral de conclusão - COPIADO da fila"""
+        if self.total_consultas == 0:
+            return 0
+        return round((self.total_enviados / self.total_consultas) * 100, 1)
+
+    # Aliases para templates (igual à fila)
+    percentual_validacao = pct_validacao
+    percentual_envio = pct_envio
+    percentual_confirmacao = pct_confirmacao
+
+    def pendentes_validar(self):
+        """Consultas pendentes de validação - COPIADO da fila"""
+        return self.consultas.filter_by(status='AGUARDANDO_ENVIO').count()
+
+    def pendentes_enviar(self):
+        """Consultas prontas para envio - COPIADO da fila"""
+        return self.consultas.filter_by(status='AGUARDANDO_ENVIO').count()
+
+    def pode_enviar_hoje(self):
+        """Verifica se pode enviar mais consultas hoje - IGUAL à fila"""
+        hoje = date.today()
+        if self.data_ultimo_envio != hoje:
+            self.enviados_hoje = 0
+            self.data_ultimo_envio = hoje
+            db.session.commit()
+        return self.enviados_hoje < self.meta_diaria
+
+    def pode_enviar_agora(self):
+        """Verifica se está dentro do horário de envio - IGUAL à fila (com overnight)"""
+        agora = datetime.now()
+        hora_atual = agora.hour
+
+        if self.hora_inicio <= self.hora_fim:
+            # Horário normal (ex: 8h às 18h)
+            dentro_horario = self.hora_inicio <= hora_atual < self.hora_fim
+        else:
+            # Horário overnight (ex: 22h às 6h)
+            dentro_horario = hora_atual >= self.hora_inicio or hora_atual < self.hora_fim
+
+        return dentro_horario
+
+    def atingiu_duracao(self):
+        """Verifica se atingiu o número de dias definido - COPIADO da fila"""
+        if self.dias_duracao == 0:
+            return False  # Sem limite de duração
+
+        if not self.data_inicio:
+            return False
+
+        dias_decorridos = (datetime.now() - self.data_inicio).days
+        return dias_decorridos >= self.dias_duracao
+
+    def registrar_envio(self):
+        """Registra que um envio foi realizado hoje - COPIADO da fila"""
+        hoje = date.today()
+        if self.data_ultimo_envio != hoje:
+            self.enviados_hoje = 1
+            self.data_ultimo_envio = hoje
+        else:
+            self.enviados_hoje += 1
+        db.session.commit()
+
+    def calcular_intervalo(self):
+        """Calcula automaticamente o intervalo entre envios - COPIADO da fila"""
+        if self.meta_diaria <= 0:
+            return 15  # Default
+
+        if self.hora_inicio <= self.hora_fim:
+            # Horário normal
+            horas_trabalho = self.hora_fim - self.hora_inicio
+        else:
+            # Horário overnight
+            horas_trabalho = (24 - self.hora_inicio) + self.hora_fim
+
+        segundos_disponiveis = horas_trabalho * 3600
+        intervalo = segundos_disponiveis / self.meta_diaria
+
+        # Mínimo de 5 segundos
+        intervalo = max(5, int(intervalo))
+
+        return intervalo
+
+
+class AgendamentoConsulta(db.Model):
+    """Modelo para agendamento de consultas (RETORNO e INTERCONSULTA)"""
+    __tablename__ = 'agendamentos_consultas'
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Relacionamento com usuário que criou
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id', ondelete='SET NULL'))
+    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas_consultas.id', ondelete='SET NULL'))
+
+    # Dados da planilha
+    pasta = db.Column(db.String(50))
+    od_maste = db.Column(db.String(50))
+    codigo_agh = db.Column(db.String(50))
+    paciente = db.Column(db.String(200), nullable=False)
+    telefone_cadas = db.Column(db.String(20))
+    telefone_regist = db.Column(db.String(20))
+    tipo = db.Column(db.String(50), nullable=False)  # RETORNO ou INTERCONSULTA
+
+    # Dados da consulta
+    sub_especialidade = db.Column(db.String(200))
+    especialidade = db.Column(db.String(200))
+    grade = db.Column(db.String(50))
+    prioridade = db.Column(db.String(50))
+    data_aghu = db.Column(db.String(50))  # Data da consulta
+    hora_consulta = db.Column(db.String(10))  # Hora da consulta
+    dia_semana = db.Column(db.String(20))
+    unidade_funcional = db.Column(db.String(200))
+    profissional = db.Column(db.String(200))
+
+    # Campo específico para INTERCONSULTA
+    paciente_voltar_posto_sms = db.Column(db.String(10))  # SIM ou NÃO
+
+    # Controle de status
+    status = db.Column(db.String(50), default='AGUARDANDO_ENVIO')
+    # Status: AGUARDANDO_ENVIO, AGUARDANDO_CONFIRMACAO, AGUARDANDO_COMPROVANTE, CONFIRMADO, CANCELADO, REJEITADO
+
+    # Controle de envio de mensagens (similar à Campanha)
+    mensagem_enviada = db.Column(db.Boolean, default=False)  # Se já foi enviada a mensagem inicial
+    data_envio_mensagem = db.Column(db.DateTime)  # Quando foi enviada
+
+    # Comprovante
+    comprovante_path = db.Column(db.String(255))
+
+    # Observações
+    observacoes = db.Column(db.Text)
+
+    # Timestamps
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    data_confirmacao = db.Column(db.DateTime)
+    data_cancelamento = db.Column(db.DateTime)
+
+    # Relacionamento
+    usuario = db.relationship('Usuario', backref='agendamentos_consultas')
+    telefones = db.relationship('TelefoneConsulta', backref='consulta', lazy='dynamic', cascade='all, delete-orphan')
+
+    def get_telefone_principal(self):
+        """Retorna o telefone principal para envio (primeiro telefone cadastrado)"""
+        primeiro_tel = self.telefones.first()
+        if primeiro_tel:
+            return primeiro_tel.numero
+        # Fallback para campos antigos
+        return self.telefone_regist if self.telefone_regist else self.telefone_cadas
+
+    def telefones_str(self):
+        """Retorna string com todos os telefones"""
+        return ", ".join([t.numero for t in self.telefones])
+
+    def status_badge(self):
+        """Retorna classe CSS do badge baseado no status"""
+        badges = {
+            'AGUARDANDO_ENVIO': 'bg-secondary',
+            'AGUARDANDO_CONFIRMACAO': 'bg-warning text-dark',
+            'AGUARDANDO_COMPROVANTE': 'bg-info',
+            'CONFIRMADO': 'bg-success',
+            'CANCELADO': 'bg-dark',
+            'REJEITADO': 'bg-danger'
+        }
+        return badges.get(self.status, 'bg-light text-dark')
+
+    def status_texto(self):
+        """Retorna texto amigável do status"""
+        textos = {
+            'AGUARDANDO_ENVIO': 'Aguardando Envio',
+            'AGUARDANDO_CONFIRMACAO': 'Aguardando Confirmação',
+            'AGUARDANDO_COMPROVANTE': 'Aguardando Comprovante',
+            'CONFIRMADO': 'Confirmado',
+            'CANCELADO': 'Cancelado',
+            'REJEITADO': 'Rejeitado'
+        }
+        return textos.get(self.status, self.status)
+
+    def tem_interacao_recente(self):
+        """Verifica se houve interação recente (últimas 24h)"""
+        if not self.updated_at:
+            return False
+        limite = datetime.utcnow() - timedelta(hours=24)
+        # Considera interação se foi atualizado recentemente E não está no status inicial
+        return self.updated_at > limite and self.status not in ['AGUARDANDO_ENVIO']
+
+
+class TelefoneConsulta(db.Model):
+    """Modelo para armazenar múltiplos telefones de uma consulta (igual Telefone da fila)"""
+    __tablename__ = 'telefones_consultas'
+    id = db.Column(db.Integer, primary_key=True)
+    consulta_id = db.Column(db.Integer, db.ForeignKey('agendamentos_consultas.id', ondelete='CASCADE'), nullable=False)
+
+    numero = db.Column(db.String(20), nullable=False)
+    numero_fmt = db.Column(db.String(20))  # 558599999999
+
+    whatsapp_valido = db.Column(db.Boolean, default=None)
+    jid = db.Column(db.String(50))
+    data_validacao = db.Column(db.DateTime)
+
+    enviado = db.Column(db.Boolean, default=False)
+    data_envio = db.Column(db.DateTime)
+    msg_id = db.Column(db.String(100))
+
+    # Response tracking per phone number
+    resposta = db.Column(db.Text)
+    data_resposta = db.Column(db.DateTime)
+    tipo_resposta = db.Column(db.String(20))  # 'confirmado', 'rejeitado', 'desconheco', null
+
+    prioridade = db.Column(db.Integer, default=1)  # 1 = principal, 2 = secundário, etc.
+
+
+class LogMsgConsulta(db.Model):
+    """Histórico de mensagens de consultas (igual LogMsg da fila)"""
+    __tablename__ = 'logs_consultas'
+    id = db.Column(db.Integer, primary_key=True)
+    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas_consultas.id', ondelete='CASCADE'))
+    consulta_id = db.Column(db.Integer, db.ForeignKey('agendamentos_consultas.id', ondelete='CASCADE'))
+    direcao = db.Column(db.String(10))  # 'enviada' ou 'recebida'
+    telefone = db.Column(db.String(20))
+    mensagem = db.Column(db.Text)
+    status = db.Column(db.String(20))
+    erro = db.Column(db.Text)
+    sentimento = db.Column(db.String(20))  # neutro, urgente, insatisfeito, etc.
+    sentimento_score = db.Column(db.Float)
+    data = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class Tutorial(db.Model):
@@ -1924,15 +2222,15 @@ def validar_campanha_bg(campanha_id):
             # Processa em lotes
             batch = 50
             for i in range(0, total, batch):
-                lote = telefones[i:i+batch]
-                nums = [t.numero_fmt for t in lote]
+                campanha = telefones[i:i+batch]
+                nums = [t.numero_fmt for t in campanha]
 
-                camp.status_msg = f'Verificando {i+len(lote)}/{total}...'
+                camp.status_msg = f'Verificando {i+len(campanha)}/{total}...'
                 db.session.commit()
 
                 result = ws.verificar_numeros(nums)
 
-                for t in lote:
+                for t in campanha:
                     info = result.get(t.numero_fmt, {})
                     t.whatsapp_valido = info.get('exists', False)
                     t.jid = info.get('jid', '')
@@ -3359,6 +3657,11 @@ def logout():
 @app.route('/dashboard')
 @login_required
 def dashboard():
+    # Redirecionar para o sistema correto baseado no tipo_sistema do usuário
+    if hasattr(current_user, 'tipo_sistema') and current_user.tipo_sistema == 'AGENDAMENTO_CONSULTA':
+        return redirect(url_for('consultas_dashboard'))
+
+    # Dashboard da Fila Cirúrgica (padrão)
     # Filtrar apenas campanhas do usuario atual
     camps = Campanha.query.filter_by(criador_id=current_user.id).order_by(Campanha.data_criacao.desc()).all()
     for c in camps:
@@ -4408,6 +4711,12 @@ def webhook():
                 c = max(contatos_validos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
 
         if not c:
+            # Não encontrou contato de campanha, verificar se é consulta
+            sucesso_consulta, msg_consulta = processar_resposta_consulta(numero, texto)
+            if sucesso_consulta:
+                logger.info(f"Webhook: Resposta de consulta processada para {numero}")
+                return jsonify({'status': 'ok'}), 200
+
             # Verificar se existem contatos de outros usuários (para debug)
             todos_contatos = [t.contato for t in telefones if t.contato]
             if todos_contatos:
@@ -4415,7 +4724,7 @@ def webhook():
                 logger.warning(f"Webhook: Telefone {numero} não tem campanhas do usuário {usuario_id}. "
                              f"Campanhas existem para usuários: {outros_usuarios}")
             else:
-                logger.warning(f"Webhook: Telefone {numero} não encontrado em nenhuma campanha")
+                logger.warning(f"Webhook: Telefone {numero} não encontrado em nenhuma campanha ou consulta")
             return jsonify({'status': 'ok'}), 200
 
         logger.info(f"Webhook: [{instance_name}] Mensagem de {c.nome} ({numero}). "
@@ -5086,8 +5395,11 @@ def cadastro_publico():
             flash('Email já cadastrado', 'danger')
             return render_template('cadastro.html')
 
+        # Tipo de sistema
+        tipo_sistema = request.form.get('tipo_sistema', 'FILA_CIRURGICA')
+
         # Criar usuário
-        usuario = Usuario(nome=nome, email=email, ativo=True)
+        usuario = Usuario(nome=nome, email=email, ativo=True, tipo_sistema=tipo_sistema)
         usuario.set_password(senha)
         db.session.add(usuario)
         db.session.commit()
@@ -5357,6 +5669,850 @@ def task_cancel(task_id):
         'task_id': task_id,
         'message': 'Task cancelada'
     })
+
+
+# =============================================================================
+# FUNCOES - AGENDAMENTO DE CONSULTAS
+# =============================================================================
+
+def formatar_mensagem_consulta(consulta):
+    """Formata mensagem de acordo com tipo e status da consulta"""
+
+    # MSG 2 - INTERCONSULTA com VOLTAR_POSTO = SIM (Rejeição)
+    if consulta.tipo == 'INTERCONSULTA' and consulta.paciente_voltar_posto_sms == 'SIM':
+        return f"""HOSPITAL WALTER CANTIDIO
+Boa tarde! Falo com {consulta.paciente}?
+Sua consulta para o serviço de {consulta.especialidade or 'especialidade'} foi avaliada e por não se encaixar nos critérios do hospital, não foi possível seguir com o agendamento, portanto será necessário procurar um posto de saúde para realizar seu atendimento.
+Agradecemos a compreensão, tenha uma boa tarde!"""
+
+    # MSG 1 - RETORNO ou INTERCONSULTA com VOLTAR_POSTO = NÃO (Confirmação)
+    if consulta.status == 'AGUARDANDO_CONFIRMACAO':
+        return f"""Bom dia!
+Falamos do HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO.
+Estamos informando que a CONSULTA do paciente {consulta.paciente}, foi MARCADA para o dia {consulta.data_aghu or 'DATA'}, com {consulta.profissional or 'PROFISSIONAL'}, com especialidade em {consulta.especialidade or 'ESPECIALIDADE'}.
+
+Caso não haja confirmação em até 1 dia útil, sua consulta será cancelada!
+
+Posso confirmar o agendamento?"""
+
+    # MSG 3 - Confirmação final (após comprovante)
+    if consulta.status == 'CONFIRMADO':
+        return f"""O Hospital Walter Cantídio agradece seu contato. CONSULTA CONFIRMADA!
+
+Responda a pesquisa de satisfação: https://forms.gle/feteZxSNBRd5xfDUA
+
+O hospital entra em contato através do: (85) 992081534 / (85)996700783 / (85)991565903 / (85) 992614237 / (85) 992726080. É importante que atenda as ligações e responda as mensagens desses números. Por tanto, salve-os!
+
+Confira seu comprovante: data, horário e nome do(a) médico(a).
+
+Não fazemos marcação de exames, apenas consultas.
+
+Caso falte, procurar o ambulatório para ser colocado novamente no pré-agendamento.
+
+Você sabia que pode verificar sua consulta no app HU Digital? https://play.google.com/store/apps/details?id=br.gov.ebserh.hudigital&pcampaignid=web_share . Após 5 horas dessa mensagem, verifique sua consulta agendada no app.
+
+Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital."""
+
+    return None
+
+
+def enviar_mensagem_consulta(consulta_id, usuario_id):
+    """Envia mensagem WhatsApp para TODOS os telefones da consulta (igual fila cirúrgica)"""
+    try:
+        consulta = AgendamentoConsulta.query.get(consulta_id)
+        if not consulta:
+            logger.error(f'Consulta {consulta_id} não encontrada')
+            return False, 'Consulta não encontrada'
+
+        # Buscar TODOS os telefones da consulta
+        telefones_obj = consulta.telefones.order_by(TelefoneConsulta.prioridade).all()
+        if not telefones_obj:
+            logger.error(f'Consulta {consulta_id} sem telefones cadastrados')
+            return False, 'Sem telefones'
+
+        # Formatar mensagem
+        mensagem = formatar_mensagem_consulta(consulta)
+        if not mensagem:
+            logger.error(f'Não foi possível formatar mensagem para consulta {consulta_id}')
+            return False, 'Erro ao formatar mensagem'
+
+        # Enviar via WhatsApp
+        ws = WhatsApp(usuario_id)
+        if not ws.ok():
+            logger.error(f'WhatsApp não configurado para usuário {usuario_id}')
+            return False, 'WhatsApp não configurado'
+
+        # Tentar enviar para cada telefone (ordem de prioridade)
+        algum_enviado = False
+        ultimo_msg_id = None
+
+        for tel_obj in telefones_obj:
+            if tel_obj.enviado:  # Já foi enviado para este telefone
+                continue
+
+            sucesso, msg_id = ws.enviar(tel_obj.numero, mensagem)
+
+            if sucesso:
+                # Marcar telefone como enviado
+                tel_obj.enviado = True
+                tel_obj.data_envio = datetime.now()
+                tel_obj.msg_id = msg_id
+                algum_enviado = True
+                ultimo_msg_id = msg_id
+
+                # Registrar log de mensagem enviada
+                log = LogMsgConsulta(
+                    campanha_id=consulta.campanha_id,
+                    consulta_id=consulta.id,
+                    direcao='enviada',
+                    telefone=tel_obj.numero,
+                    mensagem=mensagem,
+                    status='sucesso',
+                    data=datetime.now()
+                )
+                db.session.add(log)
+
+                logger.info(f'Mensagem enviada para telefone {tel_obj.numero} da consulta {consulta_id}: {msg_id}')
+                # Enviar apenas para o primeiro telefone com sucesso (igual fila)
+                break
+            else:
+                # Registrar log de erro
+                log = LogMsgConsulta(
+                    campanha_id=consulta.campanha_id,
+                    consulta_id=consulta.id,
+                    direcao='enviada',
+                    telefone=tel_obj.numero,
+                    mensagem=mensagem,
+                    status='erro',
+                    erro=str(msg_id),
+                    data=datetime.now()
+                )
+                db.session.add(log)
+                logger.warning(f'Falha ao enviar para {tel_obj.numero}: {msg_id}')
+
+        if algum_enviado:
+            # Atualizar status da consulta
+            consulta.mensagem_enviada = True
+            consulta.data_envio_mensagem = datetime.now()
+
+            # Mudar status apenas se estiver AGUARDANDO_ENVIO
+            if consulta.status == 'AGUARDANDO_ENVIO':
+                consulta.status = 'AGUARDANDO_CONFIRMACAO'
+
+            db.session.commit()
+            return True, ultimo_msg_id
+        else:
+            logger.error(f'Não foi possível enviar mensagem para nenhum telefone da consulta {consulta_id}')
+            return False, 'Erro ao enviar para todos os telefones'
+
+    except Exception as e:
+        logger.error(f'Erro ao enviar mensagem para consulta {consulta_id}: {str(e)}')
+        return False, str(e)
+
+
+def processar_resposta_consulta(telefone, mensagem_texto):
+    """Processa resposta do paciente sobre agendamento de consulta"""
+    try:
+        # Normalizar telefone (apenas dígitos)
+        telefone_fmt = ''.join(filter(str.isdigit, telefone))
+
+        # Buscar pelo modelo TelefoneConsulta (igual fila cirúrgica)
+        telefone_obj = None
+        consulta = None
+
+        # Buscar telefone que recebeu mensagem e está aguardando confirmação
+        telefones_consulta = TelefoneConsulta.query.filter(
+            TelefoneConsulta.enviado == True
+        ).all()
+
+        for tel in telefones_consulta:
+            tel_numero = ''.join(filter(str.isdigit, tel.numero))
+            # Comparar últimos 8-9 dígitos
+            if telefone_fmt[-9:] == tel_numero[-9:] or telefone_fmt[-8:] == tel_numero[-8:]:
+                # Verificar se a consulta está aguardando confirmação
+                if tel.consulta.status == 'AGUARDANDO_CONFIRMACAO' and tel.consulta.usuario_id:
+                    telefone_obj = tel
+                    consulta = tel.consulta
+                    break
+
+        if not consulta:
+            return False, 'Sem consulta pendente'
+
+        # Registrar log de mensagem recebida
+        log = LogMsgConsulta(
+            campanha_id=consulta.campanha_id,
+            consulta_id=consulta.id,
+            direcao='recebida',
+            telefone=telefone,
+            mensagem=mensagem_texto,
+            status='recebida',
+            data=datetime.now()
+        )
+        db.session.add(log)
+
+        # Verificar se é uma confirmação
+        msg_upper = mensagem_texto.upper()
+        confirmacoes = ['SIM', 'S', '1', 'CONFIRMO', 'QUERO', 'CONFIRMAR', 'OK', 'POSITIVO']
+        rejeicoes = ['NÃO', 'NAO', 'N', 'CANCELAR', 'CANCELA', 'DESMARCAR', 'DESMARCA', 'RECUSAR', 'RECUSO']
+
+        if any(palavra in msg_upper for palavra in confirmacoes):
+            # Paciente confirmou
+            consulta.status = 'AGUARDANDO_COMPROVANTE'
+            consulta.data_confirmacao = datetime.now()
+
+            # Marcar resposta no telefone
+            if telefone_obj:
+                telefone_obj.resposta = mensagem_texto
+                telefone_obj.data_resposta = datetime.now()
+                telefone_obj.tipo_resposta = 'confirmado'
+
+            db.session.commit()
+            logger.info(f'Consulta {consulta.id} confirmada pelo paciente via telefone {telefone}')
+
+            # Enviar resposta automática confirmando o recebimento
+            try:
+                ws = WhatsApp(consulta.usuario_id)
+                if ws.ok():
+                    mensagem_resposta = f"""✅ Obrigado por confirmar!
+
+Sua consulta está confirmada para o dia {consulta.data_aghu or 'DATA'} com {consulta.profissional or 'PROFISSIONAL'}.
+
+Aguarde as próximas instruções em breve.
+
+Hospital Universitário Walter Cantídio."""
+
+                    ws.enviar(telefone, mensagem_resposta)
+
+                    # Registrar log da resposta automática
+                    log_resp = LogMsgConsulta(
+                        campanha_id=consulta.campanha_id,
+                        consulta_id=consulta.id,
+                        direcao='enviada',
+                        telefone=telefone,
+                        mensagem=mensagem_resposta,
+                        status='sucesso',
+                        data=datetime.now()
+                    )
+                    db.session.add(log_resp)
+                    db.session.commit()
+
+                    logger.info(f'Resposta automática enviada para consulta {consulta.id}')
+            except Exception as e:
+                logger.error(f'Erro ao enviar resposta automática para consulta {consulta.id}: {str(e)}')
+
+            return True, 'Consulta confirmada - aguardando comprovante'
+
+        elif any(palavra in msg_upper for palavra in rejeicoes):
+            # Paciente rejeitou/cancelou
+            consulta.status = 'CANCELADO'
+            consulta.data_cancelamento = datetime.now()
+            consulta.observacoes = (consulta.observacoes or '') + f'\nCancelado pelo paciente via WhatsApp em {datetime.now().strftime("%d/%m/%Y %H:%M")}'
+
+            # Marcar resposta no telefone
+            if telefone_obj:
+                telefone_obj.resposta = mensagem_texto
+                telefone_obj.data_resposta = datetime.now()
+                telefone_obj.tipo_resposta = 'rejeitado'
+
+            db.session.commit()
+            logger.info(f'Consulta {consulta.id} cancelada pelo paciente via telefone {telefone}')
+
+            # Enviar resposta automática confirmando o cancelamento
+            try:
+                ws = WhatsApp(consulta.usuario_id)
+                if ws.ok():
+                    mensagem_resposta = """Sua consulta foi cancelada conforme solicitado.
+
+Caso precise reagendar, entre em contato com o ambulatório.
+
+Obrigado!"""
+
+                    ws.enviar(telefone, mensagem_resposta)
+
+                    # Registrar log da resposta automática
+                    log_resp = LogMsgConsulta(
+                        campanha_id=consulta.campanha_id,
+                        consulta_id=consulta.id,
+                        direcao='enviada',
+                        telefone=telefone,
+                        mensagem=mensagem_resposta,
+                        status='sucesso',
+                        data=datetime.now()
+                    )
+                    db.session.add(log_resp)
+                    db.session.commit()
+
+                    logger.info(f'Resposta de cancelamento enviada para consulta {consulta.id}')
+            except Exception as e:
+                logger.error(f'Erro ao enviar resposta de cancelamento para consulta {consulta.id}: {str(e)}')
+
+            return True, 'Consulta cancelada pelo paciente'
+
+        return False, 'Resposta não reconhecida'
+
+    except Exception as e:
+        logger.error(f'Erro ao processar resposta de consulta: {str(e)}')
+        return False, str(e)
+
+
+# =============================================================================
+# ROTAS - AGENDAMENTO DE CONSULTAS
+# =============================================================================
+
+@app.route('/consultas')
+@login_required
+def consultas_dashboard():
+    """Dashboard de agendamento de consultas"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        flash('Você não tem permissão para acessar esta área.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    # Buscar todas as campanhas do usuário
+    campanhas = CampanhaConsulta.query.filter_by(criador_id=current_user.id).order_by(CampanhaConsulta.data_criacao.desc()).all()
+
+    # Atualizar estatísticas de cada campanha
+    for campanha in campanhas:
+        campanha.atualizar_stats()
+    db.session.commit()
+
+    # Estatísticas gerais (todas as campanhas)
+    aguardando_confirmacao = AgendamentoConsulta.query.filter_by(
+        usuario_id=current_user.id,
+        status='AGUARDANDO_CONFIRMACAO'
+    ).count()
+
+    aguardando_comprovante = AgendamentoConsulta.query.filter_by(
+        usuario_id=current_user.id,
+        status='AGUARDANDO_COMPROVANTE'
+    ).count()
+
+    confirmados = AgendamentoConsulta.query.filter_by(
+        usuario_id=current_user.id,
+        status='CONFIRMADO'
+    ).count()
+
+    cancelados = AgendamentoConsulta.query.filter_by(
+        usuario_id=current_user.id,
+        status='CANCELADO'
+    ).count()
+
+    rejeitados = AgendamentoConsulta.query.filter_by(
+        usuario_id=current_user.id,
+        status='REJEITADO'
+    ).count()
+
+    return render_template('consultas_dashboard.html',
+                         campanhas=campanhas,
+                         aguardando_confirmacao=aguardando_confirmacao,
+                         aguardando_comprovante=aguardando_comprovante,
+                         confirmados=confirmados,
+                         cancelados=cancelados,
+                         rejeitados=rejeitados)
+
+
+@app.route('/consultas/importar', methods=['GET', 'POST'])
+@login_required
+def consultas_importar():
+    """Importar planilha de consultas"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        flash('Você não tem permissão para acessar esta área.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        if 'arquivo' not in request.files:
+            flash('Nenhum arquivo enviado.', 'danger')
+            return redirect(request.url)
+
+        arquivo = request.files['arquivo']
+        if arquivo.filename == '':
+            flash('Nenhum arquivo selecionado.', 'danger')
+            return redirect(request.url)
+
+        if arquivo and arquivo.filename.endswith(('.xlsx', '.xls')):
+            try:
+                # Salvar arquivo temporariamente
+                filename = f"consultas_{current_user.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+                arquivo.save(filepath)
+
+                # Processar planilha
+                df = pd.read_excel(filepath)
+
+                # Tipo de importação (RETORNO ou INTERCONSULTA)
+                tipo = request.form.get('tipo', 'RETORNO')
+
+                # Criar campanha de consultas
+                nome_lote = request.form.get('nome_lote', f"Campanha {tipo} - {datetime.now().strftime('%d/%m/%Y %H:%M')}")
+                campanha = CampanhaConsulta(
+                    nome=nome_lote,
+                    criador_id=current_user.id,
+                    tipo=tipo,
+                    arquivo=arquivo.filename,
+                    meta_diaria=int(request.form.get('meta_diaria', 50)),
+                    hora_inicio=int(request.form.get('hora_inicio', 8)),
+                    hora_fim=int(request.form.get('hora_fim', 18)),
+                    tempo_entre_envios=int(request.form.get('tempo_entre_envios', 15))
+                )
+                db.session.add(campanha)
+                db.session.flush()  # Para pegar o ID do campanha
+
+                # Contador de sucesso
+                importados = 0
+                erros = []
+
+                for idx, row in df.iterrows():
+                    try:
+                        # Obter valores com fallback para nomes antigos e novos de colunas
+                        telefone_cadas_raw = row.get('TELEFONE CADASTRO') or row.get('TELEFONE CADAS')
+                        telefone_regist_raw = row.get('TELEFONE REGISTRO') or row.get('TELEFONE REGIST')
+                        od_maste = row.get('COD MASTER') or row.get('OD MASTE')
+                        codigo_agh = row.get('CODIGO AGHU') or row.get('CÓDIGO AGH')
+                        grade = row.get('GRADE_AGHU') or row.get('GRADE')
+                        profissional = row.get('MEDICO_SOLICITANTE') or row.get('PROFISSIONAL')
+
+                        # Extrair TODOS os telefones (separados por /)
+                        telefones_list = []
+                        if pd.notna(telefone_cadas_raw):
+                            for tel in str(telefone_cadas_raw).split('/'):
+                                tel_limpo = ''.join(tel.strip().split())  # Remove espaços
+                                if tel_limpo and len(tel_limpo) >= 10:  # Telefone válido
+                                    telefones_list.append(tel_limpo)
+
+                        if pd.notna(telefone_regist_raw):
+                            for tel in str(telefone_regist_raw).split('/'):
+                                tel_limpo = ''.join(tel.strip().split())  # Remove espaços
+                                if tel_limpo and len(tel_limpo) >= 10:  # Telefone válido
+                                    if tel_limpo not in telefones_list:  # Evitar duplicatas
+                                        telefones_list.append(tel_limpo)
+
+                        # Se não tem telefone válido, pular
+                        if not telefones_list:
+                            erros.append(f"Linha {idx + 2}: Paciente sem telefone válido")
+                            continue
+
+                        # Criar consulta (mantém campos antigos para compatibilidade)
+                        consulta = AgendamentoConsulta(
+                            usuario_id=current_user.id,
+                            campanha_id=campanha.id,
+                            pasta=str(row.get('PASTA', '')) if pd.notna(row.get('PASTA')) else None,
+                            od_maste=str(od_maste) if pd.notna(od_maste) else None,
+                            codigo_agh=str(codigo_agh) if pd.notna(codigo_agh) else None,
+                            paciente=str(row['PACIENTE']),
+                            telefone_cadas=telefones_list[0] if len(telefones_list) > 0 else None,  # Primeiro telefone
+                            telefone_regist=telefones_list[1] if len(telefones_list) > 1 else None,  # Segundo telefone
+                            tipo=tipo,
+                            sub_especialidade=str(row.get('SUB-ESPECIALIDADE', '')) if pd.notna(row.get('SUB-ESPECIALIDADE')) else None,
+                            especialidade=str(row.get('ESPECIALIDADE', '')) if pd.notna(row.get('ESPECIALIDADE')) else None,
+                            grade=str(grade) if pd.notna(grade) else None,
+                            prioridade=str(row.get('PRIORIDADE', '')) if pd.notna(row.get('PRIORIDADE')) else None,
+                            data_aghu=str(row.get('DATA AGHU', '')) if pd.notna(row.get('DATA AGHU')) else None,
+                            hora_consulta=str(row.get('HORA CONSULTA', '')) if pd.notna(row.get('HORA CONSULTA')) else None,
+                            dia_semana=str(row.get('DIA SEMANA', '')) if pd.notna(row.get('DIA SEMANA')) else None,
+                            unidade_funcional=str(row.get('UNIDADE FUNCIONAL', '')) if pd.notna(row.get('UNIDADE FUNCIONAL')) else None,
+                            profissional=str(profissional) if pd.notna(profissional) else None,
+                            paciente_voltar_posto_sms=str(row.get('PACIENTE_VOLTAR_POSTO_SMS', 'NÃO')) if tipo == 'INTERCONSULTA' else None
+                        )
+
+                        # Definir status inicial
+                        if tipo == 'INTERCONSULTA' and consulta.paciente_voltar_posto_sms == 'SIM':
+                            consulta.status = 'REJEITADO'
+                        else:
+                            consulta.status = 'AGUARDANDO_ENVIO'
+
+                        db.session.add(consulta)
+                        db.session.flush()  # Para obter o ID da consulta
+
+                        # Criar registros de telefone (TODOS os telefones encontrados)
+                        for prioridade, numero in enumerate(telefones_list, start=1):
+                            tel_consulta = TelefoneConsulta(
+                                consulta_id=consulta.id,
+                                numero=numero,
+                                prioridade=prioridade
+                            )
+                            db.session.add(tel_consulta)
+
+                        importados += 1
+
+                    except Exception as e:
+                        erros.append(f"Linha {idx + 2}: {str(e)}")
+
+                db.session.commit()
+
+                # Remover arquivo temporário
+                os.remove(filepath)
+
+                if importados > 0:
+                    flash(f'{importados} consultas importadas com sucesso na campanha "{campanha.nome}"!', 'success')
+                    flash('Configure as opções de envio e clique em "Iniciar Envio" quando estiver pronto.', 'info')
+                if erros:
+                    flash(f'{len(erros)} erros encontrados. Verifique o log.', 'warning')
+                    for erro in erros[:5]:  # Mostrar apenas os 5 primeiros erros
+                        flash(erro, 'warning')
+
+                return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
+
+            except Exception as e:
+                flash(f'Erro ao processar planilha: {str(e)}', 'danger')
+                logger.error(f'Erro ao importar consultas: {str(e)}')
+                return redirect(request.url)
+        else:
+            flash('Formato de arquivo inválido. Use .xlsx ou .xls', 'danger')
+            return redirect(request.url)
+
+    return render_template('consultas_importar.html')
+
+
+@app.route('/consultas/listar')
+@login_required
+def consultas_listar():
+    """Listar consultas por status e campanha"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        flash('Você não tem permissão para acessar esta área.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    status = request.args.get('status', 'AGUARDANDO_CONFIRMACAO')
+    campanha_id = request.args.get('campanha_id', type=int)
+    page = request.args.get('page', 1, type=int)
+    per_page = 50
+
+    # Montar query base
+    query = AgendamentoConsulta.query.filter_by(usuario_id=current_user.id)
+
+    # Filtrar por campanha se fornecido
+    if campanha_id:
+        query = query.filter_by(campanha_id=campanha_id)
+
+    # Filtrar por status (se não for 'todos')
+    if status and status != 'todos':
+        query = query.filter_by(status=status)
+
+    consultas = query.order_by(AgendamentoConsulta.created_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False
+    )
+
+    # Buscar nome da campanha se filtrado
+    campanha_nome = None
+    if campanha_id:
+        campanha = CampanhaConsulta.query.get(campanha_id)
+        if campanha:
+            campanha_nome = campanha.nome
+
+    return render_template('consultas_listar.html',
+                         consultas=consultas,
+                         status_atual=status,
+                         campanha_id=campanha_id,
+                         campanha_nome=campanha_nome)
+
+
+@app.route('/consulta/<int:id>/detalhes')
+@login_required
+def consulta_detalhe(id):
+    """Detalhes de uma consulta (padrão igual a fila cirúrgica)"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        flash('Você não tem permissão para acessar esta área.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    consulta = AgendamentoConsulta.query.get_or_404(id)
+
+    if consulta.usuario_id != current_user.id:
+        flash('Você não tem permissão para visualizar esta consulta.', 'danger')
+        return redirect(url_for('consultas_dashboard'))
+
+    # Buscar telefones da consulta
+    telefones = consulta.telefones.order_by(TelefoneConsulta.prioridade).all()
+
+    # Buscar histórico de mensagens
+    logs = LogMsgConsulta.query.filter_by(consulta_id=id).order_by(LogMsgConsulta.data).all()
+
+    return render_template('consulta_detalhe.html',
+                         consulta=consulta,
+                         telefones=telefones,
+                         logs=logs)
+
+
+@app.route('/consultas/<int:id>/comprovante', methods=['POST'])
+@login_required
+def consulta_upload_comprovante(id):
+    """Upload de comprovante de consulta"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    consulta = AgendamentoConsulta.query.get_or_404(id)
+
+    if consulta.usuario_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    if consulta.status != 'AGUARDANDO_COMPROVANTE':
+        return jsonify({'sucesso': False, 'mensagem': 'Consulta não está aguardando comprovante'}), 400
+
+    if 'comprovante' not in request.files:
+        return jsonify({'sucesso': False, 'mensagem': 'Nenhum arquivo enviado'}), 400
+
+    arquivo = request.files['comprovante']
+    if arquivo.filename == '':
+        return jsonify({'sucesso': False, 'mensagem': 'Nenhum arquivo selecionado'}), 400
+
+    if arquivo:
+        try:
+            # Salvar comprovante
+            ext = arquivo.filename.rsplit('.', 1)[1].lower() if '.' in arquivo.filename else 'jpg'
+            filename = f"comprovante_{id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+            arquivo.save(filepath)
+
+            consulta.comprovante_path = filename
+            consulta.status = 'CONFIRMADO'
+            consulta.data_confirmacao = datetime.utcnow()
+            db.session.commit()
+
+            # Enviar mensagem final via WhatsApp
+            sucesso_msg, msg_id = enviar_mensagem_consulta(consulta.id, current_user.id)
+            if sucesso_msg:
+                logger.info(f'Mensagem de confirmação enviada para consulta {consulta.id}')
+            else:
+                logger.warning(f'Não foi possível enviar mensagem de confirmação: {msg_id}')
+
+            return jsonify({'sucesso': True, 'mensagem': 'Comprovante enviado e mensagem de confirmação enviada!'})
+
+        except Exception as e:
+            logger.error(f'Erro ao fazer upload de comprovante: {str(e)}')
+            return jsonify({'sucesso': False, 'mensagem': f'Erro: {str(e)}'}), 500
+
+
+@app.route('/api/consulta/<int:id>/confirmar', methods=['POST'])
+@login_required
+def api_consulta_confirmar(id):
+    """API para confirmar uma consulta manualmente"""
+    consulta = AgendamentoConsulta.query.get_or_404(id)
+
+    if consulta.usuario_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    if consulta.status == 'AGUARDANDO_CONFIRMACAO':
+        consulta.status = 'AGUARDANDO_COMPROVANTE'
+        db.session.commit()
+        return jsonify({'sucesso': True, 'mensagem': 'Consulta confirmada'})
+    else:
+        return jsonify({'sucesso': False, 'mensagem': 'Status inválido'}), 400
+
+
+@app.route('/api/consulta/<int:id>/cancelar', methods=['POST'])
+@login_required
+def api_consulta_cancelar(id):
+    """API para cancelar uma consulta"""
+    consulta = AgendamentoConsulta.query.get_or_404(id)
+
+    if consulta.usuario_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    consulta.status = 'CANCELADO'
+    consulta.data_cancelamento = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({'sucesso': True, 'mensagem': 'Consulta cancelada'})
+
+
+@app.route('/consultas/campanhas')
+@login_required
+def campanhas_consultas():
+    """Lista todas as campanhas de consultas do usuário"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        flash('Você não tem permissão para acessar esta área.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    # Buscar todas as campanhas do usuário
+    campanhas_lista = CampanhaConsulta.query.filter_by(criador_id=current_user.id).order_by(CampanhaConsulta.data_criacao.desc()).all()
+
+    # Calcular estatísticas para cada campanha
+    campanhas_com_stats = []
+    for campanha in campanhas_lista:
+        total = campanha.consultas.count()
+        aguardando_envio = campanha.consultas.filter_by(status='AGUARDANDO_ENVIO').count()
+        enviados = campanha.consultas.filter(AgendamentoConsulta.status != 'AGUARDANDO_ENVIO').count()
+        confirmados = campanha.consultas.filter_by(status='CONFIRMADO').count()
+        cancelados = campanha.consultas.filter_by(status='CANCELADO').count()
+
+        campanhas_com_stats.append({
+            'campanha': campanha,
+            'total': total,
+            'aguardando_envio': aguardando_envio,
+            'enviados': enviados,
+            'confirmados': confirmados,
+            'cancelados': cancelados,
+            'percentual_enviado': (enviados / total * 100) if total > 0 else 0
+        })
+
+    return render_template('campanhas_consultas.html', campanhas=campanhas_com_stats)
+
+
+@app.route('/consultas/campanha/<int:id>')
+@login_required
+def campanha_consultas_detalhe(id):
+    """Detalhes e configuração de uma campanha de consultas"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        flash('Você não tem permissão para acessar esta área.', 'danger')
+        return redirect(url_for('dashboard'))
+
+    campanha = CampanhaConsulta.query.get_or_404(id)
+
+    if campanha.criador_id != current_user.id:
+        flash('Você não tem permissão para visualizar esta campanha.', 'danger')
+        return redirect(url_for('consultas_dashboard'))
+
+    # Atualizar estatísticas
+    campanha.atualizar_stats()
+    db.session.commit()
+
+    # Aplicar filtro se fornecido
+    filtro = request.args.get('filtro', 'todos')
+    query = campanha.consultas
+
+    if filtro and filtro != 'todos':
+        query = query.filter_by(status=filtro)
+
+    # Listar consultas da campanha
+    consultas = query.order_by(AgendamentoConsulta.created_at.desc()).all()
+
+    # Estatísticas da campanha
+    total = campanha.total_consultas
+    aguardando_envio = campanha.consultas.filter_by(status='AGUARDANDO_ENVIO').count()
+    aguardando_confirmacao = campanha.consultas.filter_by(status='AGUARDANDO_CONFIRMACAO').count()
+    aguardando_comprovante = campanha.consultas.filter_by(status='AGUARDANDO_COMPROVANTE').count()
+    enviados = campanha.total_enviados
+    confirmados = campanha.total_confirmados
+    rejeitados = campanha.total_rejeitados
+    cancelados = campanha.total_cancelados
+
+    return render_template('campanha_consultas_detalhe.html',
+                         campanha=campanha,
+                         consultas=consultas,
+                         total=total,
+                         aguardando_envio=aguardando_envio,
+                         aguardando_confirmacao=aguardando_confirmacao,
+                         aguardando_comprovante=aguardando_comprovante,
+                         enviados=enviados,
+                         confirmados=confirmados,
+                         rejeitados=rejeitados,
+                         cancelados=cancelados)
+
+
+@app.route('/consultas/campanha/<int:id>/iniciar', methods=['POST'])
+@login_required
+def campanha_consultas_iniciar(id):
+    """Inicia envio de mensagens da campanha - IGUAL À FILA CIRÚRGICA"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    campanha = CampanhaConsulta.query.get_or_404(id)
+
+    if campanha.criador_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    if campanha.status == 'enviando':
+        return jsonify({'erro': 'Já em andamento'}), 400
+
+    # Verificar se tem consultas pendentes
+    pendentes = campanha.consultas.filter_by(status='AGUARDANDO_ENVIO').count()
+    if pendentes == 0:
+        return jsonify({'erro': 'Nenhuma consulta para enviar'}), 400
+
+    # Verificar WhatsApp conectado
+    ws = WhatsApp(campanha.criador_id)
+    conn, _ = ws.conectado()
+    if not conn:
+        return jsonify({'erro': 'WhatsApp desconectado'}), 400
+
+    # Atualizar configurações se enviadas
+    if request.form.get('meta_diaria'):
+        campanha.meta_diaria = int(request.form.get('meta_diaria', campanha.meta_diaria))
+    if request.form.get('hora_inicio'):
+        campanha.hora_inicio = int(request.form.get('hora_inicio', campanha.hora_inicio))
+    if request.form.get('hora_fim'):
+        campanha.hora_fim = int(request.form.get('hora_fim', campanha.hora_fim))
+
+    # Calcular intervalo automaticamente
+    campanha.tempo_entre_envios = campanha.calcular_intervalo()
+    db.session.commit()
+
+    # Iniciar task Celery (IGUAL À FILA CIRÚRGICA)
+    from tasks import enviar_campanha_consultas_task
+    task = enviar_campanha_consultas_task.delay(id)
+
+    flash(f'Envio iniciado em background! As mensagens serão enviadas automaticamente respeitando a meta diária e horário configurados.', 'success')
+
+    return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
+
+
+@app.route('/consultas/campanha/<int:id>/pausar', methods=['POST'])
+@login_required
+def campanha_consultas_pausar(id):
+    """Pausa o envio da campanha - IGUAL À FILA CIRÚRGICA"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    campanha = CampanhaConsulta.query.get_or_404(id)
+
+    if campanha.criador_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    campanha.status = 'pausado'
+    campanha.status_msg = 'Pausada'
+    db.session.commit()
+
+    flash('Envio pausado com sucesso!', 'success')
+    return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
+
+
+@app.route('/consultas/campanha/<int:id>/continuar', methods=['POST'])
+@login_required
+def campanha_consultas_continuar(id):
+    """Retoma o envio de uma campanha pausada - IGUAL À FILA CIRÚRGICA"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    campanha = CampanhaConsulta.query.get_or_404(id)
+
+    if campanha.criador_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    # Verificar se tem consultas pendentes
+    pendentes = campanha.consultas.filter_by(status='AGUARDANDO_ENVIO').count()
+    if pendentes == 0:
+        flash('Nenhuma consulta pendente', 'warning')
+        return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
+
+    # Iniciar task Celery novamente (IGUAL À FILA CIRÚRGICA)
+    from tasks import enviar_campanha_consultas_task
+    task = enviar_campanha_consultas_task.delay(id)
+
+    flash('Envio retomado com sucesso!', 'success')
+    return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
+
+
+@app.route('/consultas/campanha/<int:id>/atualizar', methods=['POST'])
+@login_required
+def campanha_consultas_atualizar(id):
+    """Atualiza configurações do campanha (meta, horários, intervalo)"""
+    if current_user.tipo_sistema != 'AGENDAMENTO_CONSULTA':
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    campanha = CampanhaConsulta.query.get_or_404(id)
+
+    if campanha.criador_id != current_user.id:
+        return jsonify({'sucesso': False, 'mensagem': 'Sem permissão'}), 403
+
+    # Atualizar configurações
+    campanha.meta_diaria = int(request.form.get('meta_diaria', campanha.meta_diaria))
+    campanha.hora_inicio = int(request.form.get('hora_inicio', campanha.hora_inicio))
+    campanha.hora_fim = int(request.form.get('hora_fim', campanha.hora_fim))
+
+    # Calcular intervalo automaticamente
+    campanha.tempo_entre_envios = campanha.calcular_intervalo()
+
+    db.session.commit()
+
+    flash('Configurações atualizadas com sucesso! Intervalo recalculado automaticamente.', 'success')
+    return redirect(url_for('campanha_consultas_detalhe', id=campanha.id))
 
 
 # =============================================================================

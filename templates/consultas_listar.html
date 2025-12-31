@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+
+{% block title %}Consultas - {{ status_atual }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid mt-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2><i class="bi bi-list-ul"></i> Consultas - {{ status_atual.replace('_', ' ').title() }}</h2>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('consultas_dashboard') }}">Consultas</a></li>
+                    <li class="breadcrumb-item active">Listagem</li>
+                </ol>
+            </nav>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="btn-group btn-group-sm" role="group">
+                <a href="{{ url_for('consultas_listar', status='todos') }}"
+                   class="btn btn-outline-secondary {% if status_atual == 'todos' %}active{% endif %}">
+                    Todos
+                </a>
+                <a href="{{ url_for('consultas_listar', status='CONFIRMADO') }}"
+                   class="btn btn-outline-success {% if status_atual == 'CONFIRMADO' %}active{% endif %}">
+                    Confirmados
+                </a>
+                <a href="{{ url_for('consultas_listar', status='REJEITADO') }}"
+                   class="btn btn-outline-warning {% if status_atual == 'REJEITADO' %}active{% endif %}">
+                    Rejeitados
+                </a>
+                <a href="{{ url_for('consultas_listar', status='AGUARDANDO_CONFIRMACAO') }}"
+                   class="btn btn-outline-info {% if status_atual == 'AGUARDANDO_CONFIRMACAO' %}active{% endif %}">
+                    Aguardando
+                </a>
+                <a href="{{ url_for('consultas_listar', status='AGUARDANDO_ENVIO') }}"
+                   class="btn btn-outline-secondary {% if status_atual == 'AGUARDANDO_ENVIO' %}active{% endif %}">
+                    Pendentes
+                </a>
+                <a href="{{ url_for('consultas_listar', status='CANCELADO') }}"
+                   class="btn btn-outline-danger {% if status_atual == 'CANCELADO' %}active{% endif %}">
+                    Erros
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela de Consultas -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <i class="bi bi-table"></i> Total: {{ consultas.total }} consulta(s)
+                </div>
+                <div class="card-body">
+                    {% if consultas.items %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Paciente</th>
+                                    <th>Tipo</th>
+                                    <th>Especialidade</th>
+                                    <th>Profissional</th>
+                                    <th>Data Consulta</th>
+                                    <th>Telefone</th>
+                                    <th>Status</th>
+                                    <th>Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for consulta in consultas.items %}
+                                <tr>
+                                    <td>{{ consulta.id }}</td>
+                                    <td>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <strong>{{ consulta.paciente }}</strong>
+                                            {% if consulta.tem_interacao_recente() %}
+                                            <span class="badge bg-primary" title="Interação recente (últimas 24h)">
+                                                <i class="bi bi-chat-fill"></i>
+                                            </span>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                    <td><span class="badge bg-secondary">{{ consulta.tipo }}</span></td>
+                                    <td>{{ consulta.especialidade or '-' }}</td>
+                                    <td>{{ consulta.profissional or '-' }}</td>
+                                    <td>{{ consulta.data_aghu or '-' }}</td>
+                                    <td>{{ consulta.get_telefone_principal() or '-' }}</td>
+                                    <td><span class="badge {{ consulta.status_badge() }}">{{ consulta.status_texto() }}</span></td>
+                                    <td>
+                                        <div class="btn-group btn-group-sm" role="group">
+                                            <a href="{{ url_for('consulta_detalhe', id=consulta.id) }}"
+                                               class="btn btn-outline-info" title="Ver detalhes e histórico">
+                                                <i class="bi bi-info-circle"></i>
+                                            </a>
+                                            {% if consulta.status == 'AGUARDANDO_COMPROVANTE' %}
+                                            <button type="button" class="btn btn-outline-success"
+                                                    onclick="abrirModalComprovante({{ consulta.id }})" title="Enviar comprovante">
+                                                <i class="bi bi-file-earmark-arrow-up"></i>
+                                            </button>
+                                            {% endif %}
+                                            {% if consulta.status not in ['CANCELADO', 'CONFIRMADO', 'REJEITADO'] %}
+                                            <button type="button" class="btn btn-outline-danger"
+                                                    onclick="cancelarConsulta({{ consulta.id }})" title="Cancelar">
+                                                <i class="bi bi-x-circle"></i>
+                                            </button>
+                                            {% endif %}
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Paginação -->
+                    {% if consultas.pages > 1 %}
+                    <nav aria-label="Navegação de páginas">
+                        <ul class="pagination justify-content-center">
+                            {% if consultas.has_prev %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('consultas_listar', status=status_atual, page=consultas.prev_num) }}">Anterior</a>
+                            </li>
+                            {% endif %}
+
+                            {% for page_num in consultas.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+                                {% if page_num %}
+                                    <li class="page-item {% if page_num == consultas.page %}active{% endif %}">
+                                        <a class="page-link" href="{{ url_for('consultas_listar', status=status_atual, page=page_num) }}">{{ page_num }}</a>
+                                    </li>
+                                {% else %}
+                                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                                {% endif %}
+                            {% endfor %}
+
+                            {% if consultas.has_next %}
+                            <li class="page-item">
+                                <a class="page-link" href="{{ url_for('consultas_listar', status=status_atual, page=consultas.next_num) }}">Próxima</a>
+                            </li>
+                            {% endif %}
+                        </ul>
+                    </nav>
+                    {% endif %}
+
+                    {% else %}
+                    <div class="alert alert-info mb-0">
+                        <i class="bi bi-info-circle"></i> Nenhuma consulta encontrada com status "{{ status_atual }}".
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Upload Comprovante -->
+<div class="modal fade" id="modalComprovante" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Enviar Comprovante</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="formComprovante" enctype="multipart/form-data">
+                    <input type="hidden" id="consulta_id" name="consulta_id">
+                    <div class="mb-3">
+                        <label for="comprovante" class="form-label">Arquivo do Comprovante (PDF/JPG)</label>
+                        <input type="file" class="form-control" id="comprovante" name="comprovante"
+                               accept=".pdf,.jpg,.jpeg,.png" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-success" onclick="enviarComprovante()">
+                    <i class="bi bi-upload"></i> Enviar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let modalComprovante;
+
+document.addEventListener('DOMContentLoaded', function() {
+    modalComprovante = new bootstrap.Modal(document.getElementById('modalComprovante'));
+});
+
+function abrirModalComprovante(consultaId) {
+    document.getElementById('consulta_id').value = consultaId;
+    document.getElementById('formComprovante').reset();
+    modalComprovante.show();
+}
+
+function enviarComprovante() {
+    const consultaId = document.getElementById('consulta_id').value;
+    const formData = new FormData(document.getElementById('formComprovante'));
+
+    fetch(`/consultas/${consultaId}/comprovante`, {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.sucesso) {
+            alert(data.mensagem);
+            modalComprovante.hide();
+            location.reload();
+        } else {
+            alert('Erro: ' + data.mensagem);
+        }
+    })
+    .catch(error => {
+        alert('Erro ao enviar comprovante: ' + error);
+    });
+}
+
+function cancelarConsulta(consultaId) {
+    if (confirm('Tem certeza que deseja cancelar esta consulta?')) {
+        fetch(`/api/consulta/${consultaId}/cancelar`, {
+            method: 'POST'
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.sucesso) {
+                alert(data.mensagem);
+                location.reload();
+            } else {
+                alert('Erro: ' + data.mensagem);
+            }
+        })
+        .catch(error => {
+            alert('Erro ao cancelar consulta: ' + error);
+        });
+    }
+}
+</script>
+{% endblock %}

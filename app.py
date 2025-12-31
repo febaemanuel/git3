@@ -4745,98 +4745,12 @@ def webhook():
             return jsonify({'status': 'ok'}), 200
 
         texto_up = texto.upper()
-        
-        # Buscar Telefone e Contato
-        # Prioriza contatos NAO concluidos, depois os mais recentes
-        # Tenta encontrar o telefone exato ou variacoes
-        telefones = Telefone.query.filter_by(numero_fmt=numero).all()
-        
-        if not telefones:
-            # Tenta variacao 9o digito
-            if len(numero) == 12:
-                num9 = numero[:4] + '9' + numero[4:]
-                telefones = Telefone.query.filter_by(numero_fmt=num9).all()
-            elif len(numero) == 13:
-                num_sem9 = numero[:4] + numero[5:]
-                telefones = Telefone.query.filter_by(numero_fmt=num_sem9).all()
-        
-        if not telefones:
-            logger.warning(f"Webhook: Telefone nao encontrado para {numero}")
-            return jsonify({'status': 'ok'}), 200
-        
-        # Priorizar o contato mais apropriado para responder
-        # PRIORIDADE:
-        # 0. FILTRAR apenas campanhas do usuário dono da instância (CRÍTICO para multi-usuário)
-        # 1. Se a mensagem NÃO é uma resposta válida (1, 2, 3), priorizar campanha concluída recentemente
-        # 2. Contatos em fluxo ativo (enviado, aguardando_nascimento) da campanha mais recente
-        # 3. Contatos com data_envio mais recente (último a receber mensagem)
-        # 4. Contatos com data_resposta mais recente (última interação)
-        # 5. Contato mais recente por ID
-        c = None
-
-        # CRÍTICO: Filtrar apenas contatos de campanhas do usuário correto
-        # Isso evita processar respostas no contexto de outro usuário quando
-        # dois usuários diferentes contactam o mesmo paciente
-        contatos_validos = [
-            t.contato for t in telefones
-            if t.contato and t.contato.campanha and t.contato.campanha.criador_id == usuario_id
-        ]
-
-        if contatos_validos:
-            # Buscar campanhas concluídas e em fluxo ativo
-            contatos_concluidos = [ct for ct in contatos_validos if ct.status == 'concluido' and ct.data_resposta]
-            contatos_em_fluxo = [ct for ct in contatos_validos if ct.status in ['enviado', 'aguardando_nascimento', 'pronto_envio']]
-
-            # LÓGICA DE PRIORIZAÇÃO:
-            # 1. Se há campanha concluída E campanha em fluxo ativo, comparar datas
-            # 2. Prioriza a interação mais recente (data_resposta vs data_envio)
-            # 3. Se só há uma ou outra, usa a disponível
-
-            if contatos_concluidos and contatos_em_fluxo:
-                # Pegar mais recente de cada tipo
-                concluido_recente = max(contatos_concluidos, key=lambda ct: (ct.data_resposta, ct.id))
-
-                def get_ultima_data_envio(contato):
-                    datas = [t.data_envio for t in contato.telefones if t.data_envio]
-                    return max(datas) if datas else datetime.min
-
-                fluxo_recente = max(contatos_em_fluxo, key=lambda ct: (get_ultima_data_envio(ct), ct.id))
-
-                # Comparar: se campanha concluída é mais recente, usar ela
-                # Isso garante que "1" após conclusão responde "já confirmou"
-                if concluido_recente.data_resposta > get_ultima_data_envio(fluxo_recente):
-                    c = concluido_recente
-                else:
-                    c = fluxo_recente
-            elif contatos_concluidos:
-                # Só tem concluídas
-                c = max(contatos_concluidos, key=lambda ct: (ct.data_resposta, ct.id))
-            elif contatos_em_fluxo:
-                # Só tem fluxo ativo
-                def get_ultima_data_envio(contato):
-                    datas = [t.data_envio for t in contato.telefones if t.data_envio]
-                    return max(datas) if datas else datetime.min
-
-                c = max(contatos_em_fluxo, key=lambda ct: (get_ultima_data_envio(ct), ct.id))
-            else:
-                # Nenhuma concluída nem em fluxo, pegar qualquer uma por data_resposta
-                c = max(contatos_validos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
-
-        if not c:
-            # Verificar se existem contatos de outros usuários (para debug)
-            todos_contatos = [t.contato for t in telefones if t.contato]
-            if todos_contatos:
-                outros_usuarios = set(ct.campanha.criador_id for ct in todos_contatos if ct.campanha)
-                logger.warning(f"Webhook: Telefone {numero} não tem campanhas do usuário {usuario_id}. "
-                             f"Campanhas existem para usuários: {outros_usuarios}")
-            else:
-                logger.warning(f"Webhook: Telefone {numero} não encontrado em nenhuma campanha")
-            return jsonify({'status': 'ok'}), 200
 
         # =====================================================================
-        # MODO CONSULTA - Processar respostas de agendamento de consultas
+        # MODO CONSULTA - Processar PRIMEIRO (tem prioridade)
         # =====================================================================
-        # Verificar se é uma resposta de consulta (antes de processar fila cirúrgica)
+        # Verificar se é uma resposta de consulta ANTES de processar fila cirúrgica
+        # Isso garante que ambos os sistemas (Consultas e Fila) funcionem independentemente
         # Busca por telefone do usuário correto (mesmo filtro de instância)
         # IMPORTANTE: Tentar variações do número (com/sem 9º dígito)
         consulta_telefone = TelefoneConsulta.query.filter_by(numero=numero).first()
@@ -4969,7 +4883,98 @@ _Hospital Universitário Walter Cantídio_""")
                     return jsonify({'status': 'ok'}), 200
 
         # =====================================================================
-        # FILA CIRÚRGICA - Processar respostas (código original)
+        # FILA CIRÚRGICA - Processar apenas se NÃO for consulta
+        # =====================================================================
+
+        # Buscar Telefone e Contato
+        # Prioriza contatos NAO concluidos, depois os mais recentes
+        # Tenta encontrar o telefone exato ou variacoes
+        telefones = Telefone.query.filter_by(numero_fmt=numero).all()
+        
+        if not telefones:
+            # Tenta variacao 9o digito
+            if len(numero) == 12:
+                num9 = numero[:4] + '9' + numero[4:]
+                telefones = Telefone.query.filter_by(numero_fmt=num9).all()
+            elif len(numero) == 13:
+                num_sem9 = numero[:4] + numero[5:]
+                telefones = Telefone.query.filter_by(numero_fmt=num_sem9).all()
+        
+        if not telefones:
+            logger.warning(f"Webhook: Telefone nao encontrado para {numero}")
+            return jsonify({'status': 'ok'}), 200
+        
+        # Priorizar o contato mais apropriado para responder
+        # PRIORIDADE:
+        # 0. FILTRAR apenas campanhas do usuário dono da instância (CRÍTICO para multi-usuário)
+        # 1. Se a mensagem NÃO é uma resposta válida (1, 2, 3), priorizar campanha concluída recentemente
+        # 2. Contatos em fluxo ativo (enviado, aguardando_nascimento) da campanha mais recente
+        # 3. Contatos com data_envio mais recente (último a receber mensagem)
+        # 4. Contatos com data_resposta mais recente (última interação)
+        # 5. Contato mais recente por ID
+        c = None
+
+        # CRÍTICO: Filtrar apenas contatos de campanhas do usuário correto
+        # Isso evita processar respostas no contexto de outro usuário quando
+        # dois usuários diferentes contactam o mesmo paciente
+        contatos_validos = [
+            t.contato for t in telefones
+            if t.contato and t.contato.campanha and t.contato.campanha.criador_id == usuario_id
+        ]
+
+        if contatos_validos:
+            # Buscar campanhas concluídas e em fluxo ativo
+            contatos_concluidos = [ct for ct in contatos_validos if ct.status == 'concluido' and ct.data_resposta]
+            contatos_em_fluxo = [ct for ct in contatos_validos if ct.status in ['enviado', 'aguardando_nascimento', 'pronto_envio']]
+
+            # LÓGICA DE PRIORIZAÇÃO:
+            # 1. Se há campanha concluída E campanha em fluxo ativo, comparar datas
+            # 2. Prioriza a interação mais recente (data_resposta vs data_envio)
+            # 3. Se só há uma ou outra, usa a disponível
+
+            if contatos_concluidos and contatos_em_fluxo:
+                # Pegar mais recente de cada tipo
+                concluido_recente = max(contatos_concluidos, key=lambda ct: (ct.data_resposta, ct.id))
+
+                def get_ultima_data_envio(contato):
+                    datas = [t.data_envio for t in contato.telefones if t.data_envio]
+                    return max(datas) if datas else datetime.min
+
+                fluxo_recente = max(contatos_em_fluxo, key=lambda ct: (get_ultima_data_envio(ct), ct.id))
+
+                # Comparar: se campanha concluída é mais recente, usar ela
+                # Isso garante que "1" após conclusão responde "já confirmou"
+                if concluido_recente.data_resposta > get_ultima_data_envio(fluxo_recente):
+                    c = concluido_recente
+                else:
+                    c = fluxo_recente
+            elif contatos_concluidos:
+                # Só tem concluídas
+                c = max(contatos_concluidos, key=lambda ct: (ct.data_resposta, ct.id))
+            elif contatos_em_fluxo:
+                # Só tem fluxo ativo
+                def get_ultima_data_envio(contato):
+                    datas = [t.data_envio for t in contato.telefones if t.data_envio]
+                    return max(datas) if datas else datetime.min
+
+                c = max(contatos_em_fluxo, key=lambda ct: (get_ultima_data_envio(ct), ct.id))
+            else:
+                # Nenhuma concluída nem em fluxo, pegar qualquer uma por data_resposta
+                c = max(contatos_validos, key=lambda ct: (ct.data_resposta or datetime.min, ct.id))
+
+        if not c:
+            # Verificar se existem contatos de outros usuários (para debug)
+            todos_contatos = [t.contato for t in telefones if t.contato]
+            if todos_contatos:
+                outros_usuarios = set(ct.campanha.criador_id for ct in todos_contatos if ct.campanha)
+                logger.warning(f"Webhook: Telefone {numero} não tem campanhas do usuário {usuario_id}. "
+                             f"Campanhas existem para usuários: {outros_usuarios}")
+            else:
+                logger.warning(f"Webhook: Telefone {numero} não encontrado em nenhuma campanha")
+            return jsonify({'status': 'ok'}), 200
+
+        # =====================================================================
+        # FILA CIRÚRGICA - Processar respostas (código original continua abaixo)
         # =====================================================================
 
         logger.info(f"Webhook: [{instance_name}] Mensagem de {c.nome} ({numero}). "

@@ -4806,6 +4806,21 @@ def webhook():
                 logger.info(f"Webhook Consulta: [{instance_name}] Mensagem de {consulta.paciente} ({numero} → {consulta_telefone.numero}). "
                            f"Campanha: {consulta.campanha_id}. Status: {consulta.status}. Texto: {texto}")
 
+                # PROTEÇÃO CONTRA DUPLICAÇÃO (múltiplos workers do Gunicorn)
+                # Verificar se já processamos esta mensagem nos últimos 5 segundos
+                from datetime import timedelta
+                cinco_segundos_atras = datetime.utcnow() - timedelta(seconds=5)
+                log_recente = LogMsgConsulta.query.filter(
+                    LogMsgConsulta.consulta_id == consulta.id,
+                    LogMsgConsulta.direcao == 'recebida',
+                    LogMsgConsulta.mensagem == texto[:500],
+                    LogMsgConsulta.data >= cinco_segundos_atras
+                ).first()
+
+                if log_recente:
+                    logger.info(f"Mensagem duplicada detectada (já processada há {(datetime.utcnow() - log_recente.data).total_seconds():.1f}s). Ignorando.")
+                    return jsonify({'status': 'ok'}), 200
+
                 ws = WhatsApp(consulta.campanha.criador_id)
 
                 # IMPORTANTE: Usar o número cadastrado na consulta para garantir que respondemos no formato correto
@@ -5012,6 +5027,21 @@ _Hospital Universitário Walter Cantídio_""")
 
         logger.info(f"Webhook: [{instance_name}] Mensagem de {c.nome} ({numero}). "
                    f"Campanha: {c.campanha_id} (User {usuario_id}). Status: {c.status}. Texto: {texto}")
+
+        # PROTEÇÃO CONTRA DUPLICAÇÃO (múltiplos workers do Gunicorn)
+        # Verificar se já processamos esta mensagem nos últimos 5 segundos
+        from datetime import timedelta
+        cinco_segundos_atras = datetime.utcnow() - timedelta(seconds=5)
+        log_recente = LogMsg.query.filter(
+            LogMsg.contato_id == c.id,
+            LogMsg.direcao == 'recebida',
+            LogMsg.mensagem == texto[:500],
+            LogMsg.data >= cinco_segundos_atras
+        ).first()
+
+        if log_recente:
+            logger.info(f"Mensagem duplicada detectada (já processada há {(datetime.utcnow() - log_recente.data).total_seconds():.1f}s). Ignorando.")
+            return jsonify({'status': 'ok'}), 200
 
         # Análise de sentimento
         analise = AnaliseSentimento.analisar(texto)

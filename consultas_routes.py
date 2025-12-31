@@ -29,7 +29,7 @@ def init_consultas_routes(app, db):
     # Importar modelos e funções (evita circular import)
     from app import (
         CampanhaConsulta, AgendamentoConsulta, TelefoneConsulta,
-        LogMsgConsulta, WhatsApp,
+        LogMsgConsulta, WhatsApp, formatar_numero,
         formatar_mensagem_comprovante, formatar_mensagem_voltar_posto
     )
 
@@ -178,22 +178,26 @@ def init_consultas_routes(app, db):
                         db.session.add(consulta)
                         db.session.flush()  # Para obter ID da consulta
 
-                        # Criar telefones
+                        # Criar telefones (com formatação)
                         if consulta.telefone_cadastro:
-                            tel1 = TelefoneConsulta(
-                                consulta_id=consulta.id,
-                                numero=consulta.telefone_cadastro,
-                                prioridade=1
-                            )
-                            db.session.add(tel1)
+                            numero_formatado = formatar_numero(consulta.telefone_cadastro)
+                            if numero_formatado:
+                                tel1 = TelefoneConsulta(
+                                    consulta_id=consulta.id,
+                                    numero=numero_formatado,
+                                    prioridade=1
+                                )
+                                db.session.add(tel1)
 
                         if consulta.telefone_registro and consulta.telefone_registro != consulta.telefone_cadastro:
-                            tel2 = TelefoneConsulta(
-                                consulta_id=consulta.id,
-                                numero=consulta.telefone_registro,
-                                prioridade=2
-                            )
-                            db.session.add(tel2)
+                            numero_formatado = formatar_numero(consulta.telefone_registro)
+                            if numero_formatado:
+                                tel2 = TelefoneConsulta(
+                                    consulta_id=consulta.id,
+                                    numero=numero_formatado,
+                                    prioridade=2
+                                )
+                                db.session.add(tel2)
 
                         consultas_criadas += 1
 

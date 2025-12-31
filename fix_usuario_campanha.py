@@ -30,7 +30,7 @@ with app.app_context():
         usuario = Usuario.query.get(c.usuario_id)
         print(f"   - Usuário {c.usuario_id} ({usuario.email if usuario else 'N/A'})")
         print(f"     Instance: {c.instance_name}")
-        print(f"     API URL: {c.api_url}")
+        print(f"     Conectado: {'SIM' if c.conectado else 'NÃO'}")
     print()
 
     # 3. Verificar campanhas de consulta

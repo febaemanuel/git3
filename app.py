@@ -2018,6 +2018,11 @@ def get_dashboard_route():
         return 'dashboard'
     return 'login'
 
+@app.context_processor
+def inject_dashboard_route():
+    """Disponibiliza get_dashboard_route nos templates"""
+    return dict(get_dashboard_route=get_dashboard_route)
+
 def formatar_numero(num):
     if not num:
         return None

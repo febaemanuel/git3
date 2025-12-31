@@ -984,12 +984,17 @@ def formatar_mensagem_consulta_inicial(consulta):
     Status: AGUARDANDO_ENVIO → AGUARDANDO_CONFIRMACAO
     """
     return f"""Bom dia!
+
 Falamos do HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO.
-Estamos informando que a CONSULTA do paciente {consulta.paciente}, foi MARCADA para o dia {consulta.data_aghu}, com {consulta.medico_solicitante}, com especialidade em {consulta.especialidade}.
+Estamos informando que a CONSULTA do paciente {consulta.paciente}, foi MARCADA para o dia {consulta.data_aghu} 00:00:00, com {consulta.medico_solicitante}, com especialidade em {consulta.especialidade}.
 
 Caso não haja confirmação em até 1 dia útil, sua consulta será cancelada!
 
-Posso confirmar o agendamento?"""
+Posso confirmar o agendamento?
+
+1️⃣ *SIM* - Tenho interesse
+2️⃣ *NÃO* - Não tenho mais interesse
+3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
 
 
 def formatar_mensagem_comprovante():
@@ -4858,10 +4863,11 @@ def webhook():
 
                 # ESTADO 1: AGUARDANDO_CONFIRMACAO (resposta à MSG 1)
                 if consulta.status == 'AGUARDANDO_CONFIRMACAO':
-                    # Verificar se é SIM ou NÃO
+                    # Verificar se é SIM, NÃO ou DESCONHEÇO
                     if verificar_resposta_em_lista(texto_up, RESPOSTAS_SIM):
                         # Paciente confirmou! → AGUARDANDO_COMPROVANTE
                         consulta.status = 'AGUARDANDO_COMPROVANTE'
+                        consulta.data_confirmacao = datetime.utcnow()
                         db.session.commit()
 
                         consulta.campanha.atualizar_stats()
@@ -4879,9 +4885,32 @@ def webhook():
                         ws.enviar(numero, msg_perguntar_motivo)
                         logger.info(f"Consulta {consulta.id} rejeitada por {consulta.paciente}, aguardando motivo")
 
+                    elif verificar_resposta_em_lista(texto_up, RESPOSTAS_DESCONHECO):
+                        # Paciente não conhece → REJEITADO imediatamente
+                        consulta.status = 'REJEITADO'
+                        consulta.motivo_rejeicao = 'Paciente não reconhece o agendamento (opção 3 - DESCONHEÇO)'
+                        consulta.data_rejeicao = datetime.utcnow()
+                        db.session.commit()
+
+                        consulta.campanha.atualizar_stats()
+                        db.session.commit()
+
+                        ws.enviar(numero, """✅ *Obrigado pela informação!*
+
+Vamos atualizar nossos registros e remover seu contato da nossa lista.
+
+Desculpe pelo transtorno.
+
+_Hospital Universitário Walter Cantídio_""")
+                        logger.info(f"Consulta {consulta.id} rejeitada - paciente não reconhece")
+
                     else:
                         # Resposta não reconhecida
-                        ws.enviar(numero, "Por favor, responda com SIM ou NÃO.")
+                        ws.enviar(numero, """Por favor, responda com uma das opções:
+
+1️⃣ *SIM* - Tenho interesse
+2️⃣ *NÃO* - Não tenho mais interesse
+3️⃣ *DESCONHEÇO* - Não sou essa pessoa""")
 
                     return jsonify({'status': 'ok'}), 200
 

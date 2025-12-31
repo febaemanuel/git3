@@ -1156,8 +1156,8 @@ def enviar_campanha_consultas_task(self, campanha_id):
                 consulta.data_envio_mensagem = datetime.utcnow()
                 enviados += 1
 
-                # Atualizar contadores da campanha
-                camp.enviados_hoje += 1
+                # Registrar envio na campanha (incrementa contadores)
+                camp.registrar_envio()
                 camp.total_enviados += 1
             else:
                 erros += 1

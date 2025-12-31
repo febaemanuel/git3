@@ -746,6 +746,7 @@ class CampanhaConsulta(db.Model):
     nome = db.Column(db.String(200), nullable=False)
     descricao = db.Column(db.Text)
     status = db.Column(db.String(50), default='pendente')  # pendente, enviando, pausado, concluido, erro
+    status_msg = db.Column(db.String(255))
 
     # Configurações de envio (mesmas da fila cirúrgica)
     meta_diaria = db.Column(db.Integer, default=50)
@@ -835,6 +836,47 @@ class CampanhaConsulta(db.Model):
         self.total_confirmados = AgendamentoConsulta.query.filter_by(campanha_id=self.id, status='CONFIRMADO').count()
         self.total_aguardando_comprovante = AgendamentoConsulta.query.filter_by(campanha_id=self.id, status='AGUARDANDO_COMPROVANTE').count()
         self.total_rejeitados = AgendamentoConsulta.query.filter_by(campanha_id=self.id, status='REJEITADO').count()
+
+    def atingiu_duracao(self):
+        """Verifica se atingiu o número de dias definido"""
+        if self.dias_duracao == 0:
+            return False  # Até acabar
+
+        if not self.data_inicio:
+            return False
+
+        dias_decorridos = (datetime.now() - self.data_inicio).days
+        return dias_decorridos >= self.dias_duracao
+
+    def registrar_envio(self):
+        """Registra que um envio foi realizado hoje"""
+        hoje = date.today()
+        if self.data_ultimo_envio != hoje:
+            self.enviados_hoje = 1
+            self.data_ultimo_envio = hoje
+        else:
+            self.enviados_hoje += 1
+        db.session.commit()
+
+    def pct_envio(self):
+        """Percentual de consultas enviadas"""
+        return round((self.total_enviados / self.total_consultas * 100), 1) if self.total_consultas else 0
+
+    def pct_confirmacao(self):
+        """Percentual de consultas confirmadas"""
+        return round((self.total_confirmados / self.total_enviados * 100), 1) if self.total_enviados else 0
+
+    def percentual_conclusao(self):
+        """Percentual de conclusão total"""
+        return round((self.total_enviados / self.total_consultas * 100), 1) if self.total_consultas else 0
+
+    def pendentes_enviar(self):
+        """Consultas pendentes de envio"""
+        return AgendamentoConsulta.query.filter_by(campanha_id=self.id, status='AGUARDANDO_ENVIO').count()
+
+    # Aliases para compatibilidade com templates
+    percentual_envio = pct_envio
+    percentual_confirmacao = pct_confirmacao
 
 
 class AgendamentoConsulta(db.Model):

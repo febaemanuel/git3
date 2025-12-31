@@ -4753,18 +4753,51 @@ def webhook():
         # Isso garante que ambos os sistemas (Consultas e Fila) funcionem independentemente
         # Busca por telefone do usuário correto (mesmo filtro de instância)
         # IMPORTANTE: Tentar variações do número (com/sem 9º dígito)
-        consulta_telefone = TelefoneConsulta.query.filter_by(numero=numero).first()
+        consulta_telefones = TelefoneConsulta.query.filter_by(numero=numero).all()
 
-        if not consulta_telefone:
+        if not consulta_telefones:
             # Tenta variação 9º dígito (mesmo código usado para fila cirúrgica)
             if len(numero) == 12:
                 # Número sem 9, tentar com 9
                 num9 = numero[:4] + '9' + numero[4:]
-                consulta_telefone = TelefoneConsulta.query.filter_by(numero=num9).first()
+                consulta_telefones = TelefoneConsulta.query.filter_by(numero=num9).all()
             elif len(numero) == 13:
                 # Número com 9, tentar sem 9
                 num_sem9 = numero[:4] + numero[5:]
-                consulta_telefone = TelefoneConsulta.query.filter_by(numero=num_sem9).first()
+                consulta_telefones = TelefoneConsulta.query.filter_by(numero=num_sem9).all()
+
+        # Priorizar consulta mais apropriada quando há múltiplas consultas do mesmo telefone
+        # PRIORIDADE:
+        # 1. Consultas do usuário correto (filtro de instância)
+        # 2. Consultas em fluxo ativo (AGUARDANDO_CONFIRMACAO, AGUARDANDO_MOTIVO_REJEICAO)
+        # 3. Consultas da campanha mais recente (maior ID de campanha)
+        # 4. Consultas mais recentes (maior ID de consulta)
+        consulta_telefone = None
+        if consulta_telefones:
+            # Filtrar apenas consultas do usuário correto
+            consultas_validas = [
+                tel for tel in consulta_telefones
+                if tel.consulta and tel.consulta.campanha and tel.consulta.campanha.criador_id == usuario_id
+            ]
+
+            if consultas_validas:
+                # Separar por status
+                em_fluxo = [
+                    tel for tel in consultas_validas
+                    if tel.consulta.status in ['AGUARDANDO_CONFIRMACAO', 'AGUARDANDO_MOTIVO_REJEICAO']
+                ]
+                outras = [
+                    tel for tel in consultas_validas
+                    if tel.consulta.status not in ['AGUARDANDO_CONFIRMACAO', 'AGUARDANDO_MOTIVO_REJEICAO']
+                ]
+
+                # Priorizar consultas em fluxo ativo, depois as mais recentes
+                if em_fluxo:
+                    # Pegar a mais recente em fluxo (maior ID de campanha, depois maior ID de consulta)
+                    consulta_telefone = max(em_fluxo, key=lambda t: (t.consulta.campanha_id, t.consulta.id))
+                elif outras:
+                    # Pegar a mais recente das outras (maior ID de campanha, depois maior ID de consulta)
+                    consulta_telefone = max(outras, key=lambda t: (t.consulta.campanha_id, t.consulta.id))
 
         if consulta_telefone:
             consulta = consulta_telefone.consulta

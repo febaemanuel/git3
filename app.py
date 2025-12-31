@@ -6582,7 +6582,7 @@ def api_enviar_proximas_consultas(id):
                 time.sleep(campanha.tempo_entre_envios)
             else:
                 erros += 1
-                erro_msg = f'{consulta.nome_paciente}: {msg_id}'
+                erro_msg = f'{consulta.paciente}: {msg_id}'
                 erros_detalhes.append(erro_msg)
                 logger.error(f'Erro ao enviar consulta {consulta.id}: {msg_id}')
 

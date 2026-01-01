@@ -4747,6 +4747,286 @@ def webhook():
         texto_up = texto.upper()
 
         # =====================================================================
+        # PROTEÇÃO GLOBAL: Evitar duplicação quando mesmo telefone está em múltiplos usuários
+        # =====================================================================
+        # Buscar TODAS as variações do número
+        numeros_buscar = [numero]
+        if len(numero) == 12:
+            numeros_buscar.append(numero[:4] + '9' + numero[4:])  # Com 9º dígito
+        elif len(numero) == 13:
+            numeros_buscar.append(numero[:4] + numero[5:])  # Sem 9º dígito
+
+        # Verificar se esta mensagem já foi processada por OUTRO webhook (outro usuário)
+        from datetime import timedelta
+        cinco_segundos_atras = datetime.utcnow() - timedelta(seconds=5)
+
+        # Buscar log global por telefone (qualquer consulta)
+        log_global_consulta = LogMsgConsulta.query.filter(
+            LogMsgConsulta.telefone.in_(numeros_buscar),
+            LogMsgConsulta.direcao == 'recebida',
+            LogMsgConsulta.mensagem == texto[:500],
+            LogMsgConsulta.data >= cinco_segundos_atras
+        ).first()
+
+        if log_global_consulta:
+            logger.debug(f"Webhook: Mensagem já processada por outro webhook de consulta. Ignorando.")
+            return jsonify({'status': 'ok'}), 200
+
+        # Buscar log global por telefone (qualquer cirurgia/fila)
+        log_global_fila = LogMsg.query.filter(
+            LogMsg.telefone.in_(numeros_buscar),
+            LogMsg.direcao == 'recebida',
+            LogMsg.mensagem == texto[:500],
+            LogMsg.data >= cinco_segundos_atras
+        ).first()
+
+        if log_global_fila:
+            logger.debug(f"Webhook: Mensagem já processada por outro webhook de fila. Ignorando.")
+            return jsonify({'status': 'ok'}), 200
+
+        # =====================================================================
+        # DETECÇÃO DE MÚLTIPLAS PENDÊNCIAS (Consultas + Cirurgias)
+        # =====================================================================
+        # Se é resposta de confirmação (1, SIM, etc), verificar se tem múltiplas pendências
+        resposta_confirmacao = verificar_resposta_em_lista(texto_up, RESPOSTAS_SIM)
+        resposta_rejeicao = verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO)
+
+        if resposta_confirmacao or resposta_rejeicao:
+            # Buscar TODAS as consultas pendentes deste telefone (de QUALQUER usuário)
+            consultas_pendentes = []
+            for num in numeros_buscar:
+                tels = TelefoneConsulta.query.filter_by(numero=num).all()
+                for tel in tels:
+                    if tel.consulta and tel.consulta.status == 'AGUARDANDO_CONFIRMACAO':
+                        consultas_pendentes.append(tel.consulta)
+
+            # Buscar TODAS as cirurgias pendentes deste telefone (de QUALQUER usuário)
+            cirurgias_pendentes = []
+            for num in numeros_buscar:
+                tels_fila = Telefone.query.filter_by(numero_fmt=num).all()
+                for tel in tels_fila:
+                    if tel.contato and tel.contato.status in ['enviado', 'pronto_envio']:
+                        cirurgias_pendentes.append(tel.contato)
+
+            # Remover duplicados (mesmo ID)
+            consultas_pendentes = list({c.id: c for c in consultas_pendentes}.values())
+            cirurgias_pendentes = list({c.id: c for c in cirurgias_pendentes}.values())
+
+            total_pendencias = len(consultas_pendentes) + len(cirurgias_pendentes)
+
+            # Se tem múltiplas pendências E a resposta é de confirmação/rejeição
+            if total_pendencias > 1:
+                # Verificar se já enviamos menu nos últimos 2 minutos
+                dois_minutos_atras = datetime.utcnow() - timedelta(minutes=2)
+                menu_enviado = LogMsgConsulta.query.filter(
+                    LogMsgConsulta.telefone.in_(numeros_buscar),
+                    LogMsgConsulta.direcao == 'enviada',
+                    LogMsgConsulta.mensagem.like('%Qual agendamento%'),
+                    LogMsgConsulta.data >= dois_minutos_atras
+                ).first()
+
+                if not menu_enviado:
+                    # Também verificar na tabela de logs da fila
+                    menu_enviado = LogMsg.query.filter(
+                        LogMsg.telefone.in_(numeros_buscar),
+                        LogMsg.direcao == 'enviada',
+                        LogMsg.mensagem.like('%Qual agendamento%'),
+                        LogMsg.data >= dois_minutos_atras
+                    ).first()
+
+                if not menu_enviado:
+                    # Enviar menu de escolha
+                    ws = WhatsApp(usuario_id)
+
+                    menu_texto = "📋 *Você tem múltiplos agendamentos pendentes:*\n\n"
+                    opcao = 1
+
+                    # Ordenar por data (mais próxima primeiro)
+                    for consulta in sorted(consultas_pendentes, key=lambda c: c.data_aghu or ''):
+                        data_str = consulta.data_aghu or 'Data não informada'
+                        menu_texto += f"{opcao}️⃣ *CONSULTA* - {consulta.especialidade or 'Especialidade'}\n"
+                        menu_texto += f"   📅 {data_str}\n"
+                        menu_texto += f"   👨‍⚕️ {consulta.grade_aghu or 'Médico não informado'}\n\n"
+                        opcao += 1
+
+                    for cirurgia in cirurgias_pendentes:
+                        menu_texto += f"{opcao}️⃣ *CIRURGIA* - {cirurgia.especialidade or 'Especialidade'}\n"
+                        menu_texto += f"   📅 Fila cirúrgica\n\n"
+                        opcao += 1
+
+                    menu_texto += f"*Qual agendamento deseja {'confirmar' if resposta_confirmacao else 'recusar'}?*\n"
+                    menu_texto += f"Responda com o número (1 a {total_pendencias}) ou *TODOS* para confirmar todos."
+
+                    ws.enviar(numero, menu_texto)
+
+                    # Registrar que enviamos o menu (para não enviar de novo)
+                    if consultas_pendentes:
+                        log = LogMsgConsulta(
+                            campanha_id=consultas_pendentes[0].campanha_id,
+                            consulta_id=consultas_pendentes[0].id,
+                            direcao='enviada',
+                            telefone=numero,
+                            mensagem=menu_texto[:500]
+                        )
+                        db.session.add(log)
+                    elif cirurgias_pendentes:
+                        log = LogMsg(
+                            campanha_id=cirurgias_pendentes[0].campanha_id,
+                            contato_id=cirurgias_pendentes[0].id,
+                            direcao='enviada',
+                            telefone=numero,
+                            mensagem=menu_texto[:500],
+                            status='ok'
+                        )
+                        db.session.add(log)
+
+                    db.session.commit()
+                    logger.info(f"Menu de múltiplas pendências enviado para {numero} ({total_pendencias} pendências)")
+                    return jsonify({'status': 'ok'}), 200
+
+        # =====================================================================
+        # PROCESSAR RESPOSTA DO MENU DE MÚLTIPLAS PENDÊNCIAS
+        # =====================================================================
+        # Verificar se paciente recebeu menu recentemente e está respondendo
+        dois_minutos_atras = datetime.utcnow() - timedelta(minutes=2)
+
+        # Verificar se existe menu enviado recentemente
+        menu_recente_consulta = LogMsgConsulta.query.filter(
+            LogMsgConsulta.telefone.in_(numeros_buscar),
+            LogMsgConsulta.direcao == 'enviada',
+            LogMsgConsulta.mensagem.like('%Qual agendamento%'),
+            LogMsgConsulta.data >= dois_minutos_atras
+        ).first()
+
+        menu_recente_fila = None
+        if not menu_recente_consulta:
+            menu_recente_fila = LogMsg.query.filter(
+                LogMsg.telefone.in_(numeros_buscar),
+                LogMsg.direcao == 'enviada',
+                LogMsg.mensagem.like('%Qual agendamento%'),
+                LogMsg.data >= dois_minutos_atras
+            ).first()
+
+        if menu_recente_consulta or menu_recente_fila:
+            # Paciente está respondendo ao menu - processar escolha
+            escolha = texto_up.strip()
+
+            # Buscar novamente as pendências (podem ter mudado)
+            consultas_pendentes = []
+            for num in numeros_buscar:
+                tels = TelefoneConsulta.query.filter_by(numero=num).all()
+                for tel in tels:
+                    if tel.consulta and tel.consulta.status == 'AGUARDANDO_CONFIRMACAO':
+                        consultas_pendentes.append((tel.consulta, tel.numero))
+
+            cirurgias_pendentes = []
+            for num in numeros_buscar:
+                tels_fila = Telefone.query.filter_by(numero_fmt=num).all()
+                for tel in tels_fila:
+                    if tel.contato and tel.contato.status in ['enviado', 'pronto_envio']:
+                        cirurgias_pendentes.append((tel.contato, tel.numero_fmt))
+
+            # Remover duplicados
+            consultas_pendentes = list({c[0].id: c for c in consultas_pendentes}.values())
+            cirurgias_pendentes = list({c[0].id: c for c in cirurgias_pendentes}.values())
+
+            # Ordenar igual ao menu
+            consultas_pendentes = sorted(consultas_pendentes, key=lambda c: c[0].data_aghu or '')
+
+            todas_pendencias = consultas_pendentes + cirurgias_pendentes
+
+            if escolha == 'TODOS' or escolha == 'TODAS':
+                # Confirmar/rejeitar TODAS as pendências
+                ws = WhatsApp(usuario_id)
+                confirmados = 0
+
+                for item, tel_numero in todas_pendencias:
+                    if hasattr(item, 'campanha_id') and hasattr(item, 'paciente'):
+                        # É uma consulta
+                        item.status = 'AGUARDANDO_COMPROVANTE'
+                        item.data_confirmacao = datetime.utcnow()
+                        db.session.commit()
+                        item.campanha.atualizar_stats()
+                        confirmados += 1
+                    else:
+                        # É uma cirurgia - iniciar fluxo de data de nascimento
+                        item.status = 'aguardando_nascimento'
+                        item.resposta = '1'
+                        item.data_resposta = datetime.utcnow()
+                        confirmados += 1
+
+                db.session.commit()
+
+                if confirmados > 0:
+                    ws.enviar(numero, f"✅ *{confirmados} agendamento(s) confirmado(s)!*\n\nAguarde o envio dos comprovantes.")
+                    logger.info(f"Múltiplas pendências confirmadas para {numero}: {confirmados} itens")
+
+                return jsonify({'status': 'ok'}), 200
+
+            elif escolha.isdigit():
+                opcao_num = int(escolha)
+                if 1 <= opcao_num <= len(todas_pendencias):
+                    item, tel_numero = todas_pendencias[opcao_num - 1]
+                    ws = WhatsApp(usuario_id)
+
+                    if hasattr(item, 'campanha_id') and hasattr(item, 'paciente'):
+                        # É uma consulta
+                        item.status = 'AGUARDANDO_COMPROVANTE'
+                        item.data_confirmacao = datetime.utcnow()
+                        db.session.commit()
+                        item.campanha.atualizar_stats()
+                        db.session.commit()
+
+                        ws.enviar(numero, f"✅ *Consulta confirmada!*\n\n📅 {item.data_aghu or 'Data não informada'}\n👨‍⚕️ {item.especialidade or 'Especialidade'}\n\nAguarde o envio do comprovante.")
+                        logger.info(f"Consulta {item.id} confirmada via menu por {item.paciente}")
+
+                        # Log da mensagem recebida
+                        log = LogMsgConsulta(
+                            campanha_id=item.campanha_id,
+                            consulta_id=item.id,
+                            direcao='recebida',
+                            telefone=numero,
+                            mensagem=texto[:500]
+                        )
+                        db.session.add(log)
+                        db.session.commit()
+
+                    else:
+                        # É uma cirurgia - iniciar fluxo de data de nascimento
+                        item.status = 'aguardando_nascimento'
+                        item.resposta = '1'
+                        item.data_resposta = datetime.utcnow()
+                        db.session.commit()
+
+                        ws.enviar(numero, "🔒 Por segurança, por favor digite sua *Data de Nascimento* (ex: 03/09/1954).")
+                        logger.info(f"Cirurgia selecionada via menu para {item.nome}, aguardando nascimento")
+
+                        # Log da mensagem recebida
+                        log = LogMsg(
+                            campanha_id=item.campanha_id,
+                            contato_id=item.id,
+                            direcao='recebida',
+                            telefone=numero,
+                            mensagem=texto[:500],
+                            status='ok'
+                        )
+                        db.session.add(log)
+                        db.session.commit()
+
+                    # Verificar se ainda há outras pendências
+                    pendencias_restantes = len(todas_pendencias) - 1
+                    if pendencias_restantes > 0:
+                        ws.enviar(numero, f"📋 Você ainda tem *{pendencias_restantes}* agendamento(s) pendente(s). Responda *1* para confirmar ou *2* para recusar.")
+
+                    return jsonify({'status': 'ok'}), 200
+
+                else:
+                    # Número inválido
+                    ws = WhatsApp(usuario_id)
+                    ws.enviar(numero, f"❌ Opção inválida. Por favor, responda com um número de 1 a {len(todas_pendencias)} ou *TODOS*.")
+                    return jsonify({'status': 'ok'}), 200
+
+        # =====================================================================
         # MODO CONSULTA - Processar PRIMEIRO (tem prioridade)
         # =====================================================================
         # Verificar se é uma resposta de consulta ANTES de processar fila cirúrgica

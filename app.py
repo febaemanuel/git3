@@ -4850,7 +4850,8 @@ def webhook():
                         opcao += 1
 
                     for cirurgia in cirurgias_pendentes:
-                        menu_texto += f"{opcao}️⃣ *CIRURGIA* - {cirurgia.especialidade or 'Especialidade'}\n"
+                        proc = cirurgia.procedimento_normalizado or cirurgia.procedimento or 'Procedimento'
+                        menu_texto += f"{opcao}️⃣ *CIRURGIA* - {proc}\n"
                         menu_texto += f"   📅 Fila cirúrgica\n\n"
                         opcao += 1
 

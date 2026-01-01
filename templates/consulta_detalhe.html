@@ -85,16 +85,37 @@
                         <label class="form-label">Comprovante (PDF/JPG/PNG)</label>
                         <input type="file" class="form-control" id="inputComprovante" accept=".pdf,.jpg,.jpeg,.png" required>
                     </div>
-                    <button type="submit" class="btn btn-success w-100">
+                    <button type="submit" class="btn btn-success w-100" id="btnEnviarComprovante">
                         <i class="bi bi-send"></i> Enviar Comprovante para Paciente
                     </button>
                 </form>
 
                 <script>
+                let enviandoComprovante = false;
                 document.getElementById('formComprovante').addEventListener('submit', function(e) {
                     e.preventDefault();
+
+                    // Proteção contra duplo clique
+                    if (enviandoComprovante) {
+                        alert('Aguarde, o comprovante está sendo enviado...');
+                        return;
+                    }
+
+                    const btn = document.getElementById('btnEnviarComprovante');
+                    const file = document.getElementById('inputComprovante').files[0];
+
+                    if (!file) {
+                        alert('Selecione um arquivo');
+                        return;
+                    }
+
+                    // Desabilitar botão e mostrar loading
+                    enviandoComprovante = true;
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Enviando...';
+
                     const formData = new FormData();
-                    formData.append('comprovante', document.getElementById('inputComprovante').files[0]);
+                    formData.append('comprovante', file);
 
                     fetch('/api/consulta/{{ consulta.id }}/enviar_comprovante', {
                         method: 'POST',
@@ -107,10 +128,18 @@
                             location.reload();
                         } else {
                             alert('Erro: ' + data.erro);
+                            // Reabilitar botão em caso de erro
+                            enviandoComprovante = false;
+                            btn.disabled = false;
+                            btn.innerHTML = '<i class="bi bi-send"></i> Enviar Comprovante para Paciente';
                         }
                     })
                     .catch(error => {
                         alert('Erro ao enviar: ' + error);
+                        // Reabilitar botão em caso de erro
+                        enviandoComprovante = false;
+                        btn.disabled = false;
+                        btn.innerHTML = '<i class="bi bi-send"></i> Enviar Comprovante para Paciente';
                     });
                 });
                 </script>

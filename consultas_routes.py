@@ -264,10 +264,25 @@ def init_consultas_routes(app, db):
         campanha.atualizar_stats()
         db.session.commit()
 
-        # Buscar consultas
-        consultas = AgendamentoConsulta.query.filter_by(
-            campanha_id=id
-        ).order_by(AgendamentoConsulta.id).all()
+        # Filtro de status
+        filtro = request.args.get('filtro', 'todos')
+
+        # Query base
+        query = AgendamentoConsulta.query.filter_by(campanha_id=id)
+
+        # Aplicar filtro
+        if filtro == 'aguardando_envio':
+            query = query.filter_by(status='AGUARDANDO_ENVIO')
+        elif filtro == 'aguardando_confirmacao':
+            query = query.filter_by(status='AGUARDANDO_CONFIRMACAO')
+        elif filtro == 'aguardando_comprovante':
+            query = query.filter_by(status='AGUARDANDO_COMPROVANTE')
+        elif filtro == 'confirmados':
+            query = query.filter_by(status='CONFIRMADO')
+        elif filtro == 'rejeitados':
+            query = query.filter_by(status='REJEITADO')
+
+        consultas = query.order_by(AgendamentoConsulta.id).all()
 
         # Progresso da task (se estiver rodando)
         task_progress = None
@@ -286,7 +301,8 @@ def init_consultas_routes(app, db):
             'campanha_consultas_detalhe.html',
             campanha=campanha,
             consultas=consultas,
-            task_progress=task_progress
+            task_progress=task_progress,
+            filtro=filtro
         )
 
 
@@ -428,7 +444,20 @@ def init_consultas_routes(app, db):
             return jsonify({'erro': 'Acesso negado'}), 403
 
         if consulta.status != 'AGUARDANDO_COMPROVANTE':
-            return jsonify({'erro': f'Status inválido: {consulta.status}'}), 400
+            return jsonify({'erro': f'Status inválido: {consulta.status}. Comprovante já foi enviado?'}), 400
+
+        # PROTEÇÃO CONTRA ENVIO MÚLTIPLO: verificar se já enviou nos últimos 30 segundos
+        from datetime import timedelta
+        trinta_segundos_atras = datetime.utcnow() - timedelta(seconds=30)
+        envio_recente = LogMsgConsulta.query.filter(
+            LogMsgConsulta.consulta_id == consulta.id,
+            LogMsgConsulta.direcao == 'enviada',
+            LogMsgConsulta.mensagem.like('%COMPROVANTE%'),
+            LogMsgConsulta.data >= trinta_segundos_atras
+        ).first()
+
+        if envio_recente:
+            return jsonify({'erro': 'Comprovante já foi enviado recentemente. Aguarde alguns segundos.'}), 400
 
         try:
             # Validar arquivo

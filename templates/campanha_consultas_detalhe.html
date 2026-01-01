@@ -86,7 +86,37 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header">
-                <h5 class="mb-0">Consultas ({{ consultas|length }})</h5>
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <h5 class="mb-0">Consultas ({{ consultas|length }})</h5>
+
+                    <!-- Filtros -->
+                    <div class="btn-group btn-group-sm flex-wrap">
+                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='todos') }}"
+                           class="btn btn-outline-secondary {% if filtro == 'todos' %}active{% endif %}">
+                            Todos
+                        </a>
+                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='aguardando_envio') }}"
+                           class="btn btn-outline-secondary {% if filtro == 'aguardando_envio' %}active{% endif %}">
+                            Ag. Envio
+                        </a>
+                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='aguardando_confirmacao') }}"
+                           class="btn btn-outline-info {% if filtro == 'aguardando_confirmacao' %}active{% endif %}">
+                            Ag. Confirmação
+                        </a>
+                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='aguardando_comprovante') }}"
+                           class="btn btn-outline-warning {% if filtro == 'aguardando_comprovante' %}active{% endif %}">
+                            Ag. Comprovante
+                        </a>
+                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='confirmados') }}"
+                           class="btn btn-outline-success {% if filtro == 'confirmados' %}active{% endif %}">
+                            Confirmados
+                        </a>
+                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='rejeitados') }}"
+                           class="btn btn-outline-danger {% if filtro == 'rejeitados' %}active{% endif %}">
+                            Rejeitados
+                        </a>
+                    </div>
+                </div>
             </div>
             <div class="card-body">
                 <div class="table-responsive">

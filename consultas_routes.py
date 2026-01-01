@@ -790,7 +790,7 @@ def init_consultas_routes(app, db):
     @login_required
     def consulta_reenviar(id):
         """Reenvia mensagem de confirmação para uma consulta"""
-        from app import formatar_mensagem_consulta
+        from app import formatar_mensagem_consulta_inicial
 
         consulta = AgendamentoConsulta.query.get_or_404(id)
 
@@ -817,14 +817,8 @@ def init_consultas_routes(app, db):
             if not telefone:
                 return jsonify({'erro': 'Nenhum telefone disponível'}), 400
 
-            # Formatar mensagem
-            msg = formatar_mensagem_consulta(
-                consulta.paciente,
-                consulta.tipo,
-                consulta.especialidade,
-                consulta.data_aghu,
-                consulta.grade_aghu or consulta.medico_solicitante
-            )
+            # Formatar mensagem (usa o objeto consulta diretamente)
+            msg = formatar_mensagem_consulta_inicial(consulta)
 
             # Enviar mensagem
             ok, result = ws.enviar(telefone, msg)

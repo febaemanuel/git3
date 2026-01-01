@@ -4,79 +4,145 @@
 
 {% block content %}
 <div class="row">
+    <!-- Cabecalho -->
     <div class="col-12 mb-4">
-        <h2>{{ campanha.nome }}</h2>
-        <p class="text-muted">{{ campanha.descricao }}</p>
-    </div>
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('consultas_dashboard') }}">Dashboard</a></li>
+                <li class="breadcrumb-item active">{{ campanha.nome }}</li>
+            </ol>
+        </nav>
 
-    <!-- Estatísticas -->
-    <div class="col-md-3 mb-4">
-        <div class="card">
-            <div class="card-body text-center">
-                <h5 class="text-muted">Total</h5>
-                <h2>{{ campanha.total_consultas }}</h2>
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2>{{ campanha.nome }}</h2>
+                {% if campanha.descricao %}
+                <p class="text-muted mb-0">{{ campanha.descricao }}</p>
+                {% endif %}
+            </div>
+            <div class="d-flex gap-2">
+                {% if campanha.status in ['pendente', 'pronta', 'pausado'] %}
+                <form method="POST" action="{{ url_for('consultas_campanha_iniciar', id=campanha.id) }}" class="d-inline">
+                    <button type="submit" class="btn btn-whatsapp">
+                        <i class="bi bi-play-fill"></i> Iniciar Envio
+                    </button>
+                </form>
+                {% elif campanha.status == 'enviando' %}
+                <form method="POST" action="{{ url_for('consultas_campanha_pausar', id=campanha.id) }}" class="d-inline">
+                    <button type="submit" class="btn btn-warning">
+                        <i class="bi bi-pause-fill"></i> Pausar
+                    </button>
+                </form>
+                {% endif %}
             </div>
         </div>
     </div>
 
-    <div class="col-md-3 mb-4">
-        <div class="card">
-            <div class="card-body text-center">
-                <h5 class="text-muted">Enviados</h5>
-                <h2 class="text-primary">{{ campanha.total_enviados }}</h2>
+    <!-- Cards de Estatisticas -->
+    <div class="col-12 mb-4">
+        <div class="row g-3">
+            <div class="col-md">
+                <div class="card stat-card total">
+                    <div class="card-body text-center">
+                        <h3 id="stat-total">{{ campanha.total_consultas }}</h3>
+                        <small class="text-muted">Total de Consultas</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md">
+                <div class="card stat-card enviados">
+                    <div class="card-body text-center">
+                        <h3 class="text-info" id="stat-enviados">{{ campanha.total_enviados }}</h3>
+                        <small class="text-muted">Enviados</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md">
+                <div class="card stat-card confirmados">
+                    <div class="card-body text-center">
+                        <h3 class="text-success" id="stat-confirmados">{{ campanha.total_confirmados }}</h3>
+                        <small class="text-muted">Confirmados</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md">
+                <div class="card stat-card rejeitados">
+                    <div class="card-body text-center">
+                        <h3 class="text-warning" id="stat-rejeitados">{{ campanha.total_rejeitados }}</h3>
+                        <small class="text-muted">Rejeitados</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md">
+                <div class="card stat-card erros">
+                    <div class="card-body text-center">
+                        <h3 class="text-danger" id="stat-erros">{{ campanha.total_consultas - campanha.total_enviados - campanha.total_confirmados - campanha.total_rejeitados }}</h3>
+                        <small class="text-muted">Ag. Comprovante</small>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 
-    <div class="col-md-3 mb-4">
+    <!-- Informacoes de Agendamento -->
+    <div class="col-12 mb-4">
         <div class="card">
-            <div class="card-body text-center">
-                <h5 class="text-muted">Confirmados</h5>
-                <h2 class="text-success">{{ campanha.total_confirmados }}</h2>
+            <div class="card-header">
+                <i class="bi bi-calendar-check"></i> Agendamento e Controle
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-3">
+                        <small class="text-muted">Meta Diaria</small>
+                        <h5>{{ campanha.meta_diaria or 50 }} pessoas/dia</h5>
+                    </div>
+                    <div class="col-md-3">
+                        <small class="text-muted">Enviados Hoje</small>
+                        <h5>
+                            <span id="enviados-hoje">{{ campanha.enviados_hoje or 0 }}</span> / {{ campanha.meta_diaria or 50 }}
+                        </h5>
+                        <div class="progress" style="height: 5px;">
+                            <div class="progress-bar bg-info" style="width: {{ ((campanha.enviados_hoje or 0) / (campanha.meta_diaria or 50) * 100)|int }}%"></div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <small class="text-muted">Horario de Funcionamento</small>
+                        <h5>{{ '%02d' % (campanha.hora_inicio or 8) }}:00 - {{ '%02d' % (campanha.hora_fim or 18) }}:00</h5>
+                    </div>
+                    <div class="col-md-3">
+                        <small class="text-muted">Duracao</small>
+                        <h5>Ate acabar</h5>
+                    </div>
+                </div>
+                {% if campanha.status_msg %}
+                <div class="alert alert-info mt-3 mb-0">
+                    <i class="bi bi-info-circle"></i> {{ campanha.status_msg }}
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
 
-    <div class="col-md-3 mb-4">
-        <div class="card">
-            <div class="card-body text-center">
-                <h5 class="text-muted">Rejeitados</h5>
-                <h2 class="text-danger">{{ campanha.total_rejeitados }}</h2>
-            </div>
-        </div>
-    </div>
-
-    <!-- Controles -->
+    <!-- Barra de Progresso -->
     <div class="col-12 mb-4">
         <div class="card">
             <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <strong>Status:</strong>
-                        <span class="badge bg-{% if campanha.status == 'enviando' %}primary{% elif campanha.status == 'concluido' %}success{% elif campanha.status == 'erro' %}danger{% else %}secondary{% endif %}">
-                            {{ campanha.status }}
-                        </span>
-                        {% if campanha.status_msg %}
-                        <small class="text-muted">{{ campanha.status_msg }}</small>
-                        {% endif %}
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Progresso do Envio</span>
+                    <span id="progresso-texto">{{ (campanha.total_enviados / campanha.total_consultas * 100)|round(1) if campanha.total_consultas > 0 else 0 }}%</span>
+                </div>
+                <div class="progress">
+                    <div class="progress-bar" role="progressbar" id="progresso-bar"
+                         style="width: {{ (campanha.total_enviados / campanha.total_consultas * 100)|round(1) if campanha.total_consultas > 0 else 0 }}%">
                     </div>
-                    <div>
-                        {% if campanha.status in ['pendente', 'pronta', 'pausado'] %}
-                        <form method="POST" action="{{ url_for('consultas_campanha_iniciar', id=campanha.id) }}" class="d-inline">
-                            <button type="submit" class="btn btn-success">
-                                <i class="bi bi-play"></i> Iniciar Envio
-                            </button>
-                        </form>
-                        {% endif %}
-
-                        {% if campanha.status == 'enviando' %}
-                        <form method="POST" action="{{ url_for('consultas_campanha_pausar', id=campanha.id) }}" class="d-inline">
-                            <button type="submit" class="btn btn-warning">
-                                <i class="bi bi-pause"></i> Pausar
-                            </button>
-                        </form>
-                        {% endif %}
-                    </div>
+                </div>
+                <div class="d-flex justify-content-between mt-2">
+                    <small class="text-muted">
+                        Status: <strong id="status-campanha">{{ campanha.status.replace('_', ' ').title() }}</strong>
+                    </small>
+                    <small class="text-muted">
+                        Taxa de confirmacao: <strong id="taxa-confirmacao">{{ (campanha.total_confirmados / campanha.total_enviados * 100)|round(1) if campanha.total_enviados > 0 else 0 }}%</strong>
+                    </small>
                 </div>
             </div>
         </div>
@@ -86,26 +152,14 @@
     <div class="col-12">
         <div class="card">
             <div class="card-header">
-                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <h5 class="mb-0">Consultas ({{ consultas|length }})</h5>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-calendar2-check"></i> Consultas</span>
 
                     <!-- Filtros -->
-                    <div class="btn-group btn-group-sm flex-wrap">
+                    <div class="btn-group btn-group-sm">
                         <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='todos') }}"
                            class="btn btn-outline-secondary {% if filtro == 'todos' %}active{% endif %}">
                             Todos
-                        </a>
-                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='aguardando_envio') }}"
-                           class="btn btn-outline-secondary {% if filtro == 'aguardando_envio' %}active{% endif %}">
-                            Ag. Envio
-                        </a>
-                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='aguardando_confirmacao') }}"
-                           class="btn btn-outline-info {% if filtro == 'aguardando_confirmacao' %}active{% endif %}">
-                            Ag. Confirmação
-                        </a>
-                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='aguardando_comprovante') }}"
-                           class="btn btn-outline-warning {% if filtro == 'aguardando_comprovante' %}active{% endif %}">
-                            Ag. Comprovante
                         </a>
                         <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='confirmados') }}"
                            class="btn btn-outline-success {% if filtro == 'confirmados' %}active{% endif %}">
@@ -115,55 +169,81 @@
                            class="btn btn-outline-danger {% if filtro == 'rejeitados' %}active{% endif %}">
                             Rejeitados
                         </a>
+                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='aguardando_comprovante') }}"
+                           class="btn btn-outline-warning {% if filtro == 'aguardando_comprovante' %}active{% endif %}">
+                            Aguardando
+                        </a>
+                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='aguardando_envio') }}"
+                           class="btn btn-outline-secondary {% if filtro == 'aguardando_envio' %}active{% endif %}">
+                            Pendentes
+                        </a>
+                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='aguardando_confirmacao') }}"
+                           class="btn btn-outline-info {% if filtro == 'aguardando_confirmacao' %}active{% endif %}">
+                            Erros
+                        </a>
                     </div>
                 </div>
             </div>
-            <div class="card-body">
+            <div class="card-body p-0">
+                {% if consultas %}
                 <div class="table-responsive">
-                    <table class="table table-sm table-hover">
-                        <thead>
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
                             <tr>
-                                <th>Paciente</th>
-                                <th>Tipo</th>
-                                <th>Data Consulta</th>
-                                <th>Médico</th>
-                                <th>Status</th>
-                                <th>Ações</th>
+                                <th>Nome</th>
+                                <th>Telefone</th>
+                                <th>Procedimento</th>
+                                <th class="text-center">Status</th>
+                                <th>Resposta</th>
+                                <th>Data Envio</th>
+                                <th class="text-center">Acoes</th>
                             </tr>
                         </thead>
                         <tbody>
                             {% for consulta in consultas %}
                             <tr>
-                                <td>{{ consulta.paciente }}</td>
-                                <td><span class="badge bg-info">{{ consulta.tipo }}</span></td>
-                                <td>{{ consulta.data_aghu }}</td>
-                                <td>{{ consulta.medico_solicitante }}</td>
                                 <td>
+                                    <strong>{{ consulta.paciente }}</strong>
+                                </td>
+                                <td>{{ consulta.telefone_cadastro or '-' }}</td>
+                                <td>
+                                    <small>{{ consulta.especialidade or consulta.tipo or '-' }}</small>
+                                </td>
+                                <td class="text-center">
                                     {% if consulta.status == 'CONFIRMADO' %}
                                     <span class="badge bg-success">Confirmado</span>
                                     {% elif consulta.status == 'AGUARDANDO_COMPROVANTE' %}
                                     <span class="badge bg-warning">Ag. Comprovante</span>
                                     {% elif consulta.status == 'AGUARDANDO_CONFIRMACAO' %}
-                                    <span class="badge bg-info">Ag. Confirmação</span>
+                                    <span class="badge bg-info">Ag. Confirmacao</span>
                                     {% elif consulta.status == 'REJEITADO' %}
                                     <span class="badge bg-danger">Rejeitado</span>
+                                    {% elif consulta.status == 'AGUARDANDO_ENVIO' %}
+                                    <span class="badge bg-secondary">Pendente</span>
                                     {% else %}
                                     <span class="badge bg-secondary">{{ consulta.status }}</span>
                                     {% endif %}
                                 </td>
                                 <td>
+                                    {% if consulta.motivo_rejeicao %}
+                                    <small>{{ consulta.motivo_rejeicao[:30] }}...</small>
+                                    {% else %}
+                                    <small class="text-muted">-</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if consulta.data_envio_mensagem %}
+                                    <small>{{ consulta.data_envio_mensagem.strftime('%d/%m %H:%M') }}</small>
+                                    {% else %}
+                                    <small class="text-muted">-</small>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
                                     <div class="btn-group btn-group-sm">
-                                        <!-- Botão de Chat/Histórico -->
-                                        <button class="btn btn-outline-info" title="Ver histórico de mensagens"
-                                                onclick="verHistoricoConsulta({{ consulta.id }})">
-                                            <i class="bi bi-chat-dots"></i>
-                                        </button>
-                                        <!-- Botão de Detalhes -->
                                         <a href="{{ url_for('consulta_detalhe', id=consulta.id) }}"
-                                           class="btn btn-outline-primary" title="Ver todos os detalhes">
+                                           class="btn btn-outline-info" title="Ver detalhes e historico">
                                             <i class="bi bi-info-circle"></i>
                                         </a>
-                                        <!-- Botões de Ação -->
                                         {% if consulta.status == 'AGUARDANDO_CONFIRMACAO' %}
                                         <button class="btn btn-outline-success" title="Confirmar manualmente"
                                                 onclick="confirmarConsulta({{ consulta.id }})">
@@ -181,139 +261,18 @@
                         </tbody>
                     </table>
                 </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-inbox text-muted" style="font-size: 48px;"></i>
+                    <p class="text-muted mt-3">Nenhuma consulta encontrada</p>
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>
 </div>
 
-<!-- Modal de Histórico de Mensagens -->
-<div class="modal fade" id="modalHistorico" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Histórico de Mensagens</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body" id="historicoContent">
-                <div class="text-center">
-                    <div class="spinner-border" role="status">
-                        <span class="visually-hidden">Carregando...</span>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer">
-                <div class="flex-grow-1">
-                    <div class="input-group">
-                        <input type="text" class="form-control" id="novaMensagem"
-                               placeholder="Digite uma mensagem...">
-                        <button class="btn btn-primary" onclick="enviarMensagemManual()">
-                            <i class="bi bi-send"></i> Enviar
-                        </button>
-                    </div>
-                </div>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-{% endblock %}
-
-{% block extra_js %}
 <script>
-let consultaAtualId = null;
-
-function verHistoricoConsulta(consultaId) {
-    consultaAtualId = consultaId;
-    const modal = new bootstrap.Modal(document.getElementById('modalHistorico'));
-    modal.show();
-
-    // Carregar histórico
-    document.getElementById('historicoContent').innerHTML = `
-        <div class="text-center">
-            <div class="spinner-border" role="status">
-                <span class="visually-hidden">Carregando...</span>
-            </div>
-        </div>
-    `;
-
-    fetch(`/api/consulta/${consultaId}/detalhes`)
-        .then(r => r.json())
-        .then(data => {
-            let html = `
-                <div class="mb-3">
-                    <h6><strong>Paciente:</strong> ${data.paciente}</h6>
-                    <p class="mb-1"><strong>Tipo:</strong> ${data.tipo}</p>
-                    <p class="mb-1"><strong>Status:</strong> <span class="badge bg-primary">${data.status}</span></p>
-                    ${data.motivo_rejeicao ? `<p class="mb-1"><strong>Motivo:</strong> ${data.motivo_rejeicao}</p>` : ''}
-                </div>
-                <hr>
-                <h6>Mensagens:</h6>
-                <div class="list-group">
-            `;
-
-            if (data.logs && data.logs.length > 0) {
-                data.logs.forEach(log => {
-                    const isEnviada = log.direcao === 'enviada';
-                    const bgClass = isEnviada ? 'bg-light' : 'bg-primary text-white';
-                    const align = isEnviada ? 'text-end' : 'text-start';
-
-                    html += `
-                        <div class="list-group-item ${bgClass} ${align}">
-                            <div class="d-flex justify-content-between">
-                                <small class="text-muted">
-                                    ${isEnviada ? '📤 Enviada' : '📥 Recebida'}
-                                </small>
-                                <small class="text-muted">${log.data || ''}</small>
-                            </div>
-                            <div class="mt-1">${log.mensagem || ''}</div>
-                            ${log.erro ? `<small class="text-danger">Erro: ${log.erro}</small>` : ''}
-                        </div>
-                    `;
-                });
-            } else {
-                html += '<div class="alert alert-info">Nenhuma mensagem ainda</div>';
-            }
-
-            html += '</div>';
-            document.getElementById('historicoContent').innerHTML = html;
-        })
-        .catch(err => {
-            document.getElementById('historicoContent').innerHTML =
-                '<div class="alert alert-danger">Erro ao carregar histórico</div>';
-        });
-}
-
-function enviarMensagemManual() {
-    const mensagem = document.getElementById('novaMensagem').value.trim();
-    if (!mensagem) {
-        alert('Digite uma mensagem');
-        return;
-    }
-
-    if (!consultaAtualId) {
-        alert('Erro: Consulta não identificada');
-        return;
-    }
-
-    fetch(`/api/consulta/${consultaAtualId}/enviar_mensagem`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({mensagem: mensagem})
-    })
-    .then(r => r.json())
-    .then(data => {
-        if (data.sucesso) {
-            document.getElementById('novaMensagem').value = '';
-            verHistoricoConsulta(consultaAtualId); // Recarregar histórico
-            alert('Mensagem enviada!');
-        } else {
-            alert('Erro: ' + (data.erro || 'Desconhecido'));
-        }
-    })
-    .catch(err => alert('Erro ao enviar mensagem'));
-}
-
 function confirmarConsulta(consultaId) {
     if (!confirm('Confirmar esta consulta manualmente?')) return;
 

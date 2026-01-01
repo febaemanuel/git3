@@ -427,7 +427,13 @@ def init_consultas_routes(app, db):
             flash('Acesso negado', 'danger')
             return redirect(url_for('consultas_dashboard'))
 
-        return render_template('consulta_detalhe.html', consulta=consulta)
+        # Buscar logs de mensagens
+        logs = LogMsgConsulta.query.filter_by(consulta_id=consulta.id).order_by(LogMsgConsulta.data.asc()).all()
+
+        # Buscar telefones
+        telefones = TelefoneConsulta.query.filter_by(consulta_id=consulta.id).all()
+
+        return render_template('consulta_detalhe.html', consulta=consulta, logs=logs, telefones=telefones)
 
 
     # =========================================================================

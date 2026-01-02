@@ -1277,8 +1277,6 @@ def formatar_mensagem_comprovante(consulta=None, dados_ocr=None):
 *Médico(a):* *{medico_str}*
 *Especialidade:* *{especialidade_str}*
 
-Responda a pesquisa de satisfação: https://forms.gle/feteZxSNBRd5xfDUA
-
 O hospital entra em contato através do: (85) 992081534 / (85)996700783 / (85)991565903 / (85) 992614237 / (85) 992726080. É importante que atenda as ligações e responda as mensagens desses números. Por tanto, salve-os!
 
 Confira seu comprovante: data, horário e nome do(a) médico(a).

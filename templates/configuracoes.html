@@ -94,6 +94,7 @@
                     Configure a URL e API Key da Evolution API.
                 </div>
                 <form method="POST" action="{{ url_for('configuracoes_global') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="row">
                         <div class="col-md-5 mb-3">
                             <label class="form-label">URL da Evolution API *</label>

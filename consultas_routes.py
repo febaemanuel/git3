@@ -31,7 +31,8 @@ def init_consultas_routes(app, db):
         CampanhaConsulta, AgendamentoConsulta, TelefoneConsulta,
         LogMsgConsulta, WhatsApp, formatar_numero,
         formatar_mensagem_comprovante, formatar_mensagem_voltar_posto,
-        extrair_dados_comprovante, PesquisaSatisfacao, enviar_e_registrar_consulta
+        extrair_dados_comprovante, PesquisaSatisfacao, enviar_e_registrar_consulta,
+        Paciente, HistoricoConsulta
     )
 
     try:
@@ -1236,6 +1237,138 @@ _Hospital Universitário Walter Cantídio_"""
             output.getvalue(),
             mimetype='text/csv',
             headers={'Content-Disposition': 'attachment; filename=pesquisas_satisfacao.csv'}
+        )
+
+
+    # =========================================================================
+    # HISTÓRICO DE CONSULTAS - Visualização de pacientes e seus históricos
+    # =========================================================================
+
+    @app.route('/consultas/historico')
+    @login_required
+    def consultas_historico():
+        """Página de histórico de consultas dos pacientes"""
+        tipo_sistema = getattr(current_user, 'tipo_sistema', 'BUSCA_ATIVA')
+        if tipo_sistema != 'AGENDAMENTO_CONSULTA':
+            flash('Acesso negado. Usuário configurado para Fila Cirúrgica.', 'warning')
+            return redirect(url_for('dashboard'))
+
+        # Parâmetros de filtro
+        filtro_paciente = request.args.get('paciente', '').strip()
+        filtro_especialidade = request.args.get('especialidade', '').strip()
+        filtro_data_inicio = request.args.get('data_inicio', '').strip()
+        filtro_data_fim = request.args.get('data_fim', '').strip()
+
+        # Query base - pacientes do usuário
+        pacientes_query = Paciente.query.filter_by(usuario_id=current_user.id)
+
+        if filtro_paciente:
+            pacientes_query = pacientes_query.filter(Paciente.nome.ilike(f'%{filtro_paciente}%'))
+
+        pacientes = pacientes_query.order_by(Paciente.nome).all()
+
+        # Buscar históricos com filtros
+        historicos_query = HistoricoConsulta.query.filter_by(usuario_id=current_user.id)
+
+        if filtro_especialidade:
+            historicos_query = historicos_query.filter(HistoricoConsulta.especialidade.ilike(f'%{filtro_especialidade}%'))
+
+        if filtro_data_inicio:
+            historicos_query = historicos_query.filter(HistoricoConsulta.data_consulta >= filtro_data_inicio)
+
+        if filtro_data_fim:
+            historicos_query = historicos_query.filter(HistoricoConsulta.data_consulta <= filtro_data_fim)
+
+        historicos = historicos_query.order_by(HistoricoConsulta.data_consulta.desc()).all()
+
+        # Estatísticas
+        total_pacientes = Paciente.query.filter_by(usuario_id=current_user.id).count()
+        total_historicos = HistoricoConsulta.query.filter_by(usuario_id=current_user.id).count()
+
+        # Lista de especialidades para filtro
+        especialidades = db.session.query(HistoricoConsulta.especialidade).filter(
+            HistoricoConsulta.usuario_id == current_user.id,
+            HistoricoConsulta.especialidade.isnot(None)
+        ).distinct().all()
+        especialidades = [e[0] for e in especialidades if e[0]]
+
+        return render_template(
+            'historico_consultas.html',
+            pacientes=pacientes,
+            historicos=historicos,
+            total_pacientes=total_pacientes,
+            total_historicos=total_historicos,
+            especialidades=especialidades,
+            filtro_paciente=filtro_paciente,
+            filtro_especialidade=filtro_especialidade,
+            filtro_data_inicio=filtro_data_inicio,
+            filtro_data_fim=filtro_data_fim
+        )
+
+
+    @app.route('/consultas/historico/paciente/<int:id>')
+    @login_required
+    def consultas_historico_paciente(id):
+        """Detalhes do histórico de um paciente específico"""
+        paciente = Paciente.query.get_or_404(id)
+
+        if paciente.usuario_id != current_user.id:
+            flash('Acesso negado', 'danger')
+            return redirect(url_for('consultas_historico'))
+
+        # Buscar todo o histórico do paciente
+        historicos = HistoricoConsulta.query.filter_by(
+            paciente_id=paciente.id
+        ).order_by(HistoricoConsulta.data_consulta.desc()).all()
+
+        return render_template(
+            'historico_paciente_detalhe.html',
+            paciente=paciente,
+            historicos=historicos
+        )
+
+
+    @app.route('/api/consultas/historico/export')
+    @login_required
+    def historico_export_csv():
+        """Exportar histórico de consultas para CSV"""
+        import csv
+        from io import StringIO
+
+        historicos = HistoricoConsulta.query.filter_by(
+            usuario_id=current_user.id
+        ).order_by(HistoricoConsulta.data_consulta.desc()).all()
+
+        output = StringIO()
+        writer = csv.writer(output)
+
+        # Header
+        writer.writerow([
+            'Paciente', 'Data Consulta', 'Hora', 'Especialidade', 'Profissional',
+            'Unidade', 'Tipo Consulta', 'Tipo Demanda', 'Nro Consulta'
+        ])
+
+        for h in historicos:
+            paciente_nome = h.paciente.nome if h.paciente else 'N/A'
+            writer.writerow([
+                paciente_nome,
+                h.data_consulta or '',
+                h.hora_consulta or '',
+                h.especialidade or '',
+                h.profissional or '',
+                h.unidade_funcional or '',
+                h.tipo_consulta or '',
+                h.tipo_demanda or '',
+                h.nro_consulta or ''
+            ])
+
+        output.seek(0)
+
+        from flask import Response
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': 'attachment; filename=historico_consultas.csv'}
         )
 
 

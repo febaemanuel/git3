@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}Historico de Consultas{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Cabecalho -->
+    <div class="col-12 mb-4">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('consultas_dashboard') }}">Dashboard</a></li>
+                <li class="breadcrumb-item active">Historico de Consultas</li>
+            </ol>
+        </nav>
+
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2><i class="bi bi-clock-history"></i> Historico de Consultas</h2>
+                <p class="text-muted mb-0">Visualize o historico de consultas dos pacientes</p>
+            </div>
+            <div>
+                <a href="{{ url_for('historico_export_csv') }}" class="btn btn-outline-success">
+                    <i class="bi bi-download"></i> Exportar CSV
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Cards de Estatisticas -->
+    <div class="col-12 mb-4">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <div class="card bg-primary text-white">
+                    <div class="card-body text-center">
+                        <h3 class="mb-0">{{ total_pacientes }}</h3>
+                        <small>Pacientes Cadastrados</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-success text-white">
+                    <div class="card-body text-center">
+                        <h3 class="mb-0">{{ total_historicos }}</h3>
+                        <small>Consultas no Historico</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card bg-info text-white">
+                    <div class="card-body text-center">
+                        <h3 class="mb-0">{{ especialidades|length }}</h3>
+                        <small>Especialidades</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="col-12 mb-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-funnel"></i> Filtros
+            </div>
+            <div class="card-body">
+                <form method="GET" class="row g-3">
+                    <div class="col-md-3">
+                        <label class="form-label">Paciente</label>
+                        <input type="text" class="form-control" name="paciente"
+                               value="{{ filtro_paciente }}" placeholder="Nome do paciente">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Especialidade</label>
+                        <select class="form-select" name="especialidade">
+                            <option value="">Todas</option>
+                            {% for esp in especialidades %}
+                            <option value="{{ esp }}" {% if filtro_especialidade == esp %}selected{% endif %}>
+                                {{ esp }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Data Inicio</label>
+                        <input type="date" class="form-control" name="data_inicio" value="{{ filtro_data_inicio }}">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label">Data Fim</label>
+                        <input type="date" class="form-control" name="data_fim" value="{{ filtro_data_fim }}">
+                    </div>
+                    <div class="col-md-2 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">
+                            <i class="bi bi-search"></i> Filtrar
+                        </button>
+                    </div>
+                </form>
+                {% if filtro_paciente or filtro_especialidade or filtro_data_inicio or filtro_data_fim %}
+                <div class="mt-2">
+                    <a href="{{ url_for('consultas_historico') }}" class="btn btn-sm btn-outline-secondary">
+                        <i class="bi bi-x"></i> Limpar Filtros
+                    </a>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de Historicos -->
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-table"></i> Historico de Consultas ({{ historicos|length }})
+            </div>
+            <div class="card-body p-0">
+                {% if historicos %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Paciente</th>
+                                <th>Data Consulta</th>
+                                <th>Hora</th>
+                                <th>Especialidade</th>
+                                <th>Profissional</th>
+                                <th>Unidade</th>
+                                <th>Tipo</th>
+                                <th class="text-center">Acoes</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for h in historicos %}
+                            <tr>
+                                <td>
+                                    <strong>{{ h.paciente.nome if h.paciente else 'N/A' }}</strong>
+                                    {% if h.paciente and h.paciente.prontuario %}
+                                    <br><small class="text-muted">Pront: {{ h.paciente.prontuario }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>{{ h.data_consulta or '-' }}</td>
+                                <td>{{ h.hora_consulta or '-' }}</td>
+                                <td>
+                                    <span class="badge bg-info">{{ h.especialidade or '-' }}</span>
+                                </td>
+                                <td>{{ h.profissional or '-' }}</td>
+                                <td>
+                                    <small>{{ h.unidade_funcional or '-' }}</small>
+                                    {% if h.sala %}
+                                    <br><small class="text-muted">Sala: {{ h.sala }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if h.tipo_demanda %}
+                                    <span class="badge bg-secondary">{{ h.tipo_demanda }}</span>
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if h.paciente %}
+                                    <a href="{{ url_for('consultas_historico_paciente', id=h.paciente.id) }}"
+                                       class="btn btn-sm btn-outline-primary" title="Ver historico do paciente">
+                                        <i class="bi bi-eye"></i>
+                                    </a>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-inbox text-muted" style="font-size: 48px;"></i>
+                    <p class="text-muted mt-3">
+                        {% if filtro_paciente or filtro_especialidade or filtro_data_inicio or filtro_data_fim %}
+                        Nenhum registro encontrado com os filtros aplicados.
+                        {% else %}
+                        Nenhum historico de consultas ainda.<br>
+                        <small>O historico sera preenchido automaticamente quando comprovantes forem enviados.</small>
+                        {% endif %}
+                    </p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Lista de Pacientes -->
+    {% if pacientes %}
+    <div class="col-12 mt-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-people"></i> Pacientes Cadastrados ({{ pacientes|length }})
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    {% for paciente in pacientes[:20] %}
+                    <div class="col-md-4 col-lg-3 mb-3">
+                        <div class="card h-100">
+                            <div class="card-body py-2">
+                                <div class="d-flex align-items-center">
+                                    <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center me-2"
+                                         style="width: 40px; height: 40px; min-width: 40px;">
+                                        <i class="bi bi-person"></i>
+                                    </div>
+                                    <div class="overflow-hidden">
+                                        <strong class="d-block text-truncate">{{ paciente.nome }}</strong>
+                                        {% if paciente.prontuario %}
+                                        <small class="text-muted">{{ paciente.prontuario }}</small>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="card-footer bg-transparent py-1">
+                                <a href="{{ url_for('consultas_historico_paciente', id=paciente.id) }}"
+                                   class="btn btn-sm btn-outline-primary w-100">
+                                    <i class="bi bi-clock-history"></i> Ver Historico
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% if pacientes|length > 20 %}
+                <div class="text-center mt-3">
+                    <small class="text-muted">Mostrando 20 de {{ pacientes|length }} pacientes. Use os filtros para refinar a busca.</small>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

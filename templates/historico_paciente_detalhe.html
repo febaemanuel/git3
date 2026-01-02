@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block title %}{{ paciente.nome }} - Historico{% endblock %}
+
+{% block content %}
+<div class="row">
+    <!-- Cabecalho -->
+    <div class="col-12 mb-4">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('consultas_dashboard') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('consultas_historico') }}">Historico</a></li>
+                <li class="breadcrumb-item active">{{ paciente.nome }}</li>
+            </ol>
+        </nav>
+    </div>
+
+    <!-- Card do Paciente -->
+    <div class="col-lg-4 mb-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-person-circle"></i> Dados do Paciente
+            </div>
+            <div class="card-body">
+                <div class="text-center mb-3">
+                    <div class="bg-primary text-white rounded-circle d-inline-flex align-items-center justify-content-center"
+                         style="width: 80px; height: 80px; font-size: 2rem;">
+                        <i class="bi bi-person-fill"></i>
+                    </div>
+                </div>
+
+                <h5 class="text-center mb-3">{{ paciente.nome }}</h5>
+
+                <ul class="list-group list-group-flush">
+                    {% if paciente.prontuario %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">Prontuario:</span>
+                        <strong>{{ paciente.prontuario }}</strong>
+                    </li>
+                    {% endif %}
+                    {% if paciente.codigo %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">Codigo:</span>
+                        <strong>{{ paciente.codigo }}</strong>
+                    </li>
+                    {% endif %}
+                    {% if paciente.data_nascimento %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">Nascimento:</span>
+                        <strong>{{ paciente.data_nascimento }}</strong>
+                    </li>
+                    {% endif %}
+                    {% if paciente.telefone %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">Telefone:</span>
+                        <strong>{{ paciente.telefone }}</strong>
+                    </li>
+                    {% endif %}
+                    <li class="list-group-item d-flex justify-content-between">
+                        <span class="text-muted">Consultas:</span>
+                        <strong>{{ historicos|length }}</strong>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Timeline de Consultas -->
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-clock-history"></i> Historico de Consultas
+            </div>
+            <div class="card-body">
+                {% if historicos %}
+                <div class="timeline">
+                    {% for h in historicos %}
+                    <div class="card mb-3 border-start border-primary border-4">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h6 class="mb-1">
+                                        <i class="bi bi-calendar-event text-primary"></i>
+                                        {{ h.data_consulta or 'Data nao informada' }}
+                                        {% if h.hora_consulta %}
+                                        <span class="text-muted">as {{ h.hora_consulta }}</span>
+                                        {% endif %}
+                                    </h6>
+                                    <p class="mb-2">
+                                        <span class="badge bg-info">{{ h.especialidade or 'Especialidade' }}</span>
+                                        {% if h.tipo_demanda %}
+                                        <span class="badge bg-secondary">{{ h.tipo_demanda }}</span>
+                                        {% endif %}
+                                    </p>
+                                </div>
+                                {% if h.nro_consulta %}
+                                <small class="text-muted">#{{ h.nro_consulta }}</small>
+                                {% endif %}
+                            </div>
+
+                            <div class="row mt-2">
+                                {% if h.profissional %}
+                                <div class="col-md-6">
+                                    <small class="text-muted d-block">Profissional</small>
+                                    <span>{{ h.profissional }}</span>
+                                </div>
+                                {% endif %}
+                                {% if h.unidade_funcional %}
+                                <div class="col-md-6">
+                                    <small class="text-muted d-block">Unidade</small>
+                                    <span>{{ h.unidade_funcional }}</span>
+                                </div>
+                                {% endif %}
+                            </div>
+
+                            {% if h.sala or h.andar or h.ala_bloco %}
+                            <div class="mt-2 text-muted">
+                                <small>
+                                    <i class="bi bi-geo-alt"></i>
+                                    {% if h.andar %}Andar: {{ h.andar }}{% endif %}
+                                    {% if h.ala_bloco %} | Ala/Bloco: {{ h.ala_bloco }}{% endif %}
+                                    {% if h.sala %} | Sala: {{ h.sala }}{% endif %}
+                                </small>
+                            </div>
+                            {% endif %}
+
+                            {% if h.observacao %}
+                            <div class="alert alert-light mt-2 mb-0 py-2">
+                                <small><i class="bi bi-info-circle"></i> {{ h.observacao }}</small>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-inbox text-muted" style="font-size: 48px;"></i>
+                    <p class="text-muted mt-3">Nenhum historico de consultas para este paciente.</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.border-4 {
+    border-width: 4px !important;
+}
+</style>
+{% endblock %}

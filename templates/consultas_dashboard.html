@@ -10,7 +10,13 @@
                 <h2><i class="bi bi-calendar-check"></i> Agendamento de Consultas</h2>
                 <p class="text-muted mb-0">Gerencie campanhas de agendamento de consultas</p>
             </div>
-            <div>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('consultas_historico') }}" class="btn btn-outline-info">
+                    <i class="bi bi-clock-history"></i> Historico
+                </a>
+                <a href="{{ url_for('pesquisas_dashboard') }}" class="btn btn-outline-success">
+                    <i class="bi bi-star"></i> Pesquisas
+                </a>
                 <a href="{{ url_for('consultas_importar') }}" class="btn btn-primary">
                     <i class="bi bi-file-earmark-excel"></i> Importar Planilha
                 </a>

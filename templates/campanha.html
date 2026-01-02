@@ -44,6 +44,7 @@
                         <li>
                             <form method="POST" action="{{ url_for('excluir_campanha', id=campanha.id) }}"
                                   onsubmit="return confirm('Tem certeza que deseja excluir esta campanha?');">
+                                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="dropdown-item text-danger">
                                     <i class="bi bi-trash"></i> Excluir Campanha
                                 </button>

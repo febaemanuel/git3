@@ -2170,7 +2170,11 @@ class WhatsApp:
             return False, "Nao configurado"
 
         num = ''.join(filter(str.isdigit, str(numero)))
-        ok, r = self._req('POST', f"/message/sendText/{self.instance}", {'number': num, 'text': texto})
+        ok, r = self._req('POST', f"/message/sendText/{self.instance}", {
+            'number': num, 
+            'text': texto,
+            'linkPreview': False  # Desabilita preview de links
+        })
 
         if ok and r.status_code in [200, 201]:
             try:

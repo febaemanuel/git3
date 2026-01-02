@@ -31,7 +31,7 @@ def init_consultas_routes(app, db):
         CampanhaConsulta, AgendamentoConsulta, TelefoneConsulta,
         LogMsgConsulta, WhatsApp, formatar_numero,
         formatar_mensagem_comprovante, formatar_mensagem_voltar_posto,
-        extrair_dados_comprovante, PesquisaSatisfacao
+        extrair_dados_comprovante, PesquisaSatisfacao, enviar_e_registrar_consulta
     )
 
     try:

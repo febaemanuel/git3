@@ -612,8 +612,16 @@ function editarConsulta(consultaId) {
 }
 
 // Reenviar mensagem
+let reenviando = {};
 function reenviarMensagem(consultaId) {
+    if (reenviando[consultaId]) {
+        alert('Aguarde, mensagem sendo reenviada...');
+        return;
+    }
+
     if (!confirm('Reenviar mensagem de confirmacao para este paciente?')) return;
+
+    reenviando[consultaId] = true;
 
     fetch(`/api/consulta/${consultaId}/reenviar`, {
         method: 'POST',
@@ -621,13 +629,18 @@ function reenviarMensagem(consultaId) {
     })
     .then(r => r.json())
     .then(data => {
+        reenviando[consultaId] = false;
         if (data.sucesso) {
             alert('Mensagem reenviada!');
+            location.reload();
         } else {
             alert('Erro: ' + (data.erro || 'Desconhecido'));
         }
     })
-    .catch(err => alert('Erro: ' + err));
+    .catch(err => {
+        reenviando[consultaId] = false;
+        alert('Erro: ' + err);
+    });
 }
 
 // Excluir consulta

@@ -1026,7 +1026,11 @@ def formatar_mensagem_perguntar_motivo():
     Enviada para: TODOS que respondem NÃO na MSG 1
     Status: AGUARDANDO_CONFIRMACAO → AGUARDANDO_MOTIVO_REJEICAO
     """
-    return "Qual o motivo?"
+    return """Entendemos sua decisão.
+
+Poderia nos informar o *motivo* da recusa? Isso nos ajuda a melhorar nosso atendimento.
+
+(Pode responder livremente com o motivo)"""
 
 
 def formatar_mensagem_voltar_posto(consulta):
@@ -4867,7 +4871,8 @@ def webhook():
                             consulta_id=consultas_pendentes[0].id,
                             direcao='enviada',
                             telefone=numero,
-                            mensagem=menu_texto[:500]
+                            mensagem=menu_texto[:500],
+                            status='sucesso'
                         )
                         db.session.add(log)
                     elif cirurgias_pendentes:
@@ -4987,7 +4992,8 @@ def webhook():
                             consulta_id=item.id,
                             direcao='recebida',
                             telefone=numero,
-                            mensagem=texto[:500]
+                            mensagem=texto[:500],
+                            status='sucesso'
                         )
                         db.session.add(log)
                         db.session.commit()

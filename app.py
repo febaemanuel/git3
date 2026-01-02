@@ -1243,11 +1243,11 @@ def formatar_mensagem_comprovante(consulta=None, dados_ocr=None):
 
     return f"""O Hospital Walter Cantídio agradece seu contato. *CONSULTA CONFIRMADA!*
 
-*Paciente:* {paciente_str}
-*Data:* {data_str}
-*Horário:* {hora_str}
-*Médico(a):* {medico_str}
-*Especialidade:* {especialidade_str}
+*Paciente:* *{paciente_str}*
+*Data:* *{data_str}*
+*Horário:* *{hora_str}*
+*Médico(a):* *{medico_str}*
+*Especialidade:* *{especialidade_str}*
 
 Responda a pesquisa de satisfação: https://forms.gle/feteZxSNBRd5xfDUA
 

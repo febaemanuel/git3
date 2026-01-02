@@ -50,6 +50,7 @@ with app.app_context():
             conn.commit()
             print("[OK] Tabela pacientes")
         except Exception as e:
+            conn.rollback()
             print(f"[ERR] Tabela pacientes: {e}")
 
         # 3. Tabela HISTORICO_CONSULTAS
@@ -89,6 +90,7 @@ with app.app_context():
             conn.commit()
             print("[OK] Tabela historico_consultas")
         except Exception as e:
+            conn.rollback()
             print(f"[ERR] Tabela historico_consultas: {e}")
 
         # 4. Colunas na tabela AGENDAMENTOS_CONSULTAS
@@ -105,6 +107,7 @@ with app.app_context():
                 conn.commit()
                 print(f"[OK] Coluna {col_nome}")
             except Exception as e:
+                conn.rollback()
                 if "duplicate" in str(e).lower() or "exists" in str(e).lower():
                     print(f"[OK] Coluna {col_nome} ja existe")
                 else:

@@ -368,7 +368,7 @@ function enviarMensagem() {
 
     fetch('/api/consulta/{{ consulta.id }}/enviar_mensagem', {
         method: 'POST',
-        headers: {'Content-Type': 'application/json'},
+        headers: {'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}'},
         body: JSON.stringify({mensagem: mensagem, telefone: telefone})
     })
     .then(r => r.json())
@@ -418,6 +418,7 @@ document.getElementById('formComprovante').addEventListener('submit', function(e
 
     fetch('/api/consulta/{{ consulta.id }}/enviar_comprovante', {
         method: 'POST',
+        headers: {'X-CSRFToken': '{{ csrf_token() }}'},
         body: formData
     })
     .then(response => response.json())

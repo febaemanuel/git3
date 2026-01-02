@@ -71,6 +71,7 @@
                 {% if campanha.status in ['pendente', 'pronta', 'pausado'] %}
                 <form method="POST" action="{{ url_for('consultas_campanha_iniciar', id=campanha.id) }}"
                     class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-whatsapp">
                         <i class="bi bi-play-fill"></i> Iniciar Envio
                     </button>
@@ -78,6 +79,7 @@
                 {% elif campanha.status == 'enviando' %}
                 <form method="POST" action="{{ url_for('consultas_campanha_pausar', id=campanha.id) }}"
                     class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-warning">
                         <i class="bi bi-pause-fill"></i> Pausar
                     </button>
@@ -558,7 +560,7 @@
 
         fetch(`/api/consulta/${consultaId}/confirmar`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' }
         })
             .then(r => r.json())
             .then(data => {
@@ -579,7 +581,7 @@
 
         fetch(`/api/consulta/${consultaId}/cancelar`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
             body: JSON.stringify({ motivo: motivo })
         })
             .then(r => r.json())
@@ -633,6 +635,7 @@
 
         fetch(`/api/consulta/${consultaId}/enviar_comprovante`, {
             method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token() }}' },
             body: formData
         })
             .then(r => r.json())
@@ -674,7 +677,7 @@
 
         fetch(`/api/consulta/${consultaId}/reenviar`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' }
         })
             .then(r => r.json())
             .then(data => {
@@ -698,7 +701,7 @@
 
         fetch(`/api/consulta/${consultaId}/excluir`, {
             method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' }
         })
             .then(r => r.json())
             .then(data => {
@@ -725,7 +728,7 @@
 
         fetch('/api/consultas/campanha/{{ campanha.id }}/editar', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
             body: JSON.stringify(dados)
         })
             .then(r => r.json())
@@ -746,7 +749,7 @@
 
         fetch('/api/consultas/campanha/{{ campanha.id }}/excluir', {
             method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' }
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' }
         })
             .then(r => r.json())
             .then(data => {

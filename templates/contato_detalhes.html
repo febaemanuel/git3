@@ -424,7 +424,7 @@ function enviarMensagem(event) {
 
     fetch(`/api/contato/${contatoId}/enviar_mensagem`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
         body: JSON.stringify({
             telefone_id: parseInt(telefoneId),
             mensagem: mensagem

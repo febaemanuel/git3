@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block title %}Pesquisas de Satisfação{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-bar-chart-fill me-2"></i>Pesquisas de Satisfação</h2>
+            <p class="text-muted mb-0">Feedback dos pacientes sobre o atendimento via WhatsApp</p>
+        </div>
+        <div>
+            <a href="{{ url_for('pesquisas_export_csv') }}" class="btn btn-outline-success">
+                <i class="bi bi-download me-2"></i>Exportar CSV
+            </a>
+            <a href="{{ url_for('consultas_dashboard') }}" class="btn btn-outline-secondary ms-2">
+                <i class="bi bi-arrow-left me-2"></i>Voltar
+            </a>
+        </div>
+    </div>
+
+    <!-- Cards com Estatísticas -->
+    <div class="row g-4 mb-4">
+        <!-- NPS Score -->
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-4 fw-bold text-primary">{{ media_nota }}</div>
+                    <div class="text-muted">Nota Média</div>
+                    <div class="mt-2">
+                        {% for i in range(1, 11) %}
+                        {% if i <= media_nota|int %} <i class="bi bi-star-fill text-warning"></i>
+                            {% else %}
+                            <i class="bi bi-star text-muted"></i>
+                            {% endif %}
+                            {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Total Pesquisas -->
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-4 fw-bold text-info">{{ total }}</div>
+                    <div class="text-muted">Total de Respostas</div>
+                    <div class="mt-2 small">
+                        <span class="text-success">{{ respondidas }} respondidas</span> |
+                        <span class="text-secondary">{{ puladas }} puladas</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- % Atendimento Ágil -->
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-4 fw-bold text-success">{{ pct_agil }}%</div>
+                    <div class="text-muted">Atendimento Ágil</div>
+                    <div class="progress mt-2" style="height: 8px;">
+                        <div class="progress-bar bg-success" style="width: {{ pct_agil }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Comentários -->
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-4 fw-bold text-warning">{{ comentarios|length }}</div>
+                    <div class="text-muted">Comentários</div>
+                    <div class="mt-2 small text-muted">
+                        Feedbacks detalhados
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4">
+        <!-- Comentários Recentes -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0">
+                    <h5 class="mb-0"><i class="bi bi-chat-quote me-2"></i>Comentários Recentes</h5>
+                </div>
+                <div class="card-body">
+                    {% if comentarios %}
+                    <div class="list-group list-group-flush">
+                        {% for p in comentarios %}
+                        <div class="list-group-item px-0">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div class="flex-grow-1">
+                                    <div class="d-flex align-items-center mb-1">
+                                        {% for i in range(p.nota_satisfacao or 0) %}
+                                        <i class="bi bi-star-fill text-warning small"></i>
+                                        {% endfor %}
+                                        <span class="badge bg-light text-dark ms-2">{{ p.especialidade or '-' }}</span>
+                                    </div>
+                                    <p class="mb-1">"{{ p.comentario }}"</p>
+                                    <small class="text-muted">
+                                        {{ p.data_resposta.strftime('%d/%m/%Y %H:%M') if p.data_resposta else '-' }}
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-chat-text" style="font-size: 48px;"></i>
+                        <p class="mt-2">Nenhum comentário ainda</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Todas as Respostas -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-list-check me-2"></i>Todas as Respostas</h5>
+                    <select class="form-select form-select-sm" style="width: auto;" id="filtroEspecialidade">
+                        <option value="">Todas especialidades</option>
+                        {% for esp in especialidades %}
+                        <option value="{{ esp }}">{{ esp }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-sm table-hover" id="tabelaPesquisas">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>Data</th>
+                                <th>Nota</th>
+                                <th>Ágil</th>
+                                <th>Especialidade</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for p in pesquisas %}
+                            <tr data-especialidade="{{ p.especialidade or '' }}">
+                                <td>{{ p.data_resposta.strftime('%d/%m %H:%M') if p.data_resposta else '-' }}</td>
+                                <td>
+                                    {% if p.pulou %}
+                                    <span class="badge bg-secondary">Pulou</span>
+                                    {% elif p.nota_satisfacao %}
+                                    <span
+                                        class="badge {% if p.nota_satisfacao >= 8 %}bg-success{% elif p.nota_satisfacao >= 5 %}bg-warning{% else %}bg-danger{% endif %}">
+                                        {{ p.nota_satisfacao }}
+                                    </span>
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if p.equipe_atenciosa is not none %}
+                                    {% if p.equipe_atenciosa %}
+                                    <i class="bi bi-check-circle-fill text-success"></i>
+                                    {% else %}
+                                    <i class="bi bi-x-circle-fill text-danger"></i>
+                                    {% endif %}
+                                    {% else %}
+                                    -
+                                    {% endif %}
+                                </td>
+                                <td><small>{{ p.especialidade or '-' }}</small></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Filtro por especialidade
+    document.getElementById('filtroEspecialidade').addEventListener('change', function () {
+        const valor = this.value.toLowerCase();
+        const linhas = document.querySelectorAll('#tabelaPesquisas tbody tr');
+
+        linhas.forEach(linha => {
+            const esp = linha.dataset.especialidade.toLowerCase();
+            if (!valor || esp.includes(valor)) {
+                linha.style.display = '';
+            } else {
+                linha.style.display = 'none';
+            }
+        });
+    });
+</script>
+{% endblock %}

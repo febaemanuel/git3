@@ -31,7 +31,7 @@ def init_consultas_routes(app, db):
         CampanhaConsulta, AgendamentoConsulta, TelefoneConsulta,
         LogMsgConsulta, WhatsApp, formatar_numero,
         formatar_mensagem_comprovante, formatar_mensagem_voltar_posto,
-        extrair_dados_comprovante
+        extrair_dados_comprovante, PesquisaSatisfacao
     )
 
     try:
@@ -546,6 +546,25 @@ def init_consultas_routes(app, db):
             consulta.campanha.atualizar_stats()
             db.session.commit()
 
+            # =====================================================
+            # INICIAR PESQUISA DE SATISFAÇÃO
+            # =====================================================
+            try:
+                msg_pesquisa = """📊 *Pesquisa de Satisfação* (opcional)
+
+De *1 a 10*, qual sua satisfação com a marcação de consulta por WhatsApp?
+
+_(Digite um número de 1 a 10, ou "pular" para não responder)_"""
+                
+                ok_pesq, _ = ws.enviar(telefone, msg_pesquisa)
+                if ok_pesq:
+                    consulta.etapa_pesquisa = 'NOTA'
+                    db.session.commit()
+                    logger.info(f"Pesquisa iniciada para consulta {consulta.id}")
+            except Exception as e:
+                logger.warning(f"Erro ao iniciar pesquisa: {e}")
+                # Não falha o envio do comprovante se pesquisa falhar
+
             return jsonify({'sucesso': True, 'mensagem': 'Comprovante enviado com sucesso!'})
 
         except Exception as e:
@@ -1006,6 +1025,86 @@ def init_consultas_routes(app, db):
             db.session.rollback()
             logger.exception(f"Erro ao excluir campanha: {e}")
             return jsonify({'erro': str(e)}), 500
+
+
+    # =========================================================================
+    # PESQUISAS DE SATISFAÇÃO - Dashboard
+    # =========================================================================
+
+    @app.route('/consultas/pesquisas')
+    @login_required
+    def pesquisas_dashboard():
+        """Dashboard de pesquisas de satisfação"""
+        from sqlalchemy import func
+        
+        # Buscar pesquisas do usuário
+        pesquisas = PesquisaSatisfacao.query.filter_by(usuario_id=current_user.id).order_by(PesquisaSatisfacao.data_resposta.desc()).all()
+        
+        # Calcular estatísticas
+        total = len(pesquisas)
+        respondidas = len([p for p in pesquisas if not p.pulou])
+        puladas = len([p for p in pesquisas if p.pulou])
+        
+        # Média de notas (NPS)
+        notas = [p.nota_satisfacao for p in pesquisas if p.nota_satisfacao is not None]
+        media_nota = round(sum(notas) / len(notas), 1) if notas else 0
+        
+        # % atendimento ágil
+        atenciosos = [p for p in pesquisas if p.equipe_atenciosa is not None]
+        pct_agil = round(len([p for p in atenciosos if p.equipe_atenciosa]) / len(atenciosos) * 100, 1) if atenciosos else 0
+        
+        # Comentários recentes
+        comentarios = [p for p in pesquisas if p.comentario and len(p.comentario.strip()) > 0][:10]
+        
+        # Especialidades para filtro
+        especialidades = list(set([p.especialidade for p in pesquisas if p.especialidade]))
+        especialidades.sort()
+        
+        return render_template('pesquisas_dashboard.html',
+            pesquisas=pesquisas,
+            total=total,
+            respondidas=respondidas,
+            puladas=puladas,
+            media_nota=media_nota,
+            pct_agil=pct_agil,
+            comentarios=comentarios,
+            especialidades=especialidades
+        )
+
+    @app.route('/api/consultas/pesquisas/export')
+    @login_required
+    def pesquisas_export_csv():
+        """Exportar pesquisas para CSV"""
+        import csv
+        from io import StringIO
+        
+        pesquisas = PesquisaSatisfacao.query.filter_by(usuario_id=current_user.id).order_by(PesquisaSatisfacao.data_resposta.desc()).all()
+        
+        output = StringIO()
+        writer = csv.writer(output)
+        
+        # Header
+        writer.writerow(['Data', 'Especialidade', 'Tipo', 'Nota', 'Equipe Ágil', 'Comentário', 'Pulou'])
+        
+        for p in pesquisas:
+            writer.writerow([
+                p.data_resposta.strftime('%d/%m/%Y %H:%M') if p.data_resposta else '',
+                p.especialidade or '',
+                p.tipo_agendamento or '',
+                p.nota_satisfacao or '',
+                'Sim' if p.equipe_atenciosa else ('Não' if p.equipe_atenciosa is False else ''),
+                p.comentario or '',
+                'Sim' if p.pulou else 'Não'
+            ])
+        
+        output.seek(0)
+        
+        from flask import Response
+        return Response(
+            output.getvalue(),
+            mimetype='text/csv',
+            headers={'Content-Disposition': 'attachment; filename=pesquisas_satisfacao.csv'}
+        )
 
 
     logger.info("Rotas do modo consulta inicializadas com sucesso")

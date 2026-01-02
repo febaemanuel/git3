@@ -1155,6 +1155,29 @@ def formatar_data_consulta(data_str):
     except Exception:
         return data_str
 
+def enviar_e_registrar_consulta(ws, telefone, mensagem, consulta):
+    """
+    Envia mensagem via WhatsApp e registra no log automaticamente.
+    Isso garante que todas as mensagens enviadas apareçam no chat.
+    """
+    ok, result = ws.enviar(telefone, mensagem)
+    
+    # Registrar no log independente do resultado
+    log = LogMsgConsulta(
+        campanha_id=consulta.campanha_id,
+        consulta_id=consulta.id,
+        direcao='enviada',
+        telefone=telefone,
+        mensagem=mensagem[:500],
+        status='sucesso' if ok else 'erro',
+        msg_id=result if ok else None,
+        erro=str(result)[:200] if not ok else None
+    )
+    db.session.add(log)
+    db.session.commit()
+    
+    return ok, result
+
 def formatar_mensagem_consulta_inicial(consulta):
     """
     MSG 1: Mensagem inicial de confirmação de consulta (enviada automaticamente)
@@ -1163,8 +1186,8 @@ def formatar_mensagem_consulta_inicial(consulta):
     """
     return f"""Bom dia!
 
-Falamos do HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO.
-Estamos informando que a CONSULTA do paciente {consulta.paciente}, foi MARCADA para o dia {formatar_data_consulta(consulta.data_aghu)}, com {consulta.medico_solicitante}, com especialidade em {consulta.especialidade}.
+Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
+Estamos informando que a *CONSULTA* do paciente *{consulta.paciente}*, foi *MARCADA* para o dia *{formatar_data_consulta(consulta.data_aghu)}*, com *{consulta.medico_solicitante}*, com especialidade em *{consulta.especialidade}*.
 
 Caso não haja confirmação em até 1 dia útil, sua consulta será cancelada!
 
@@ -5374,7 +5397,7 @@ def webhook():
                         consulta.campanha.atualizar_stats()
                         db.session.commit()
 
-                        ws.enviar(numero_resposta, "✅ Consulta confirmada! Aguarde o envio do comprovante.")
+                        enviar_e_registrar_consulta(ws, numero_resposta, "✅ Consulta confirmada! Aguarde o envio do comprovante.", consulta)
                         logger.info(f"Consulta {consulta.id} confirmada por {consulta.paciente}")
 
                     elif verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO):
@@ -5383,7 +5406,7 @@ def webhook():
                         db.session.commit()
 
                         msg_perguntar_motivo = formatar_mensagem_perguntar_motivo()
-                        ws.enviar(numero_resposta, msg_perguntar_motivo)
+                        enviar_e_registrar_consulta(ws, numero_resposta, msg_perguntar_motivo, consulta)
                         logger.info(f"Consulta {consulta.id} rejeitada por {consulta.paciente}, aguardando motivo")
 
                     elif verificar_resposta_em_lista(texto_up, RESPOSTAS_DESCONHECO):
@@ -5396,22 +5419,22 @@ def webhook():
                         consulta.campanha.atualizar_stats()
                         db.session.commit()
 
-                        ws.enviar(numero_resposta, """✅ *Obrigado pela informação!*
+                        enviar_e_registrar_consulta(ws, numero_resposta, """✅ *Obrigado pela informação!*
 
 Vamos atualizar nossos registros e remover seu contato da nossa lista.
 
 Desculpe pelo transtorno.
 
-_Hospital Universitário Walter Cantídio_""")
+_Hospital Universitário Walter Cantídio_""", consulta)
                         logger.info(f"Consulta {consulta.id} rejeitada - paciente não reconhece")
 
                     else:
                         # Resposta não reconhecida
-                        ws.enviar(numero_resposta, """Por favor, responda com uma das opções:
+                        enviar_e_registrar_consulta(ws, numero_resposta, """Por favor, responda com uma das opções:
 
 1️⃣ *SIM* - Tenho interesse
 2️⃣ *NÃO* - Não tenho mais interesse
-3️⃣ *DESCONHEÇO* - Não sou essa pessoa""")
+3️⃣ *DESCONHEÇO* - Não sou essa pessoa""", consulta)
 
                     return jsonify({'status': 'ok'}), 200
 
@@ -5432,7 +5455,7 @@ _Hospital Universitário Walter Cantídio_""")
                         consulta.paciente_voltar_posto_sms.upper() == 'SIM'):
 
                         msg_voltar_posto = formatar_mensagem_voltar_posto(consulta)
-                        ws.enviar(numero_resposta, msg_voltar_posto)
+                        enviar_e_registrar_consulta(ws, numero_resposta, msg_voltar_posto, consulta)
                         logger.info(f"MSG 3B enviada para {consulta.paciente} (INTERCONSULTA + voltar posto)")
 
                     consulta.campanha.atualizar_stats()
@@ -5442,15 +5465,34 @@ _Hospital Universitário Walter Cantídio_""")
 
                 # Outros status (CONFIRMADO, REJEITADO, etc.)
                 else:
-                    # Mensagem após conclusão
+                    # Responder UMA VEZ APENAS quando já está CONFIRMADO/REJEITADO
+                    # Verifica se já enviamos essa mensagem ALGUMA VEZ para esta consulta
+                    
                     if consulta.status == 'CONFIRMADO':
-                        ws.enviar(numero_resposta, "✅ Sua consulta já foi confirmada. Obrigado!")
+                        msg_ja_enviada = LogMsgConsulta.query.filter(
+                            LogMsgConsulta.consulta_id == consulta.id,
+                            LogMsgConsulta.direcao == 'enviada',
+                            LogMsgConsulta.mensagem.like('%já foi confirmada%')
+                        ).first()
+                        
+                        if not msg_ja_enviada:
+                            enviar_e_registrar_consulta(ws, numero_resposta, "✅ Sua consulta já foi confirmada. Obrigado!", consulta)
+                        # Se já enviou, ignora silenciosamente (fluxo encerrado)
+                        
                     elif consulta.status == 'REJEITADO':
-                        ws.enviar(numero_resposta, "Sua consulta foi cancelada. Obrigado!")
+                        msg_ja_enviada = LogMsgConsulta.query.filter(
+                            LogMsgConsulta.consulta_id == consulta.id,
+                            LogMsgConsulta.direcao == 'enviada',
+                            LogMsgConsulta.mensagem.like('%foi cancelada%')
+                        ).first()
+                        if not msg_ja_enviada:
+                            enviar_e_registrar_consulta(ws, numero_resposta, "Sua consulta foi cancelada. Obrigado!", consulta)
+                        # Se já enviou, ignora silenciosamente (fluxo encerrado)
+                        
                     elif consulta.status == 'AGUARDANDO_COMPROVANTE':
-                        ws.enviar(numero_resposta, "✅ Sua consulta está confirmada! Aguarde o envio do comprovante.")
+                        enviar_e_registrar_consulta(ws, numero_resposta, "✅ Sua consulta está confirmada! Aguarde o envio do comprovante.", consulta)
                     else:
-                        ws.enviar(numero_resposta, "Recebemos sua mensagem. Obrigado!")
+                        enviar_e_registrar_consulta(ws, numero_resposta, "Recebemos sua mensagem. Obrigado!", consulta)
 
                     return jsonify({'status': 'ok'}), 200
 

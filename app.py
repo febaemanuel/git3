@@ -5022,6 +5022,7 @@ def verificar_resposta_em_lista(texto_up, lista_respostas):
 
 # Webhook
 @app.route('/webhook/whatsapp', methods=['POST'])
+@csrf.exempt
 def webhook():
     try:
         data = request.get_json()

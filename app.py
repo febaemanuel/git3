@@ -57,6 +57,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+from flask_wtf.csrf import CSRFProtect
+
 # Importar Celery app configurado com backend Redis
 try:
     from celery_app import celery as celery_app
@@ -67,6 +69,7 @@ except ImportError as e:
     logger.warning(f"Celery não disponível - funcionalidades assíncronas desabilitadas: {e}")
 
 app = Flask(__name__)
+csrf = CSRFProtect(app)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'busca-ativa-huwc-2024-secret')
 
 # Database - PostgreSQL (padrao) ou SQLite (fallback)

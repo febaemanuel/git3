@@ -174,7 +174,8 @@ function conectarWhatsApp() {
     fetch('/api/whatsapp/conectar', {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
         }
     })
         .then(res => res.json())

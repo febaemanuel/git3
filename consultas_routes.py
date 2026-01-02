@@ -30,7 +30,8 @@ def init_consultas_routes(app, db):
     from app import (
         CampanhaConsulta, AgendamentoConsulta, TelefoneConsulta,
         LogMsgConsulta, WhatsApp, formatar_numero,
-        formatar_mensagem_comprovante, formatar_mensagem_voltar_posto
+        formatar_mensagem_comprovante, formatar_mensagem_voltar_posto,
+        extrair_dados_comprovante
     )
 
     try:
@@ -484,6 +485,15 @@ def init_consultas_routes(app, db):
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             arquivo.save(filepath)
 
+            # Extrair dados do comprovante via OCR
+            dados_ocr = None
+            try:
+                dados_ocr = extrair_dados_comprovante(filepath)
+                if dados_ocr:
+                    logger.info(f"Dados extraídos do comprovante via OCR: {dados_ocr}")
+            except Exception as ocr_err:
+                logger.warning(f"Erro ao extrair dados via OCR (continuando sem): {ocr_err}")
+
             # Enviar MSG 2 com comprovante
             ws = WhatsApp(consulta.usuario_id)
             if not ws.ok():
@@ -499,8 +509,8 @@ def init_consultas_routes(app, db):
             if not telefone:
                 return jsonify({'erro': 'Nenhum telefone válido encontrado'}), 400
 
-            # Enviar mensagem de texto
-            msg = formatar_mensagem_comprovante()
+            # Enviar mensagem de texto (personalizada com dados do OCR)
+            msg = formatar_mensagem_comprovante(consulta=consulta, dados_ocr=dados_ocr)
             ok_msg, result_msg = ws.enviar(telefone, msg)
 
             if not ok_msg:
@@ -557,6 +567,10 @@ def init_consultas_routes(app, db):
         if consulta.usuario_id != current_user.id and not current_user.is_admin:
             return jsonify({'erro': 'Acesso negado'}), 403
 
+        # Validar status - só pode confirmar se está aguardando
+        if consulta.status in ['CONFIRMADO', 'REJEITADO']:
+            return jsonify({'erro': f'Consulta já está {consulta.status}'}), 400
+
         try:
             consulta.status = 'CONFIRMADO'
             consulta.data_confirmacao = datetime.utcnow()
@@ -581,6 +595,10 @@ def init_consultas_routes(app, db):
 
         if consulta.usuario_id != current_user.id and not current_user.is_admin:
             return jsonify({'erro': 'Acesso negado'}), 403
+
+        # Validar status - não pode cancelar se já está finalizado
+        if consulta.status in ['CONFIRMADO', 'REJEITADO']:
+            return jsonify({'erro': f'Consulta já está {consulta.status}'}), 400
 
         try:
             motivo = request.json.get('motivo', 'Cancelado manualmente') if request.json else 'Cancelado manualmente'
@@ -682,6 +700,8 @@ def init_consultas_routes(app, db):
 
         try:
             mensagem = request.json.get('mensagem', '').strip()
+            telefone_selecionado = request.json.get('telefone', '').strip()
+
             if not mensagem:
                 return jsonify({'erro': 'Mensagem vazia'}), 400
 
@@ -694,11 +714,21 @@ def init_consultas_routes(app, db):
             if not conn:
                 return jsonify({'erro': 'WhatsApp desconectado'}), 400
 
-            # Pegar primeiro telefone disponível
+            # Usar telefone selecionado ou pegar o primeiro disponível
             if not consulta.telefones:
                 return jsonify({'erro': 'Nenhum telefone disponível'}), 400
 
-            telefone = consulta.telefones[0].numero
+            # Validar se o telefone selecionado pertence à consulta
+            telefone = None
+            if telefone_selecionado:
+                for tel in consulta.telefones:
+                    if tel.numero == telefone_selecionado:
+                        telefone = tel.numero
+                        break
+                if not telefone:
+                    return jsonify({'erro': 'Telefone selecionado não pertence a esta consulta'}), 400
+            else:
+                telefone = consulta.telefones[0].numero
 
             # Enviar mensagem
             ok, result = ws.enviar(telefone, mensagem)
@@ -797,6 +827,10 @@ def init_consultas_routes(app, db):
         if consulta.usuario_id != current_user.id and not current_user.is_admin:
             return jsonify({'erro': 'Acesso negado'}), 403
 
+        # Validar status - só pode reenviar se não está finalizado
+        if consulta.status in ['CONFIRMADO', 'REJEITADO']:
+            return jsonify({'erro': f'Não é possível reenviar. Consulta já está {consulta.status}'}), 400
+
         try:
             # Verificar WhatsApp
             ws = WhatsApp(consulta.usuario_id)
@@ -840,10 +874,11 @@ def init_consultas_routes(app, db):
                 )
                 db.session.add(log)
 
-                # Marcar telefone como enviado
+                # Marcar telefone como enviado e atualizar data_envio
                 for tel in consulta.telefones:
                     if tel.numero == telefone:
                         tel.enviado = True
+                        tel.data_envio = datetime.utcnow()
                         break
 
                 db.session.commit()

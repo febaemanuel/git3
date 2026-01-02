@@ -196,7 +196,7 @@
 
                     <div class="mb-2">
                         <small class="text-muted d-block">Medico</small>
-                        <strong>{{ consulta.grade_aghu or consulta.medico_solicitante or '-' }}</strong>
+                        <strong>{{ consulta.medico_solicitante or consulta.grade_aghu or '-' }}</strong>
                     </div>
 
                     {% if consulta.motivo_rejeicao %}

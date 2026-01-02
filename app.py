@@ -1111,6 +1111,50 @@ def extrair_dados_comprovante(filepath):
 # FUNÇÕES DE MENSAGENS - MODO CONSULTA
 # =============================================================================
 
+def formatar_data_consulta(data_str):
+    """
+    Formata a data da consulta para exibição na mensagem.
+    Remove timestamps como "00:00:00" e formata no padrão DD/MM/YYYY.
+    
+    Exemplos de entrada:
+    - "2024-05-20 00:00:00" -> "20/05/2024"
+    - "5/20/2024" -> "20/05/2024"
+    - "20/05/2024" -> "20/05/2024"
+    """
+    if not data_str or not str(data_str).strip():
+        return "-"
+    
+    data_str = str(data_str).strip()
+    
+    # Remover timestamp se existir (ex: "2024-05-20 00:00:00")
+    if ' ' in data_str:
+        data_str = data_str.split(' ')[0]
+    
+    try:
+        from datetime import datetime
+        
+        # Tentar diferentes formatos de entrada
+        formatos = [
+            '%Y-%m-%d',      # 2024-05-20
+            '%d/%m/%Y',      # 20/05/2024
+            '%m/%d/%Y',      # 5/20/2024
+            '%d-%m-%Y',      # 20-05-2024
+        ]
+        
+        for fmt in formatos:
+            try:
+                data_obj = datetime.strptime(data_str, fmt)
+                # Retorna no formato brasileiro DD/MM/YYYY
+                return data_obj.strftime('%d/%m/%Y')
+            except ValueError:
+                continue
+        
+        # Se nenhum formato funcionou, retorna o original
+        return data_str
+        
+    except Exception:
+        return data_str
+
 def formatar_mensagem_consulta_inicial(consulta):
     """
     MSG 1: Mensagem inicial de confirmação de consulta (enviada automaticamente)
@@ -1120,7 +1164,7 @@ def formatar_mensagem_consulta_inicial(consulta):
     return f"""Bom dia!
 
 Falamos do HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO.
-Estamos informando que a CONSULTA do paciente {consulta.paciente}, foi MARCADA para o dia {consulta.data_aghu} 00:00:00, com {consulta.medico_solicitante}, com especialidade em {consulta.especialidade}.
+Estamos informando que a CONSULTA do paciente {consulta.paciente}, foi MARCADA para o dia {formatar_data_consulta(consulta.data_aghu)}, com {consulta.medico_solicitante}, com especialidade em {consulta.especialidade}.
 
 Caso não haja confirmação em até 1 dia útil, sua consulta será cancelada!
 
@@ -5024,10 +5068,10 @@ def webhook():
 
                     # Ordenar por data (mais próxima primeiro)
                     for consulta in sorted(consultas_pendentes, key=lambda c: c.data_aghu or ''):
-                        data_str = consulta.data_aghu or 'Data não informada'
+                        data_str = formatar_data_consulta(consulta.data_aghu) if consulta.data_aghu else 'Data não informada'
                         menu_texto += f"{opcao}️⃣ *CONSULTA* - {consulta.especialidade or 'Especialidade'}\n"
                         menu_texto += f"   📅 {data_str}\n"
-                        menu_texto += f"   👨‍⚕️ {consulta.grade_aghu or 'Médico não informado'}\n\n"
+                        menu_texto += f"   👨‍⚕️ {consulta.medico_solicitante or consulta.grade_aghu or 'Médico não informado'}\n\n"
                         opcao += 1
 
                     for cirurgia in cirurgias_pendentes:
@@ -5160,7 +5204,7 @@ def webhook():
                         item.campanha.atualizar_stats()
                         db.session.commit()
 
-                        ws.enviar(numero, f"✅ *Consulta confirmada!*\n\n📅 {item.data_aghu or 'Data não informada'}\n👨‍⚕️ {item.especialidade or 'Especialidade'}\n\nAguarde o envio do comprovante.")
+                        ws.enviar(numero, f"✅ *Consulta confirmada!*\n\n📅 {formatar_data_consulta(item.data_aghu) if item.data_aghu else 'Data não informada'}\n👨‍⚕️ {item.especialidade or 'Especialidade'}\n\nAguarde o envio do comprovante.")
                         logger.info(f"Consulta {item.id} confirmada via menu por {item.paciente}")
 
                         # Log da mensagem recebida

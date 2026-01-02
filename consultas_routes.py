@@ -172,7 +172,7 @@ def init_consultas_routes(app, db):
                             telefone_registro=str(row.get('TELEFONE REGISTRO', '')).strip(),
                             data_registro=str(row.get('DATA DO REGISTRO', '')).strip(),
                             procedencia=str(row.get('PROCEDÊNCIA', '')).strip(),
-                            medico_solicitante=str(row.get('MEDICO_SOLICITANTE', '')).strip(),
+                            medico_solicitante=str(row.get('MEDICO_SOLICITANTE', '') or row.get('MEDICO SOLICITANTE', '') or row.get('MEDICO', '')).strip(),
                             tipo=str(row.get('TIPO', '')).strip().upper(),  # RETORNO ou INTERCONSULTA
                             observacoes=str(row.get('OBSERVAÇÕES', '')).strip(),
                             exames=str(row.get('EXAMES', '')).strip(),

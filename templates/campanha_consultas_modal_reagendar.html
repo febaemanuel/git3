@@ -1,0 +1,92 @@
+<!-- Modal Reagendamento -->
+<div class="modal fade" id="modalReagendamento" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Reagendar Consulta</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>Paciente: <strong id="reagendamentoPaciente"></strong></p>
+                <input type="hidden" id="reagendamentoConsultaId">
+
+                <div class="mb-3">
+                    <label class="form-label">Nova Data</label>
+                    <input type="date" class="form-control" id="novaDataReagendamento" required>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Novo Horário</label>
+                    <input type="time" class="form-control" id="novaHoraReagendamento" required>
+                </div>
+
+                <div class="alert alert-info">
+                    <small>Ao salvar, o paciente receberá uma mensagem com a nova data solicitando confirmação.</small>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="salvarReagendamento()">Reagendar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let modalReagendamento_bs = null;
+
+    function abrirReagendamento(id, paciente) {
+        document.getElementById('reagendamentoConsultaId').value = id;
+        document.getElementById('reagendamentoPaciente').textContent = paciente;
+
+        // Limpar campos
+        document.getElementById('novaDataReagendamento').value = '';
+        document.getElementById('novaHoraReagendamento').value = '';
+
+        if (!modalReagendamento_bs) {
+            modalReagendamento_bs = new bootstrap.Modal(document.getElementById('modalReagendamento'));
+        }
+        modalReagendamento_bs.show();
+    }
+
+    function salvarReagendamento() {
+        const id = document.getElementById('reagendamentoConsultaId').value;
+        const novaData = document.getElementById('novaDataReagendamento').value;
+        const novaHora = document.getElementById('novaHoraReagendamento').value;
+
+        if (!novaData || !novaHora) {
+            alert('Por favor, preencha a data e o horário.');
+            return;
+        }
+
+        // Formatar data para DD/MM/YYYY se necessário (o input date retorna YYYY-MM-DD)
+        const dataParts = novaData.split('-');
+        const dataFormatada = `${dataParts[2]}/${dataParts[1]}/${dataParts[0]}`;
+
+        fetch(`/api/consulta/${id}/reagendar`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': '{{ csrf_token() }}'
+            },
+            body: JSON.stringify({
+                nova_data: dataFormatada,
+                nova_hora: novaHora
+            })
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.erro) {
+                    alert('Erro: ' + data.erro);
+                } else {
+                    alert(data.mensagem);
+                    modalReagendamento_bs.hide();
+                    location.reload();
+                }
+            })
+            .catch(error => {
+                console.error('Erro:', error);
+                alert('Erro ao processar reagendamento.');
+            });
+    }
+</script>

@@ -547,6 +547,65 @@ def init_consultas_routes(app, db):
             db.session.commit()
 
             # =====================================================
+            # HISTÓRICO DO PACIENTE (Novo)
+            # =====================================================
+            try:
+                # 1. Buscar ou criar paciente
+                paciente_db = Paciente.query.filter_by(usuario_id=current_user.id, telefone=telefone).first()
+                if not paciente_db:
+                    paciente_db = Paciente.query.filter_by(usuario_id=current_user.id, nome=dados_ocr.get('paciente', consulta.paciente)).first()
+                
+                if not paciente_db:
+                    paciente_db = Paciente(
+                        usuario_id=current_user.id,
+                        nome=dados_ocr.get('paciente', consulta.paciente),
+                        telefone=telefone,
+                        data_nascimento=dados_ocr.get('data_nascimento'),
+                        prontuario=dados_ocr.get('prontuario'),
+                        codigo=dados_ocr.get('codigo')
+                    )
+                    db.session.add(paciente_db)
+                    db.session.commit()
+                else:
+                    if dados_ocr.get('data_nascimento'): paciente_db.data_nascimento = dados_ocr.get('data_nascimento')
+                    if dados_ocr.get('prontuario'): paciente_db.prontuario = dados_ocr.get('prontuario')
+                    if dados_ocr.get('codigo'): paciente_db.codigo = dados_ocr.get('codigo')
+                    db.session.commit()
+
+                # 2. Criar registro no histórico
+                historico = HistoricoConsulta(
+                    paciente_id=paciente_db.id,
+                    consulta_id=consulta.id,
+                    usuario_id=current_user.id,
+                    nro_consulta=dados_ocr.get('nro_consulta'),
+                    data_consulta=dados_ocr.get('data'),
+                    hora_consulta=dados_ocr.get('hora'),
+                    dia_semana=dados_ocr.get('dia'),
+                    grade=dados_ocr.get('grade'),
+                    unidade_funcional=dados_ocr.get('unidade_funcional'),
+                    andar=dados_ocr.get('andar'),
+                    ala_bloco=dados_ocr.get('ala_bloco'),
+                    setor=dados_ocr.get('setor'),
+                    sala=dados_ocr.get('sala'),
+                    tipo_consulta=dados_ocr.get('consulta'),
+                    tipo_demanda=dados_ocr.get('tipo'),
+                    equipe=dados_ocr.get('equipe'),
+                    profissional=dados_ocr.get('profissional'),
+                    especialidade=consulta.especialidade,
+                    marcado_por=dados_ocr.get('marcado_por'),
+                    observacao=dados_ocr.get('observacao'),
+                    nro_autorizacao=dados_ocr.get('nro_autorizacao'),
+                    status='CONFIRMADA',
+                    comprovante_path=filepath
+                )
+                db.session.add(historico)
+                db.session.commit()
+                logger.info(f"Histórico salvo para paciente {paciente_db.nome}")
+
+            except Exception as e:
+                logger.error(f"Erro ao salvar histórico: {e}")
+
+            # =====================================================
             # INICIAR PESQUISA DE SATISFAÇÃO
             # =====================================================
             try:
@@ -563,13 +622,86 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
                     logger.info(f"Pesquisa iniciada para consulta {consulta.id}")
             except Exception as e:
                 logger.warning(f"Erro ao iniciar pesquisa: {e}")
-                # Não falha o envio do comprovante se pesquisa falhar
 
             return jsonify({'sucesso': True, 'mensagem': 'Comprovante enviado com sucesso!'})
 
         except Exception as e:
             db.session.rollback()
             logger.exception(f"Erro ao enviar comprovante: {e}")
+            return jsonify({'erro': str(e)}), 500
+
+
+    @app.route('/api/consulta/<int:consulta_id>/reagendar', methods=['POST'])
+    @login_required
+    def reagendar_consulta_manual(consulta_id):
+        """
+        Processa o reagendamento manual de uma consulta.
+        O admin informa nova data/hora. O sistema envia msg confirmando.
+        """
+        consulta = AgendamentoConsulta.query.get_or_404(consulta_id)
+        
+        # Verificar permissão (mesmo criador)
+        if consulta.campanha.criador_id != current_user.id:
+            return jsonify({'erro': 'Acesso negado'}), 403
+
+        data = request.json
+        nova_data = data.get('nova_data')
+        nova_hora = data.get('nova_hora')
+
+        if not nova_data or not nova_hora:
+            return jsonify({'erro': 'Data e hora são obrigatórios'}), 400
+
+        try:
+            # 1. Atualizar consulta
+            consulta.status = 'REAGENDADO'
+            consulta.nova_data = nova_data
+            consulta.nova_hora = nova_hora
+            consulta.data_reagendamento = datetime.utcnow()
+            
+            # Buscar telefone válido
+            telefone = None
+            for tel in consulta.telefones:
+                if tel.enviado or tel.prioridade == 1:
+                    telefone = tel.numero
+                    break
+            
+            if not telefone:
+                 telefone = consulta.telefones[0].numero if consulta.telefones else None
+            
+            if not telefone:
+                return jsonify({'erro': 'Consulta sem telefone'}), 400
+
+            # 2. Enviar mensagem de confirmação do reagendamento
+            msg_reagendamento = f"""📅 *CONSULTA REAGENDADA!*
+
+Olá, {consulta.paciente}!
+
+Conseguimos uma nova data para sua consulta.
+
+🗓 *Nova Data:* {nova_data}
+⏰ *Horário:* {nova_hora}
+👨‍⚕️ *Especialidade:* {consulta.especialidade}
+
+Por favor, confirme se poderá comparecer respondendo:
+1️⃣ *SIM* - Confirmar
+2️⃣ *NÃO* - Não posso ir
+
+_Hospital Universitário Walter Cantídio_"""
+
+            ws = WhatsApp(current_user.id)
+            ok, result = ws.enviar(telefone, msg_reagendamento)
+            
+            if ok:
+                consulta.mensagem_enviada = True 
+                enviar_e_registrar_consulta(ws, telefone, msg_reagendamento, consulta)
+            
+            db.session.commit()
+            
+            return jsonify({'sucesso': True, 'mensagem': 'Reagendado com sucesso!'})
+
+        except Exception as e:
+            db.session.rollback()
+            logger.exception(f"Erro ao reagendar: {e}")
             return jsonify({'erro': str(e)}), 500
 
 

@@ -328,6 +328,12 @@
                                     <span class="badge bg-danger"><i class="bi bi-x-circle"></i> Rejeitado</span>
                                     {% elif consulta.status == 'AGUARDANDO_ENVIO' %}
                                     <span class="badge bg-secondary"><i class="bi bi-clock"></i> Pendente</span>
+                                    {% elif consulta.status == 'AGUARDANDO_REAGENDAMENTO' %}
+                                    <span class="badge bg-warning text-dark"><i class="bi bi-calendar-event"></i>
+                                        Reagendar</span>
+                                    {% elif consulta.status == 'REAGENDADO' %}
+                                    <span class="badge bg-primary"><i class="bi bi-calendar-check"></i>
+                                        Reagendado</span>
                                     {% else %}
                                     <span class="badge bg-secondary">{{ consulta.status }}</span>
                                     {% endif %}
@@ -360,6 +366,15 @@
                                         <button class="btn btn-sm btn-outline-success" title="Confirmar manualmente"
                                             onclick="confirmarConsulta({{ consulta.id }})">
                                             <i class="bi bi-check-lg"></i>
+                                        </button>
+                                        {% endif %}
+
+                                        {% if consulta.status == 'AGUARDANDO_REAGENDAMENTO' or consulta.status ==
+                                        'AGUARDANDO_OPCAO_REJEICAO' %}
+                                        <!-- Reagendar -->
+                                        <button class="btn btn-sm btn-primary" title="Reagendar consulta"
+                                            onclick="abrirReagendamento({{ consulta.id }}, '{{ consulta.paciente }}')">
+                                            <i class="bi bi-calendar-range"></i>
                                         </button>
                                         {% endif %}
 
@@ -745,4 +760,6 @@
             .catch(err => alert('Erro: ' + err));
     }
 </script>
+
+{% include 'campanha_consultas_modal_reagendar.html' %}
 {% endblock %}

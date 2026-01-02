@@ -1,5 +1,5 @@
 """
-Script de migração para adicionar pesquisa de satisfação
+Script de migração para adicionar pesquisa de satisfação + histórico + reagendamento
 Execute: python migrate_pesquisa.py
 """
 
@@ -7,9 +7,9 @@ from app import app, db
 from sqlalchemy import text
 
 with app.app_context():
-    # Criar tabela de pesquisas se não existir (PostgreSQL)
-    try:
-        with db.engine.connect() as conn:
+    with db.engine.connect() as conn:
+        # 1. Tabela PESQUISAS_SATISFACAO
+        try:
             conn.execute(text("""
                 CREATE TABLE IF NOT EXISTS pesquisas_satisfacao (
                     id SERIAL PRIMARY KEY,
@@ -27,23 +27,87 @@ with app.app_context():
                 )
             """))
             conn.commit()
-        print("[OK] Tabela pesquisas_satisfacao criada/verificada")
-    except Exception as e:
-        if "already exists" in str(e).lower():
-            print("[OK] Tabela pesquisas_satisfacao ja existe")
-        else:
-            print(f"Tabela pesquisas_satisfacao: {e}")
+            print("[OK] Tabela pesquisas_satisfacao")
+        except Exception as e:
+            print(f"[ERR] Tabela pesquisas_satisfacao: {e}")
 
-    # Adicionar coluna etapa_pesquisa se não existir
-    try:
-        with db.engine.connect() as conn:
-            conn.execute(text("ALTER TABLE agendamentos_consultas ADD COLUMN etapa_pesquisa VARCHAR(30)"))
+        # 2. Tabela PACIENTES
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS pacientes (
+                    id SERIAL PRIMARY KEY,
+                    usuario_id INTEGER,
+                    nome VARCHAR(200) NOT NULL,
+                    data_nascimento VARCHAR(20),
+                    prontuario VARCHAR(50),
+                    codigo VARCHAR(50),
+                    telefone VARCHAR(20),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+                )
+            """))
             conn.commit()
-        print("[OK] Coluna etapa_pesquisa adicionada")
-    except Exception as e:
-        if "already exists" in str(e).lower() or "duplicate column" in str(e).lower():
-            print("[OK] Coluna etapa_pesquisa ja existe")
-        else:
-            print(f"Coluna etapa_pesquisa: {e}")
+            print("[OK] Tabela pacientes")
+        except Exception as e:
+            print(f"[ERR] Tabela pacientes: {e}")
+
+        # 3. Tabela HISTORICO_CONSULTAS
+        try:
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS historico_consultas (
+                    id SERIAL PRIMARY KEY,
+                    paciente_id INTEGER,
+                    consulta_id INTEGER,
+                    usuario_id INTEGER,
+                    nro_consulta VARCHAR(50),
+                    data_consulta VARCHAR(20),
+                    hora_consulta VARCHAR(10),
+                    dia_semana VARCHAR(10),
+                    grade VARCHAR(50),
+                    unidade_funcional VARCHAR(200),
+                    andar VARCHAR(10),
+                    ala_bloco VARCHAR(50),
+                    setor VARCHAR(50),
+                    sala VARCHAR(10),
+                    tipo_consulta VARCHAR(100),
+                    tipo_demanda VARCHAR(100),
+                    equipe VARCHAR(100),
+                    profissional VARCHAR(200),
+                    especialidade VARCHAR(100),
+                    marcado_por VARCHAR(100),
+                    observacao TEXT,
+                    nro_autorizacao VARCHAR(50),
+                    status VARCHAR(50) DEFAULT 'CONFIRMADA',
+                    comprovante_path VARCHAR(255),
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (paciente_id) REFERENCES pacientes(id) ON DELETE CASCADE,
+                    FOREIGN KEY (consulta_id) REFERENCES agendamentos_consultas(id) ON DELETE SET NULL,
+                    FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+                )
+            """))
+            conn.commit()
+            print("[OK] Tabela historico_consultas")
+        except Exception as e:
+            print(f"[ERR] Tabela historico_consultas: {e}")
+
+        # 4. Colunas na tabela AGENDAMENTOS_CONSULTAS
+        colunas = [
+            ("etapa_pesquisa", "VARCHAR(30)"),
+            ("data_reagendamento", "TIMESTAMP"),
+            ("nova_data", "VARCHAR(50)"),
+            ("nova_hora", "VARCHAR(20)")
+        ]
+        
+        for col_nome, col_tipo in colunas:
+            try:
+                conn.execute(text(f"ALTER TABLE agendamentos_consultas ADD COLUMN {col_nome} {col_tipo}"))
+                conn.commit()
+                print(f"[OK] Coluna {col_nome}")
+            except Exception as e:
+                if "duplicate" in str(e).lower() or "exists" in str(e).lower():
+                    print(f"[OK] Coluna {col_nome} ja existe")
+                else:
+                    print(f"[ERR] Coluna {col_nome}: {e}")
 
     print("\nMigracao concluida!")

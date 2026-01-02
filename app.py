@@ -915,7 +915,8 @@ class AgendamentoConsulta(db.Model):
     # Controle de status do fluxo
     status = db.Column(db.String(50), default='AGUARDANDO_ENVIO')
     # Fluxo: AGUARDANDO_ENVIO → AGUARDANDO_CONFIRMACAO → AGUARDANDO_COMPROVANTE → CONFIRMADO
-    #                                                   → AGUARDANDO_MOTIVO_REJEICAO → REJEITADO
+    #                                                   → AGUARDANDO_OPCAO_REJEICAO → AGUARDANDO_MOTIVO_REJEICAO → REJEITADO
+    #                                                                               → AGUARDANDO_REAGENDAMENTO → REAGENDADO
 
     mensagem_enviada = db.Column(db.Boolean, default=False)
     data_envio_mensagem = db.Column(db.DateTime)
@@ -926,6 +927,11 @@ class AgendamentoConsulta(db.Model):
 
     # Rejeição
     motivo_rejeicao = db.Column(db.Text)  # Armazena o motivo quando paciente rejeita
+
+    # Reagendamento
+    data_reagendamento = db.Column(db.DateTime)  # Quando foi reagendado
+    nova_data = db.Column(db.String(50))         # Nova data da consulta
+    nova_hora = db.Column(db.String(20))         # Nova hora da consulta
 
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -1000,6 +1006,67 @@ class PesquisaSatisfacao(db.Model):
     consulta = db.relationship('AgendamentoConsulta', backref='pesquisa_satisfacao')
     usuario = db.relationship('Usuario', backref='pesquisas_satisfacao')
 
+
+class Paciente(db.Model):
+    """Cadastro de pacientes para histórico de consultas"""
+    __tablename__ = 'pacientes'
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    
+    # Dados do paciente (extraídos do comprovante)
+    nome = db.Column(db.String(200), nullable=False)
+    data_nascimento = db.Column(db.String(20))
+    prontuario = db.Column(db.String(50))
+    codigo = db.Column(db.String(50))
+    telefone = db.Column(db.String(20))
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    usuario = db.relationship('Usuario', backref='pacientes')
+
+
+class HistoricoConsulta(db.Model):
+    """Histórico de consultas do paciente (dados do comprovante OCR)"""
+    __tablename__ = 'historico_consultas'
+    id = db.Column(db.Integer, primary_key=True)
+    paciente_id = db.Column(db.Integer, db.ForeignKey('pacientes.id', ondelete='CASCADE'))
+    consulta_id = db.Column(db.Integer, db.ForeignKey('agendamentos_consultas.id', ondelete='SET NULL'))
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+    
+    # Dados do comprovante (OCR)
+    nro_consulta = db.Column(db.String(50))
+    data_consulta = db.Column(db.String(20))
+    hora_consulta = db.Column(db.String(10))
+    dia_semana = db.Column(db.String(10))
+    grade = db.Column(db.String(50))
+    unidade_funcional = db.Column(db.String(200))
+    andar = db.Column(db.String(10))
+    ala_bloco = db.Column(db.String(50))
+    setor = db.Column(db.String(50))
+    sala = db.Column(db.String(10))
+    tipo_consulta = db.Column(db.String(100))  # S ANESTESIOLOG, etc
+    tipo_demanda = db.Column(db.String(100))   # SUS/DEMANDA ESPONTANEA/RETORNO
+    equipe = db.Column(db.String(100))
+    profissional = db.Column(db.String(200))   # Médico
+    especialidade = db.Column(db.String(100))
+    marcado_por = db.Column(db.String(100))
+    observacao = db.Column(db.Text)
+    nro_autorizacao = db.Column(db.String(50))
+    
+    # Status
+    status = db.Column(db.String(50), default='CONFIRMADA')  # CONFIRMADA, CANCELADA, REAGENDADA, FALTOU
+    
+    # Comprovante
+    comprovante_path = db.Column(db.String(255))
+    
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    paciente = db.relationship('Paciente', backref='historico')
+    consulta = db.relationship('AgendamentoConsulta', backref='historico')
+    usuario = db.relationship('Usuario', backref='historico_consultas')
 
 # =============================================================================
 # FUNÇÕES DE OCR - EXTRAÇÃO DE DADOS DO COMPROVANTE
@@ -5431,13 +5498,18 @@ def webhook():
                         logger.info(f"Consulta {consulta.id} confirmada por {consulta.paciente}")
 
                     elif verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO):
-                        # Paciente rejeitou! → Perguntar motivo (MSG 3A)
-                        consulta.status = 'AGUARDANDO_MOTIVO_REJEICAO'
+                        # Paciente respondeu NÃO (Opção 2)
+                        # Perguntar se quer CANCELAR ou REAGENDAR
+                        consulta.status = 'AGUARDANDO_OPCAO_REJEICAO'
                         db.session.commit()
 
-                        msg_perguntar_motivo = formatar_mensagem_perguntar_motivo()
-                        enviar_e_registrar_consulta(ws, numero_resposta, msg_perguntar_motivo, consulta)
-                        logger.info(f"Consulta {consulta.id} rejeitada por {consulta.paciente}, aguardando motivo")
+                        msg_opcao = """Entendemos! O que você deseja fazer?
+
+1️⃣ *CANCELAR* - Não quero mais a consulta
+2️⃣ *REAGENDAR* - Quero mudar a data/horário"""
+                        
+                        enviar_e_registrar_consulta(ws, numero_resposta, msg_opcao, consulta)
+                        logger.info(f"Consulta {consulta.id}: paciente escolheu opção 2 (NÃO), oferecendo cancelar/reagendar")
 
                     elif verificar_resposta_em_lista(texto_up, RESPOSTAS_DESCONHECO):
                         # Paciente não conhece → REJEITADO imediatamente
@@ -5466,6 +5538,42 @@ _Hospital Universitário Walter Cantídio_""", consulta)
 2️⃣ *NÃO* - Não consigo ir / Não quero mais
 3️⃣ *DESCONHEÇO* - Não sou essa pessoa""", consulta)
 
+                    return jsonify({'status': 'ok'}), 200
+
+                # ESTADO 1.5: AGUARDANDO_OPCAO_REJEICAO (resposta se quer cancelar ou reagendar)
+                elif consulta.status == 'AGUARDANDO_OPCAO_REJEICAO':
+                    # Verificar resposta (1=CANCELAR, 2=REAGENDAR)
+                    
+                    if verificar_resposta_em_lista(texto_up, ['1', 'UM', 'CANCELAR']):
+                        # Quer CANCELAR → Perguntar motivo (fluxo antigo)
+                        consulta.status = 'AGUARDANDO_MOTIVO_REJEICAO'
+                        db.session.commit()
+
+                        msg_perguntar_motivo = formatar_mensagem_perguntar_motivo()
+                        enviar_e_registrar_consulta(ws, numero_resposta, msg_perguntar_motivo, consulta)
+                        logger.info(f"Consulta {consulta.id}: paciente escolheu CANCELAR, aguardando motivo")
+                        
+                    elif verificar_resposta_em_lista(texto_up, ['2', 'DOIS', 'REAGENDAR']):
+                        # Quer REAGENDAR → Status especial para equipe atuar
+                        consulta.status = 'AGUARDANDO_REAGENDAMENTO'
+                        db.session.commit()
+                        
+                        enviar_e_registrar_consulta(ws, numero_resposta, """✅ *Entendido!*
+                        
+Nossa equipe foi notificada e entrará em contato em breve para verificar uma nova data disponível para você.
+
+Por favor, aguarde nosso retorno.
+
+_Hospital Universitário Walter Cantídio_""", consulta)
+                        logger.info(f"Consulta {consulta.id}: paciente escolheu REAGENDAR (aguardando equipe)")
+                        
+                    else:
+                        # Resposta inválida
+                        enviar_e_registrar_consulta(ws, numero_resposta, """Por favor, digite o número da opção desejada:
+
+1️⃣ *CANCELAR* - Não quero mais a consulta
+2️⃣ *REAGENDAR* - Quero mudar a data/horário""", consulta)
+                        
                     return jsonify({'status': 'ok'}), 200
 
                 # ESTADO 2: AGUARDANDO_MOTIVO_REJEICAO (resposta à MSG 3A)

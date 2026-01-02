@@ -5429,11 +5429,11 @@ def webhook():
                 # Separar por status
                 em_fluxo = [
                     tel for tel in consultas_recentes
-                    if tel.consulta.status in ['AGUARDANDO_CONFIRMACAO', 'AGUARDANDO_MOTIVO_REJEICAO']
+                    if tel.consulta.status in ['AGUARDANDO_CONFIRMACAO', 'AGUARDANDO_MOTIVO_REJEICAO', 'AGUARDANDO_OPCAO_REJEICAO', 'REAGENDADO']
                 ]
                 outras = [
                     tel for tel in consultas_recentes
-                    if tel.consulta.status not in ['AGUARDANDO_CONFIRMACAO', 'AGUARDANDO_MOTIVO_REJEICAO']
+                    if tel.consulta.status not in ['AGUARDANDO_CONFIRMACAO', 'AGUARDANDO_MOTIVO_REJEICAO', 'AGUARDANDO_OPCAO_REJEICAO', 'REAGENDADO']
                 ]
 
                 # Priorizar consultas em fluxo ativo, depois as mais recentes
@@ -5602,6 +5602,55 @@ _Hospital Universitário Walter Cantídio_""", consulta)
 
                     consulta.campanha.atualizar_stats()
                     db.session.commit()
+
+                    return jsonify({'status': 'ok'}), 200
+
+                # ESTADO 3: REAGENDADO (resposta à mensagem de reagendamento)
+                elif consulta.status == 'REAGENDADO':
+                    # Paciente recebeu nova data e está confirmando
+                    if verificar_resposta_em_lista(texto_up, RESPOSTAS_SIM):
+                        # Paciente confirmou o reagendamento! → AGUARDANDO_COMPROVANTE
+                        consulta.status = 'AGUARDANDO_COMPROVANTE'
+                        consulta.data_confirmacao = datetime.utcnow()
+                        db.session.commit()
+
+                        consulta.campanha.atualizar_stats()
+                        db.session.commit()
+
+                        # Mensagem de confirmação com a nova data
+                        nova_data = consulta.nova_data or consulta.data_aghu or 'data agendada'
+                        nova_hora = consulta.nova_hora or ''
+                        msg_confirmacao = f"""✅ *Reagendamento confirmado!*
+
+📅 Data: {nova_data}
+⏰ Horário: {nova_hora}
+👨‍⚕️ Especialidade: {consulta.especialidade}
+
+Aguarde o envio do comprovante.
+
+_Hospital Universitário Walter Cantídio_"""
+                        enviar_e_registrar_consulta(ws, numero_resposta, msg_confirmacao, consulta)
+                        logger.info(f"Consulta {consulta.id} reagendamento confirmado por {consulta.paciente}")
+
+                    elif verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO):
+                        # Paciente não pode ir na nova data → perguntar o que quer fazer
+                        consulta.status = 'AGUARDANDO_OPCAO_REJEICAO'
+                        db.session.commit()
+
+                        msg_opcao = """Entendemos! O que você deseja fazer?
+
+1️⃣ *CANCELAR* - Não quero mais a consulta
+2️⃣ *REAGENDAR* - Quero outra data/horário"""
+
+                        enviar_e_registrar_consulta(ws, numero_resposta, msg_opcao, consulta)
+                        logger.info(f"Consulta {consulta.id}: paciente não confirmou reagendamento, oferecendo opções")
+
+                    else:
+                        # Resposta não reconhecida
+                        enviar_e_registrar_consulta(ws, numero_resposta, """Por favor, responda com uma das opções:
+
+1️⃣ *SIM* - Confirmar a nova data
+2️⃣ *NÃO* - Não posso ir nessa data""", consulta)
 
                     return jsonify({'status': 'ok'}), 200
 

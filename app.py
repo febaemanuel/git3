@@ -1194,7 +1194,7 @@ Caso não haja confirmação em até 1 dia útil, sua consulta será cancelada!
 Posso confirmar o agendamento?
 
 1️⃣ *SIM* - Tenho interesse
-2️⃣ *NÃO* - Não tenho mais interesse
+2️⃣ *NÃO* - Não consigo ir / Não quero mais
 3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
 
 
@@ -5433,7 +5433,7 @@ _Hospital Universitário Walter Cantídio_""", consulta)
                         enviar_e_registrar_consulta(ws, numero_resposta, """Por favor, responda com uma das opções:
 
 1️⃣ *SIM* - Tenho interesse
-2️⃣ *NÃO* - Não tenho mais interesse
+2️⃣ *NÃO* - Não consigo ir / Não quero mais
 3️⃣ *DESCONHEÇO* - Não sou essa pessoa""", consulta)
 
                     return jsonify({'status': 'ok'}), 200
@@ -5486,7 +5486,13 @@ _Hospital Universitário Walter Cantídio_""", consulta)
                             LogMsgConsulta.mensagem.like('%foi cancelada%')
                         ).first()
                         if not msg_ja_enviada:
-                            enviar_e_registrar_consulta(ws, numero_resposta, "Sua consulta foi cancelada. Obrigado!", consulta)
+                            enviar_e_registrar_consulta(ws, numero_resposta, """📋 *Registro atualizado!*
+
+Nossa equipe analisará sua resposta e, se necessário, entrará em contato para verificar a melhor opção para você.
+
+Obrigado pelo retorno!
+
+_Hospital Universitário Walter Cantídio_""", consulta)
                         # Se já enviou, ignora silenciosamente (fluxo encerrado)
                         
                     elif consulta.status == 'AGUARDANDO_COMPROVANTE':

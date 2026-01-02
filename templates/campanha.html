@@ -375,7 +375,7 @@ const campanhaId = {{ campanha.id }};
 function iniciarCampanha() {
     if (!confirm('Iniciar envio de mensagens?')) return;
 
-    fetch(`/campanha/${campanhaId}/iniciar`, { method: 'POST' })
+    fetch(`/campanha/${campanhaId}/iniciar`, { method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token() }}'} })
         .then(res => res.json())
         .then(data => {
             if (data.sucesso) {
@@ -392,7 +392,7 @@ function iniciarCampanha() {
 function pausarCampanha() {
     if (!confirm('Pausar envio de mensagens?')) return;
 
-    fetch(`/campanha/${campanhaId}/pausar`, { method: 'POST' })
+    fetch(`/campanha/${campanhaId}/pausar`, { method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token() }}'} })
         .then(res => res.json())
         .then(data => {
             if (data.sucesso) {
@@ -408,7 +408,7 @@ function pausarCampanha() {
 function cancelarCampanha() {
     if (!confirm('Tem certeza que deseja cancelar esta campanha?')) return;
 
-    fetch(`/campanha/${campanhaId}/cancelar`, { method: 'POST' })
+    fetch(`/campanha/${campanhaId}/cancelar`, { method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token() }}'} })
         .then(res => res.json())
         .then(data => {
             if (data.sucesso) {
@@ -422,7 +422,7 @@ function cancelarCampanha() {
 
 // Funcao para confirmar contato
 function confirmarContato(id) {
-    fetch(`/api/contato/${id}/confirmar`, { method: 'POST' })
+    fetch(`/api/contato/${id}/confirmar`, { method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token() }}'} })
         .then(res => res.json())
         .then(data => {
             if (data.sucesso) {
@@ -436,7 +436,7 @@ function confirmarContato(id) {
 
 // Funcao para rejeitar contato
 function rejeitarContato(id) {
-    fetch(`/api/contato/${id}/rejeitar`, { method: 'POST' })
+    fetch(`/api/contato/${id}/rejeitar`, { method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token() }}'} })
         .then(res => res.json())
         .then(data => {
             if (data.sucesso) {
@@ -452,7 +452,7 @@ function rejeitarContato(id) {
 function reenviarContato(id) {
     if (!confirm('Reenviar mensagem para este contato?')) return;
 
-    fetch(`/api/contato/${id}/reenviar`, { method: 'POST' })
+    fetch(`/api/contato/${id}/reenviar`, { method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token() }}'} })
         .then(res => res.json())
         .then(data => {
             if (data.sucesso) {

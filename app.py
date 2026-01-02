@@ -974,6 +974,140 @@ class LogMsgConsulta(db.Model):
 
 
 # =============================================================================
+# FUNÇÕES DE OCR - EXTRAÇÃO DE DADOS DO COMPROVANTE
+# =============================================================================
+
+def extrair_dados_comprovante(filepath):
+    """
+    Extrai dados do comprovante de consulta usando OCR.
+    Suporta PDF, JPG e PNG.
+
+    Retorna dict com:
+    - paciente: nome do paciente
+    - data: data da consulta (ex: "16/01/2026")
+    - hora: horário da consulta (ex: "07:00")
+    - medico: nome do médico
+    - especialidade: especialidade médica
+    - raw_text: texto completo extraído
+    """
+    import re
+
+    try:
+        import pytesseract
+        from PIL import Image
+    except ImportError:
+        logger.warning("pytesseract ou PIL não disponível para OCR")
+        return None
+
+    dados = {
+        'paciente': None,
+        'data': None,
+        'hora': None,
+        'medico': None,
+        'especialidade': None,
+        'raw_text': ''
+    }
+
+    try:
+        ext = os.path.splitext(filepath)[1].lower()
+        images = []
+
+        # Converter PDF para imagens se necessário
+        if ext == '.pdf':
+            try:
+                from pdf2image import convert_from_path
+                images = convert_from_path(filepath, dpi=300)
+            except ImportError:
+                logger.warning("pdf2image não disponível para processar PDF")
+                return None
+            except Exception as e:
+                logger.error(f"Erro ao converter PDF para imagem: {e}")
+                return None
+        else:
+            # Carregar imagem diretamente
+            images = [Image.open(filepath)]
+
+        # Extrair texto de todas as páginas/imagens
+        full_text = ''
+        for img in images:
+            # Configurar pytesseract para português
+            text = pytesseract.image_to_string(img, lang='por')
+            full_text += text + '\n'
+
+        dados['raw_text'] = full_text
+        logger.info(f"OCR extraído ({len(full_text)} chars): {full_text[:200]}...")
+
+        # Padrões de regex para extrair campos
+        # Paciente: procura por "Paciente:" ou "Nome:" seguido do nome
+        paciente_patterns = [
+            r'Paciente[:\s]+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)(?:\n|$|Data)',
+            r'Nome[:\s]+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)(?:\n|$|Data)',
+            r'PACIENTE[:\s]+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)(?:\n|$)',
+        ]
+        for pattern in paciente_patterns:
+            match = re.search(pattern, full_text, re.IGNORECASE)
+            if match:
+                dados['paciente'] = match.group(1).strip()
+                break
+
+        # Data: procura por padrão DD/MM/YYYY
+        data_patterns = [
+            r'Data[:\s]+(\d{2}/\d{2}/\d{4})',
+            r'(\d{2}/\d{2}/\d{4})',
+        ]
+        for pattern in data_patterns:
+            match = re.search(pattern, full_text)
+            if match:
+                dados['data'] = match.group(1)
+                break
+
+        # Hora: procura por padrão HH:MM
+        hora_patterns = [
+            r'Hora[:\s]+(\d{2}:\d{2})',
+            r'Horário[:\s]+(\d{2}:\d{2})',
+            r'(?:às|as)[:\s]+(\d{2}:\d{2})',
+            r'(\d{2}:\d{2})(?:h|hs|hrs)?',
+        ]
+        for pattern in hora_patterns:
+            match = re.search(pattern, full_text, re.IGNORECASE)
+            if match:
+                dados['hora'] = match.group(1)
+                break
+
+        # Médico/Profissional
+        medico_patterns = [
+            r'Profissional[:\s]+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)(?:\n|$|Unidade)',
+            r'Médico[:\s]+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)(?:\n|$)',
+            r'Dr\.?\s*([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)(?:\n|$)',
+            r'Dra\.?\s*([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)(?:\n|$)',
+        ]
+        for pattern in medico_patterns:
+            match = re.search(pattern, full_text, re.IGNORECASE)
+            if match:
+                dados['medico'] = match.group(1).strip()
+                break
+
+        # Especialidade/Unidade Funcional
+        especialidade_patterns = [
+            r'Unidade\s+Funcional[:\s]+(?:AMBULATÓRIO\s+)?([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)(?:\n|$|\.|,)',
+            r'Especialidade[:\s]+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)(?:\n|$)',
+            r'AMBULATÓRIO\s+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)(?:\n|$|\.|,)',
+        ]
+        for pattern in especialidade_patterns:
+            match = re.search(pattern, full_text, re.IGNORECASE)
+            if match:
+                dados['especialidade'] = match.group(1).strip()
+                break
+
+        logger.info(f"Dados extraídos do comprovante: {dados}")
+        return dados
+
+    except Exception as e:
+        logger.exception(f"Erro ao extrair dados do comprovante via OCR: {e}")
+        return None
+
+
+# =============================================================================
 # FUNÇÕES DE MENSAGENS - MODO CONSULTA
 # =============================================================================
 
@@ -997,13 +1131,56 @@ Posso confirmar o agendamento?
 3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
 
 
-def formatar_mensagem_comprovante():
+def formatar_mensagem_comprovante(consulta=None, dados_ocr=None):
     """
     MSG 2: Mensagem de comprovante (enviada manualmente com arquivo anexo)
     Enviada para: Consultas com status AGUARDANDO_COMPROVANTE
     Status: AGUARDANDO_COMPROVANTE → CONFIRMADO
+
+    Args:
+        consulta: Objeto AgendamentoConsulta (opcional, para fallback)
+        dados_ocr: Dict com dados extraídos do comprovante via OCR (opcional)
+                   Keys: paciente, data, hora, medico, especialidade
     """
-    return """O Hospital Walter Cantídio agradece seu contato. CONSULTA CONFIRMADA!
+    # Prioriza dados do OCR, com fallback para dados da consulta
+    paciente = None
+    data = None
+    hora = None
+    medico = None
+    especialidade = None
+
+    if dados_ocr:
+        paciente = dados_ocr.get('paciente')
+        data = dados_ocr.get('data')
+        hora = dados_ocr.get('hora')
+        medico = dados_ocr.get('medico')
+        especialidade = dados_ocr.get('especialidade')
+
+    # Fallback para dados da consulta se OCR não extraiu
+    if consulta:
+        if not paciente:
+            paciente = consulta.paciente
+        if not data:
+            data = consulta.data_aghu
+        if not medico:
+            medico = consulta.medico_solicitante or consulta.grade_aghu
+        if not especialidade:
+            especialidade = consulta.especialidade
+
+    # Formata dados para exibição
+    paciente_str = paciente if paciente else 'Paciente'
+    data_str = data if data else '-'
+    hora_str = hora if hora else '-'
+    medico_str = medico if medico else '-'
+    especialidade_str = especialidade if especialidade else '-'
+
+    return f"""O Hospital Walter Cantídio agradece seu contato. *CONSULTA CONFIRMADA!*
+
+*Paciente:* {paciente_str}
+*Data:* {data_str}
+*Horário:* {hora_str}
+*Médico(a):* {medico_str}
+*Especialidade:* {especialidade_str}
 
 Responda a pesquisa de satisfação: https://forms.gle/feteZxSNBRd5xfDUA
 

@@ -7,6 +7,10 @@ RUN apt-get update && apt-get install -y \
     gcc \
     libpq-dev \
     postgresql-client \
+    # OCR - tesseract e poppler para pdf2image
+    tesseract-ocr \
+    tesseract-ocr-por \
+    poppler-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # Copiar requirements primeiro (melhora cache build)

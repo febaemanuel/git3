@@ -30,7 +30,8 @@ def init_consultas_routes(app, db):
     from app import (
         CampanhaConsulta, AgendamentoConsulta, TelefoneConsulta,
         LogMsgConsulta, WhatsApp, formatar_numero,
-        formatar_mensagem_comprovante, formatar_mensagem_voltar_posto
+        formatar_mensagem_comprovante, formatar_mensagem_voltar_posto,
+        extrair_dados_comprovante
     )
 
     try:
@@ -484,6 +485,15 @@ def init_consultas_routes(app, db):
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             arquivo.save(filepath)
 
+            # Extrair dados do comprovante via OCR
+            dados_ocr = None
+            try:
+                dados_ocr = extrair_dados_comprovante(filepath)
+                if dados_ocr:
+                    logger.info(f"Dados extraídos do comprovante via OCR: {dados_ocr}")
+            except Exception as ocr_err:
+                logger.warning(f"Erro ao extrair dados via OCR (continuando sem): {ocr_err}")
+
             # Enviar MSG 2 com comprovante
             ws = WhatsApp(consulta.usuario_id)
             if not ws.ok():
@@ -499,8 +509,8 @@ def init_consultas_routes(app, db):
             if not telefone:
                 return jsonify({'erro': 'Nenhum telefone válido encontrado'}), 400
 
-            # Enviar mensagem de texto
-            msg = formatar_mensagem_comprovante()
+            # Enviar mensagem de texto (personalizada com dados do OCR)
+            msg = formatar_mensagem_comprovante(consulta=consulta, dados_ocr=dados_ocr)
             ok_msg, result_msg = ws.enviar(telefone, msg)
 
             if not ok_msg:

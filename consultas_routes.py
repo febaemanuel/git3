@@ -742,4 +742,235 @@ def init_consultas_routes(app, db):
             return jsonify({'erro': str(e)}), 500
 
 
+    # =========================================================================
+    # EXCLUIR CONSULTA
+    # =========================================================================
+
+    @app.route('/api/consulta/<int:id>/excluir', methods=['DELETE', 'POST'])
+    @login_required
+    def consulta_excluir(id):
+        """Exclui uma consulta individual"""
+        consulta = AgendamentoConsulta.query.get_or_404(id)
+
+        if consulta.usuario_id != current_user.id and not current_user.is_admin:
+            return jsonify({'erro': 'Acesso negado'}), 403
+
+        try:
+            campanha_id = consulta.campanha_id
+
+            # Excluir logs relacionados
+            LogMsgConsulta.query.filter_by(consulta_id=consulta.id).delete()
+
+            # Excluir telefones relacionados
+            TelefoneConsulta.query.filter_by(consulta_id=consulta.id).delete()
+
+            # Excluir a consulta
+            db.session.delete(consulta)
+            db.session.commit()
+
+            # Atualizar stats da campanha
+            campanha = CampanhaConsulta.query.get(campanha_id)
+            if campanha:
+                campanha.atualizar_stats()
+                db.session.commit()
+
+            return jsonify({'sucesso': True, 'mensagem': 'Consulta excluída com sucesso'})
+
+        except Exception as e:
+            db.session.rollback()
+            logger.exception(f"Erro ao excluir consulta: {e}")
+            return jsonify({'erro': str(e)}), 500
+
+
+    # =========================================================================
+    # REENVIAR MENSAGEM DE CONFIRMAÇÃO
+    # =========================================================================
+
+    @app.route('/api/consulta/<int:id>/reenviar', methods=['POST'])
+    @login_required
+    def consulta_reenviar(id):
+        """Reenvia mensagem de confirmação para uma consulta"""
+        from app import formatar_mensagem_consulta_inicial
+
+        consulta = AgendamentoConsulta.query.get_or_404(id)
+
+        if consulta.usuario_id != current_user.id and not current_user.is_admin:
+            return jsonify({'erro': 'Acesso negado'}), 403
+
+        try:
+            # Verificar WhatsApp
+            ws = WhatsApp(consulta.usuario_id)
+            if not ws.ok():
+                return jsonify({'erro': 'WhatsApp não configurado'}), 400
+
+            conn, _ = ws.conectado()
+            if not conn:
+                return jsonify({'erro': 'WhatsApp desconectado'}), 400
+
+            # Buscar telefone
+            telefone = None
+            for tel in consulta.telefones:
+                if tel.numero:
+                    telefone = tel.numero
+                    break
+
+            if not telefone:
+                return jsonify({'erro': 'Nenhum telefone disponível'}), 400
+
+            # Formatar mensagem (usa o objeto consulta diretamente)
+            msg = formatar_mensagem_consulta_inicial(consulta)
+
+            # Enviar mensagem
+            ok, result = ws.enviar(telefone, msg)
+
+            if ok:
+                # Atualizar status
+                consulta.status = 'AGUARDANDO_CONFIRMACAO'
+                consulta.data_envio_mensagem = datetime.utcnow()
+
+                # Log de sucesso
+                log = LogMsgConsulta(
+                    campanha_id=consulta.campanha_id,
+                    consulta_id=consulta.id,
+                    direcao='enviada',
+                    telefone=telefone,
+                    mensagem=msg[:500],
+                    status='sucesso',
+                    msg_id=result
+                )
+                db.session.add(log)
+
+                # Marcar telefone como enviado
+                for tel in consulta.telefones:
+                    if tel.numero == telefone:
+                        tel.enviado = True
+                        break
+
+                db.session.commit()
+
+                # Atualizar stats
+                consulta.campanha.atualizar_stats()
+                db.session.commit()
+
+                return jsonify({'sucesso': True, 'mensagem': 'Mensagem reenviada com sucesso'})
+            else:
+                # Log de erro
+                log = LogMsgConsulta(
+                    campanha_id=consulta.campanha_id,
+                    consulta_id=consulta.id,
+                    direcao='enviada',
+                    telefone=telefone,
+                    mensagem=msg[:500],
+                    status='erro',
+                    erro=str(result)[:200]
+                )
+                db.session.add(log)
+                db.session.commit()
+
+                return jsonify({'erro': f'Erro ao enviar: {result}'}), 500
+
+        except Exception as e:
+            db.session.rollback()
+            logger.exception(f"Erro ao reenviar mensagem: {e}")
+            return jsonify({'erro': str(e)}), 500
+
+
+    # =========================================================================
+    # EDITAR CAMPANHA
+    # =========================================================================
+
+    @app.route('/api/consultas/campanha/<int:id>/editar', methods=['POST'])
+    @login_required
+    def consultas_campanha_editar(id):
+        """Edita configurações da campanha"""
+        campanha = CampanhaConsulta.query.get_or_404(id)
+
+        if campanha.criador_id != current_user.id and not current_user.is_admin:
+            return jsonify({'erro': 'Acesso negado'}), 403
+
+        try:
+            data = request.json or {}
+
+            # Atualizar campos permitidos
+            if 'nome' in data:
+                campanha.nome = data['nome'].strip()
+
+            if 'descricao' in data:
+                campanha.descricao = data['descricao'].strip()
+
+            if 'meta_diaria' in data:
+                campanha.meta_diaria = int(data['meta_diaria'])
+
+            if 'hora_inicio' in data:
+                campanha.hora_inicio = int(data['hora_inicio'])
+
+            if 'hora_fim' in data:
+                campanha.hora_fim = int(data['hora_fim'])
+
+            if 'tempo_entre_envios' in data:
+                campanha.tempo_entre_envios = int(data['tempo_entre_envios'])
+
+            db.session.commit()
+
+            return jsonify({
+                'sucesso': True,
+                'mensagem': 'Campanha atualizada com sucesso',
+                'campanha': {
+                    'id': campanha.id,
+                    'nome': campanha.nome,
+                    'descricao': campanha.descricao,
+                    'meta_diaria': campanha.meta_diaria,
+                    'hora_inicio': campanha.hora_inicio,
+                    'hora_fim': campanha.hora_fim,
+                    'tempo_entre_envios': campanha.tempo_entre_envios
+                }
+            })
+
+        except Exception as e:
+            db.session.rollback()
+            logger.exception(f"Erro ao editar campanha: {e}")
+            return jsonify({'erro': str(e)}), 500
+
+
+    # =========================================================================
+    # EXCLUIR CAMPANHA
+    # =========================================================================
+
+    @app.route('/api/consultas/campanha/<int:id>/excluir', methods=['DELETE', 'POST'])
+    @login_required
+    def consultas_campanha_excluir(id):
+        """Exclui uma campanha e todas as suas consultas"""
+        campanha = CampanhaConsulta.query.get_or_404(id)
+
+        if campanha.criador_id != current_user.id and not current_user.is_admin:
+            return jsonify({'erro': 'Acesso negado'}), 403
+
+        try:
+            # Buscar todas as consultas da campanha
+            consultas = AgendamentoConsulta.query.filter_by(campanha_id=campanha.id).all()
+
+            for consulta in consultas:
+                # Excluir logs
+                LogMsgConsulta.query.filter_by(consulta_id=consulta.id).delete()
+                # Excluir telefones
+                TelefoneConsulta.query.filter_by(consulta_id=consulta.id).delete()
+
+            # Excluir logs da campanha (que não têm consulta específica)
+            LogMsgConsulta.query.filter_by(campanha_id=campanha.id).delete()
+
+            # Excluir todas as consultas
+            AgendamentoConsulta.query.filter_by(campanha_id=campanha.id).delete()
+
+            # Excluir a campanha
+            db.session.delete(campanha)
+            db.session.commit()
+
+            return jsonify({'sucesso': True, 'mensagem': 'Campanha excluída com sucesso'})
+
+        except Exception as e:
+            db.session.rollback()
+            logger.exception(f"Erro ao excluir campanha: {e}")
+            return jsonify({'erro': str(e)}), 500
+
+
     logger.info("Rotas do modo consulta inicializadas com sucesso")

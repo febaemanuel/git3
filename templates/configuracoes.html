@@ -261,7 +261,8 @@ function configurarWebhook() {
     fetch('/api/whatsapp/webhook/configurar', {
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'X-CSRFToken': '{{ csrf_token() }}'
         }
     })
     .then(res => res.json())

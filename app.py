@@ -963,7 +963,8 @@ class TelefoneConsulta(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Status do telefone
-    invalido = db.Column(db.Boolean, default=False)  # True se número inválido ou não pertence ao paciente
+    invalido = db.Column(db.Boolean, default=False)  # True se número inválido (erro de envio)
+    nao_pertence = db.Column(db.Boolean, default=False)  # True se respondeu "DESCONHEÇO" (opção 3)
     erro_envio = db.Column(db.String(200))  # Mensagem de erro do envio
 
     # Relationships
@@ -1280,13 +1281,35 @@ def enviar_e_registrar_consulta(ws, telefone, mensagem, consulta):
     
     return ok, result
 
+def obter_saudacao_dinamica():
+    """
+    Retorna saudação apropriada baseada na hora atual (fuso de Fortaleza/Brasil UTC-3).
+    - Bom dia! (6h - 11h59)
+    - Boa tarde! (12h - 17h59)
+    - Boa noite! (18h - 5h59)
+    """
+    import pytz
+
+    # Fuso horário de Fortaleza/Brasil
+    tz_fortaleza = pytz.timezone('America/Fortaleza')
+    hora_atual = datetime.now(tz_fortaleza).hour
+
+    if 6 <= hora_atual < 12:
+        return "Bom dia!"
+    elif 12 <= hora_atual < 18:
+        return "Boa tarde!"
+    else:
+        return "Boa noite!"
+
+
 def formatar_mensagem_consulta_inicial(consulta):
     """
     MSG 1: Mensagem inicial de confirmação de consulta (enviada automaticamente)
     Enviada para: TODOS (RETORNO e INTERCONSULTA)
     Status: AGUARDANDO_ENVIO → AGUARDANDO_CONFIRMACAO
     """
-    return f"""Bom dia!
+    saudacao = obter_saudacao_dinamica()
+    return f"""{saudacao}
 
 Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
 Estamos informando que a *CONSULTA* do paciente *{consulta.paciente}*, foi *MARCADA* para o dia *{formatar_data_consulta(consulta.data_aghu)}*, com *{consulta.medico_solicitante}*, com especialidade em *{consulta.especialidade}*.
@@ -5506,8 +5529,9 @@ def webhook():
                         logger.info(f"Consulta {consulta.id} confirmada por {consulta.paciente}")
 
                         # Notificar OUTROS telefones que a consulta já foi confirmada
+                        # (exceto os que responderam DESCONHEÇO)
                         for tel in consulta.telefones:
-                            if tel.numero != numero_resposta and tel.enviado and not tel.invalido:
+                            if tel.numero != numero_resposta and tel.enviado and not tel.invalido and not tel.nao_pertence:
                                 try:
                                     ws.enviar(tel.numero, f"ℹ️ A consulta de *{consulta.paciente}* já foi confirmada em outro telefone.\n\nNão é necessário responder por este número.")
                                     logger.info(f"Notificação enviada para {tel.numero} sobre confirmação em {numero_resposta}")
@@ -5529,23 +5553,45 @@ def webhook():
                         logger.info(f"Consulta {consulta.id}: paciente escolheu opção 2 (NÃO), oferecendo cancelar/reagendar")
 
                     elif verificar_resposta_em_lista(texto_up, RESPOSTAS_DESCONHECO):
-                        # Paciente não conhece → REJEITADO imediatamente
-                        consulta.status = 'REJEITADO'
-                        consulta.motivo_rejeicao = 'Paciente não reconhece o agendamento (opção 3 - DESCONHEÇO)'
-                        consulta.data_rejeicao = datetime.utcnow()
+                        # Paciente não conhece → Marcar APENAS este telefone como "não pertence"
+                        # Só rejeita a consulta se TODOS os telefones forem marcados assim
+
+                        # Marcar este telefone como "não pertence ao paciente"
+                        consulta_telefone.nao_pertence = True
                         db.session.commit()
 
-                        consulta.campanha.atualizar_stats()
-                        db.session.commit()
+                        # Verificar se TODOS os telefones válidos (enviados e não inválidos) foram marcados como "não pertence"
+                        telefones_validos = [t for t in consulta.telefones if t.enviado and not t.invalido]
+                        telefones_nao_pertence = [t for t in telefones_validos if t.nao_pertence]
 
-                        enviar_e_registrar_consulta(ws, numero_resposta, """✅ *Obrigado pela informação!*
+                        todos_nao_pertencem = len(telefones_validos) > 0 and len(telefones_nao_pertence) == len(telefones_validos)
 
-Vamos atualizar nossos registros e remover seu contato da nossa lista.
+                        if todos_nao_pertencem:
+                            # TODOS os telefones responderam "DESCONHEÇO" → Rejeitar consulta
+                            consulta.status = 'REJEITADO'
+                            consulta.motivo_rejeicao = 'Paciente não localizado - todos os telefones responderam DESCONHEÇO'
+                            consulta.data_rejeicao = datetime.utcnow()
+                            db.session.commit()
+
+                            consulta.campanha.atualizar_stats()
+                            db.session.commit()
+
+                            enviar_e_registrar_consulta(ws, numero_resposta, """✅ *Obrigado pela informação!*
+
+Vamos atualizar nossos registros.
+
+_Hospital Universitário Walter Cantídio_""", consulta)
+                            logger.info(f"Consulta {consulta.id} rejeitada - TODOS os telefones responderam DESCONHEÇO (paciente não localizado)")
+                        else:
+                            # Ainda há outros telefones que podem responder
+                            enviar_e_registrar_consulta(ws, numero_resposta, """✅ *Obrigado pela informação!*
+
+Este número foi marcado como não pertencente ao paciente.
 
 Desculpe pelo transtorno.
 
 _Hospital Universitário Walter Cantídio_""", consulta)
-                        logger.info(f"Consulta {consulta.id} rejeitada - paciente não reconhece")
+                            logger.info(f"Consulta {consulta.id}: telefone {numero_resposta} marcado como 'não pertence ao paciente'. Aguardando outros telefones.")
 
                     else:
                         # Resposta não reconhecida
@@ -5646,8 +5692,9 @@ _Hospital Universitário Walter Cantídio_"""
                         logger.info(f"Consulta {consulta.id} reagendamento confirmado por {consulta.paciente}")
 
                         # Notificar OUTROS telefones que a consulta já foi confirmada
+                        # (exceto os que responderam DESCONHEÇO)
                         for tel in consulta.telefones:
-                            if tel.numero != numero_resposta and tel.enviado and not tel.invalido:
+                            if tel.numero != numero_resposta and tel.enviado and not tel.invalido and not tel.nao_pertence:
                                 try:
                                     ws.enviar(tel.numero, f"ℹ️ A consulta de *{consulta.paciente}* já foi confirmada em outro telefone.\n\nNão é necessário responder por este número.")
                                     logger.info(f"Notificação enviada para {tel.numero} sobre confirmação em {numero_resposta}")

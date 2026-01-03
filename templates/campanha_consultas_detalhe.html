@@ -381,6 +381,12 @@
                                         {% endif %}
 
                                         {% if consulta.status not in ['CONFIRMADO', 'REJEITADO'] %}
+                                        <!-- Reenviar Mensagem -->
+                                        <button class="btn btn-sm btn-outline-info" title="Reenviar mensagem"
+                                            onclick="reenviarMensagem({{ consulta.id }})">
+                                            <i class="bi bi-arrow-repeat"></i>
+                                        </button>
+
                                         <!-- Cancelar -->
                                         <button class="btn btn-sm btn-outline-danger" title="Cancelar/Rejeitar"
                                             onclick="cancelarConsulta({{ consulta.id }})">
@@ -388,28 +394,11 @@
                                         </button>
                                         {% endif %}
 
-                                        <!-- Menu Mais Opcoes -->
-                                        <div class="dropdown">
-                                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle"
-                                                data-bs-toggle="dropdown" title="Mais opcoes"></button>
-                                            <ul class="dropdown-menu dropdown-menu-end">
-                                                <li><a class="dropdown-item"
-                                                        href="{{ url_for('consulta_detalhe', id=consulta.id) }}">
-                                                        <i class="bi bi-eye me-2"></i>Ver Detalhes
-                                                    </a></li>
-                                                <li><a class="dropdown-item" href="#"
-                                                        onclick="reenviarMensagem({{ consulta.id }})">
-                                                        <i class="bi bi-arrow-repeat me-2"></i>Reenviar Mensagem
-                                                    </a></li>
-                                                <li>
-                                                    <hr class="dropdown-divider">
-                                                </li>
-                                                <li><a class="dropdown-item text-danger" href="#"
-                                                        onclick="excluirConsulta({{ consulta.id }})">
-                                                        <i class="bi bi-trash me-2"></i>Excluir
-                                                    </a></li>
-                                            </ul>
-                                        </div>
+                                        <!-- Excluir -->
+                                        <button class="btn btn-sm btn-danger" title="Excluir consulta"
+                                            onclick="excluirConsulta({{ consulta.id }})">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
                                     </div>
                                 </td>
                             </tr>

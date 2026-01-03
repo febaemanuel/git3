@@ -113,4 +113,16 @@ with app.app_context():
                 else:
                     print(f"[ERR] Coluna {col_nome}: {e}")
 
+        # 5. Coluna nao_pertence em telefones_consultas (para opção 3 - DESCONHEÇO)
+        try:
+            conn.execute(text("ALTER TABLE telefones_consultas ADD COLUMN nao_pertence BOOLEAN DEFAULT FALSE"))
+            conn.commit()
+            print("[OK] Coluna nao_pertence em telefones_consultas")
+        except Exception as e:
+            conn.rollback()
+            if "duplicate" in str(e).lower() or "exists" in str(e).lower():
+                print("[OK] Coluna nao_pertence ja existe")
+            else:
+                print(f"[ERR] Coluna nao_pertence: {e}")
+
     print("\nMigracao concluida!")

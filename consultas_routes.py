@@ -202,25 +202,41 @@ def init_consultas_routes(app, db):
                         db.session.flush()  # Para obter ID da consulta
 
                         # Criar telefones (com formatação)
-                        if consulta.telefone_cadastro:
-                            numero_formatado = formatar_numero(consulta.telefone_cadastro)
-                            if numero_formatado:
-                                tel1 = TelefoneConsulta(
-                                    consulta_id=consulta.id,
-                                    numero=numero_formatado,
-                                    prioridade=1
-                                )
-                                db.session.add(tel1)
+                        # Suporta múltiplos números separados por " / " na mesma célula
+                        prioridade_atual = 1
+                        numeros_adicionados = set()  # Evitar duplicatas
 
-                        if consulta.telefone_registro and consulta.telefone_registro != consulta.telefone_cadastro:
-                            numero_formatado = formatar_numero(consulta.telefone_registro)
-                            if numero_formatado:
-                                tel2 = TelefoneConsulta(
-                                    consulta_id=consulta.id,
-                                    numero=numero_formatado,
-                                    prioridade=2
-                                )
-                                db.session.add(tel2)
+                        if consulta.telefone_cadastro:
+                            # Dividir por " / " caso haja múltiplos números
+                            telefones_cadastro = [t.strip() for t in consulta.telefone_cadastro.split('/')]
+                            for tel in telefones_cadastro:
+                                if tel:
+                                    numero_formatado = formatar_numero(tel)
+                                    if numero_formatado and numero_formatado not in numeros_adicionados:
+                                        tel_obj = TelefoneConsulta(
+                                            consulta_id=consulta.id,
+                                            numero=numero_formatado,
+                                            prioridade=prioridade_atual
+                                        )
+                                        db.session.add(tel_obj)
+                                        numeros_adicionados.add(numero_formatado)
+                                        prioridade_atual += 1
+
+                        if consulta.telefone_registro:
+                            # Dividir por " / " caso haja múltiplos números
+                            telefones_registro = [t.strip() for t in consulta.telefone_registro.split('/')]
+                            for tel in telefones_registro:
+                                if tel:
+                                    numero_formatado = formatar_numero(tel)
+                                    if numero_formatado and numero_formatado not in numeros_adicionados:
+                                        tel_obj = TelefoneConsulta(
+                                            consulta_id=consulta.id,
+                                            numero=numero_formatado,
+                                            prioridade=prioridade_atual
+                                        )
+                                        db.session.add(tel_obj)
+                                        numeros_adicionados.add(numero_formatado)
+                                        prioridade_atual += 1
 
                         consultas_criadas += 1
 

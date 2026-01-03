@@ -77,6 +77,17 @@ def init_consultas_routes(app, db):
 
 
     # =========================================================================
+    # TUTORIAL
+    # =========================================================================
+
+    @app.route('/consultas/tutorial')
+    @login_required
+    def consultas_tutorial():
+        """Tutorial completo do Modo Consulta"""
+        return render_template('tutorial_consultas.html')
+
+
+    # =========================================================================
     # IMPORTAR PLANILHA
     # =========================================================================
 

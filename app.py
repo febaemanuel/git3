@@ -35,6 +35,22 @@ import logging
 import requests
 import json
 from io import BytesIO
+import pytz
+
+# Timezone de Fortaleza (UTC-3)
+TZ_FORTALEZA = pytz.timezone('America/Fortaleza')
+
+def obter_agora_fortaleza():
+    """Retorna datetime atual no fuso horário de Fortaleza"""
+    return datetime.now(TZ_FORTALEZA)
+
+def obter_hora_fortaleza():
+    """Retorna apenas a hora atual no fuso horário de Fortaleza (0-23)"""
+    return datetime.now(TZ_FORTALEZA).hour
+
+def obter_hoje_fortaleza():
+    """Retorna a data de hoje no fuso horário de Fortaleza"""
+    return datetime.now(TZ_FORTALEZA).date()
 
 # Carregar variaveis de ambiente do .env
 try:
@@ -296,9 +312,8 @@ class Campanha(db.Model):
         return self.enviados_hoje < self.meta_diaria
 
     def pode_enviar_agora(self):
-        """Verifica se está dentro do horário de funcionamento"""
-        agora = datetime.now()
-        hora_atual = agora.hour
+        """Verifica se está dentro do horário de funcionamento (timezone Fortaleza)"""
+        hora_atual = obter_hora_fortaleza()
 
         # Verificar horário
         if self.hora_inicio <= self.hora_fim:
@@ -318,12 +333,12 @@ class Campanha(db.Model):
         if not self.data_inicio:
             return False
 
-        dias_decorridos = (datetime.now() - self.data_inicio).days
+        dias_decorridos = (obter_agora_fortaleza().replace(tzinfo=None) - self.data_inicio).days
         return dias_decorridos >= self.dias_duracao
 
     def registrar_envio(self):
-        """Registra que um envio foi realizado hoje"""
-        hoje = date.today()
+        """Registra que um envio foi realizado hoje (timezone Fortaleza)"""
+        hoje = obter_hoje_fortaleza()
         if self.data_ultimo_envio != hoje:
             self.enviados_hoje = 1
             self.data_ultimo_envio = hoje
@@ -781,8 +796,8 @@ class CampanhaConsulta(db.Model):
     criador = db.relationship('Usuario', backref='campanhas_consultas')
 
     def pode_enviar_hoje(self):
-        """Verifica se pode enviar mais mensagens hoje (meta diária)"""
-        hoje = date.today()
+        """Verifica se pode enviar mais mensagens hoje (meta diária) - timezone Fortaleza"""
+        hoje = obter_hoje_fortaleza()
         if self.data_ultimo_envio != hoje:
             self.enviados_hoje = 0
             self.data_ultimo_envio = hoje
@@ -790,9 +805,8 @@ class CampanhaConsulta(db.Model):
         return self.enviados_hoje < self.meta_diaria
 
     def pode_enviar_agora(self):
-        """Verifica se está dentro do horário de funcionamento"""
-        agora = datetime.now()
-        hora_atual = agora.hour
+        """Verifica se está dentro do horário de funcionamento (timezone Fortaleza)"""
+        hora_atual = obter_hora_fortaleza()
 
         # Verificar horário
         if self.hora_inicio <= self.hora_fim:
@@ -841,19 +855,19 @@ class CampanhaConsulta(db.Model):
         self.total_rejeitados = AgendamentoConsulta.query.filter_by(campanha_id=self.id, status='REJEITADO').count()
 
     def atingiu_duracao(self):
-        """Verifica se atingiu o número de dias definido"""
+        """Verifica se atingiu o número de dias definido (timezone Fortaleza)"""
         if self.dias_duracao == 0:
             return False  # Até acabar
 
         if not self.data_inicio:
             return False
 
-        dias_decorridos = (datetime.now() - self.data_inicio).days
+        dias_decorridos = (obter_agora_fortaleza().replace(tzinfo=None) - self.data_inicio).days
         return dias_decorridos >= self.dias_duracao
 
     def registrar_envio(self):
-        """Registra que um envio foi realizado hoje"""
-        hoje = date.today()
+        """Registra que um envio foi realizado hoje (timezone Fortaleza)"""
+        hoje = obter_hoje_fortaleza()
         if self.data_ultimo_envio != hoje:
             self.enviados_hoje = 1
             self.data_ultimo_envio = hoje
@@ -1288,11 +1302,7 @@ def obter_saudacao_dinamica():
     - Boa tarde! (12h - 17h59)
     - Boa noite! (18h - 5h59)
     """
-    import pytz
-
-    # Fuso horário de Fortaleza/Brasil
-    tz_fortaleza = pytz.timezone('America/Fortaleza')
-    hora_atual = datetime.now(tz_fortaleza).hour
+    hora_atual = obter_hora_fortaleza()
 
     if 6 <= hora_atual < 12:
         return "Bom dia!"

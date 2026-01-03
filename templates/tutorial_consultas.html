@@ -54,7 +54,8 @@
                         <div class="col-md-3">
                             <ul class="list-unstyled">
                                 <li><a href="#historico">10. Histórico</a></li>
-                                <li><a href="#dicas">11. Dicas e Soluções</a></li>
+                                <li><a href="#mensagens">11. Todas as Mensagens</a></li>
+                                <li><a href="#dicas">12. Dicas e Soluções</a></li>
                             </ul>
                         </div>
                     </div>
@@ -761,12 +762,279 @@
         </div>
     </div>
 
-    <!-- 11. Dicas e Soluções -->
+    <!-- 11. Todas as Mensagens do Sistema -->
+    <div class="row mb-4" id="mensagens">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="bi bi-chat-square-text"></i> 11. Todas as Mensagens do Sistema</h5>
+                </div>
+                <div class="card-body">
+                    <p>Aqui estão <strong>TODAS</strong> as mensagens que o sistema envia automaticamente:</p>
+
+                    <!-- MSG 1 -->
+                    <div class="card mb-3 border-primary">
+                        <div class="card-header bg-primary text-white">
+                            <strong>MSG 1 - Mensagem Inicial de Confirmação</strong>
+                        </div>
+                        <div class="card-body">
+                            <pre class="bg-light p-3 mb-0" style="white-space: pre-wrap; font-size: 0.85rem;">[Bom dia! / Boa tarde! / Boa noite!]
+
+Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
+Estamos informando que a *CONSULTA* do paciente *{NOME_PACIENTE}*, foi *MARCADA* para o dia *{DATA}*, com *{MÉDICO}*, com especialidade em *{ESPECIALIDADE}*.
+
+Caso não haja confirmação em até 1 dia útil, sua consulta será cancelada!
+
+Posso confirmar o agendamento?
+
+1️⃣ *SIM* - Tenho interesse
+2️⃣ *NÃO* - Não consigo ir / Não quero mais
+3️⃣ *DESCONHEÇO* - Não sou essa pessoa</pre>
+                        </div>
+                    </div>
+
+                    <!-- Resposta SIM -->
+                    <div class="card mb-3 border-success">
+                        <div class="card-header bg-success text-white">
+                            <strong>Resposta ao SIM (Opção 1)</strong>
+                        </div>
+                        <div class="card-body">
+                            <pre class="bg-light p-3 mb-0" style="white-space: pre-wrap; font-size: 0.85rem;">✅ Consulta confirmada! Aguarde o envio do comprovante.</pre>
+                        </div>
+                    </div>
+
+                    <!-- Resposta NÃO -->
+                    <div class="card mb-3 border-warning">
+                        <div class="card-header bg-warning">
+                            <strong>Resposta ao NÃO (Opção 2) - Pergunta Cancelar/Reagendar</strong>
+                        </div>
+                        <div class="card-body">
+                            <pre class="bg-light p-3 mb-0" style="white-space: pre-wrap; font-size: 0.85rem;">Entendemos! O que você deseja fazer?
+
+1️⃣ *CANCELAR* - Não quero mais a consulta
+2️⃣ *REAGENDAR* - Quero mudar a data/horário</pre>
+                        </div>
+                    </div>
+
+                    <!-- Resposta CANCELAR -->
+                    <div class="card mb-3 border-danger">
+                        <div class="card-header bg-danger text-white">
+                            <strong>Resposta ao CANCELAR (Opção 1) - Pede Motivo</strong>
+                        </div>
+                        <div class="card-body">
+                            <pre class="bg-light p-3 mb-0" style="white-space: pre-wrap; font-size: 0.85rem;">Entendemos sua decisão.
+
+Poderia nos informar o *motivo* da recusa? Isso nos ajuda a melhorar nosso atendimento.
+
+(Pode responder livremente com o motivo)</pre>
+                        </div>
+                    </div>
+
+                    <!-- Resposta REAGENDAR -->
+                    <div class="card mb-3 border-info">
+                        <div class="card-header bg-info text-white">
+                            <strong>Resposta ao REAGENDAR (Opção 2) - Aguardando Equipe</strong>
+                        </div>
+                        <div class="card-body">
+                            <pre class="bg-light p-3 mb-0" style="white-space: pre-wrap; font-size: 0.85rem;">✅ *Entendido!*
+
+Nossa equipe foi notificada e entrará em contato em breve para verificar uma nova data disponível para você.
+
+Por favor, aguarde nosso retorno.
+
+_Hospital Universitário Walter Cantídio_</pre>
+                        </div>
+                    </div>
+
+                    <!-- MSG Reagendamento -->
+                    <div class="card mb-3 border-primary">
+                        <div class="card-header bg-primary text-white">
+                            <strong>Mensagem de Reagendamento (Enviada pelo Operador)</strong>
+                        </div>
+                        <div class="card-body">
+                            <pre class="bg-light p-3 mb-0" style="white-space: pre-wrap; font-size: 0.85rem;">📅 *CONSULTA REAGENDADA!*
+
+Olá, {NOME_PACIENTE}!
+
+Conseguimos uma nova data para sua consulta.
+
+🗓 *Nova Data:* {DATA}
+⏰ *Horário:* {HORA}
+👨‍⚕️ *Especialidade:* {ESPECIALIDADE}
+
+Por favor, confirme se poderá comparecer respondendo:
+1️⃣ *SIM* - Confirmar
+2️⃣ *NÃO* - Não posso ir
+
+_Hospital Universitário Walter Cantídio_</pre>
+                        </div>
+                    </div>
+
+                    <!-- Reagendamento Confirmado -->
+                    <div class="card mb-3 border-success">
+                        <div class="card-header bg-success text-white">
+                            <strong>Confirmação do Reagendamento</strong>
+                        </div>
+                        <div class="card-body">
+                            <pre class="bg-light p-3 mb-0" style="white-space: pre-wrap; font-size: 0.85rem;">✅ *Reagendamento confirmado!*
+
+📅 Data: {DATA}
+⏰ Horário: {HORA}
+👨‍⚕️ Especialidade: {ESPECIALIDADE}
+
+Aguarde o envio do comprovante.
+
+_Hospital Universitário Walter Cantídio_</pre>
+                        </div>
+                    </div>
+
+                    <!-- DESCONHEÇO -->
+                    <div class="card mb-3 border-secondary">
+                        <div class="card-header bg-secondary text-white">
+                            <strong>Resposta ao DESCONHEÇO (Opção 3)</strong>
+                        </div>
+                        <div class="card-body">
+                            <p class="mb-2"><strong>Quando apenas um telefone responde:</strong></p>
+                            <pre class="bg-light p-3 mb-3" style="white-space: pre-wrap; font-size: 0.85rem;">✅ *Obrigado pela informação!*
+
+Este número foi marcado como não pertencente ao paciente.
+
+Desculpe pelo transtorno.
+
+_Hospital Universitário Walter Cantídio_</pre>
+                            <p class="mb-2"><strong>Quando TODOS os telefones respondem DESCONHEÇO:</strong></p>
+                            <pre class="bg-light p-3 mb-0" style="white-space: pre-wrap; font-size: 0.85rem;">✅ *Obrigado pela informação!*
+
+Vamos atualizar nossos registros.
+
+_Hospital Universitário Walter Cantídio_</pre>
+                        </div>
+                    </div>
+
+                    <!-- Notificação outros telefones -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <strong>Notificação para Outros Telefones (após confirmação)</strong>
+                        </div>
+                        <div class="card-body">
+                            <pre class="bg-light p-3 mb-0" style="white-space: pre-wrap; font-size: 0.85rem;">ℹ️ A consulta de *{NOME_PACIENTE}* já foi confirmada em outro telefone.
+
+Não é necessário responder por este número.</pre>
+                        </div>
+                    </div>
+
+                    <!-- MSG 2 - Comprovante COMPLETA -->
+                    <div class="card mb-3 border-success">
+                        <div class="card-header bg-success text-white">
+                            <strong>MSG 2 - Comprovante de Agendamento (COMPLETA)</strong>
+                        </div>
+                        <div class="card-body">
+                            <pre class="bg-light p-3 mb-0" style="white-space: pre-wrap; font-size: 0.85rem;">O Hospital Walter Cantídio agradece seu contato. *CONSULTA CONFIRMADA!*
+
+*Paciente:* *{NOME}*
+*Data:* *{DATA}*
+*Horário:* *{HORA}*
+*Médico(a):* *{MÉDICO}*
+*Especialidade:* *{ESPECIALIDADE}*
+
+O hospital entra em contato através do: (85) 992081534 / (85)996700783 / (85)991565903 / (85) 992614237 / (85) 992726080. É importante que atenda as ligações e responda as mensagens desses números. Por tanto, salve-os!
+
+Confira seu comprovante: data, horário e nome do(a) médico(a).
+
+Não fazemos marcação de exames, apenas consultas.
+
+Caso falte, procurar o ambulatório para ser colocado novamente no pré-agendamento.
+
+Você sabia que pode verificar sua consulta no app HU Digital? https://play.google.com/store/apps/details?id=br.gov.ebserh.hudigital . Após 5 horas dessa mensagem, verifique sua consulta agendada no app.
+
+Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital.</pre>
+                        </div>
+                    </div>
+
+                    <!-- Pesquisa - Nota -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <strong>Pesquisa de Satisfação - Pergunta 1 (Nota)</strong>
+                        </div>
+                        <div class="card-body">
+                            <pre class="bg-light p-3 mb-0" style="white-space: pre-wrap; font-size: 0.85rem;">📊 *Pesquisa de Satisfação* (opcional)
+
+De *1 a 10*, qual sua satisfação com a marcação de consulta por WhatsApp?
+
+_(Digite um número de 1 a 10, ou "pular" para não responder)_</pre>
+                        </div>
+                    </div>
+
+                    <!-- Pesquisa - Atendimento -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <strong>Pesquisa de Satisfação - Pergunta 2 (Atendimento)</strong>
+                        </div>
+                        <div class="card-body">
+                            <pre class="bg-light p-3 mb-0" style="white-space: pre-wrap; font-size: 0.85rem;">A equipe foi atenciosa e o processo foi ágil?
+
+*1* - Sim ✅
+*2* - Não ❌
+
+_(ou "pular" para finalizar)_</pre>
+                        </div>
+                    </div>
+
+                    <!-- Pesquisa - Comentário -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <strong>Pesquisa de Satisfação - Pergunta 3 (Comentário)</strong>
+                        </div>
+                        <div class="card-body">
+                            <pre class="bg-light p-3 mb-0" style="white-space: pre-wrap; font-size: 0.85rem;">Tem algum comentário ou sugestão?
+
+_(Digite sua mensagem ou "N" para finalizar)_</pre>
+                        </div>
+                    </div>
+
+                    <!-- Pesquisa Finalizada -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <strong>Pesquisa Finalizada</strong>
+                        </div>
+                        <div class="card-body">
+                            <pre class="bg-light p-3 mb-0" style="white-space: pre-wrap; font-size: 0.85rem;">✅ *Obrigado pela sua avaliação!*
+
+Sua opinião é muito importante para continuarmos melhorando nosso atendimento.
+
+_Hospital Universitário Walter Cantídio_</pre>
+                        </div>
+                    </div>
+
+                    <!-- Respostas aceitas -->
+                    <div class="alert alert-info mt-4">
+                        <h6><i class="bi bi-info-circle"></i> Respostas aceitas pelo sistema:</h6>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <strong>Para SIM:</strong><br>
+                                <code>SIM, S, 1, CONFIRMO, QUERO, TENHO, CLARO, POSITIVO, TENHO INTERESSE</code>
+                            </div>
+                            <div class="col-md-4">
+                                <strong>Para NÃO:</strong><br>
+                                <code>NAO, NÃO, N, 2, DESISTO, CANCELA, NEGATIVO, NAO QUERO, NAO TENHO</code>
+                            </div>
+                            <div class="col-md-4">
+                                <strong>Para DESCONHEÇO:</strong><br>
+                                <code>3, DESCONHECO, DESCONHEÇO, NAO SOU, ENGANO, ERRADO</code>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 12. Dicas e Soluções -->
     <div class="row mb-4" id="dicas">
         <div class="col-12">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-lightbulb"></i> 11. Dicas e Solução de Problemas</h5>
+                    <h5 class="mb-0"><i class="bi bi-lightbulb"></i> 12. Dicas e Solução de Problemas</h5>
                 </div>
                 <div class="card-body">
                     <div class="accordion" id="accordionDicas">

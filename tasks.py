@@ -1193,7 +1193,7 @@ def enviar_campanha_consultas_task(self, campanha_id):
                 db.session.commit()
                 db.session.refresh(consulta)
 
-            # Enviar MSG 1 (confirmação inicial)
+            # Enviar MSG 1 (confirmação inicial) para TODOS os telefones
             msg = formatar_mensagem_consulta_inicial(consulta)
             telefones = consulta.telefones
             sucesso_envio = False
@@ -1208,6 +1208,8 @@ def enviar_campanha_consultas_task(self, campanha_id):
                     telefone.enviado = True
                     telefone.data_envio = datetime.utcnow()
                     telefone.msg_id = result
+                    telefone.invalido = False
+                    telefone.erro_envio = None
                     sucesso_envio = True
 
                     # Log de sucesso
@@ -1222,8 +1224,12 @@ def enviar_campanha_consultas_task(self, campanha_id):
                     )
                     db.session.add(log)
                     logger.info(f"Mensagem enviada para {telefone.numero}")
-                    break  # Enviou com sucesso, não precisa tentar outros telefones
+                    # NÃO usar break - continua enviando para TODOS os telefones
                 else:
+                    # Marcar telefone como inválido/com erro
+                    telefone.invalido = True
+                    telefone.erro_envio = str(result)[:200]
+
                     # Log de erro
                     log = LogMsgConsulta(
                         campanha_id=camp.id,

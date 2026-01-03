@@ -962,6 +962,10 @@ class TelefoneConsulta(db.Model):
     msg_id = db.Column(db.String(100))  # ID da mensagem na Evolution API
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # Status do telefone
+    invalido = db.Column(db.Boolean, default=False)  # True se número inválido ou não pertence ao paciente
+    erro_envio = db.Column(db.String(200))  # Mensagem de erro do envio
+
     # Relationships
     consulta = db.relationship('AgendamentoConsulta', backref='telefones')
 
@@ -5501,6 +5505,15 @@ def webhook():
                         enviar_e_registrar_consulta(ws, numero_resposta, "✅ Consulta confirmada! Aguarde o envio do comprovante.", consulta)
                         logger.info(f"Consulta {consulta.id} confirmada por {consulta.paciente}")
 
+                        # Notificar OUTROS telefones que a consulta já foi confirmada
+                        for tel in consulta.telefones:
+                            if tel.numero != numero_resposta and tel.enviado and not tel.invalido:
+                                try:
+                                    ws.enviar(tel.numero, f"ℹ️ A consulta de *{consulta.paciente}* já foi confirmada em outro telefone.\n\nNão é necessário responder por este número.")
+                                    logger.info(f"Notificação enviada para {tel.numero} sobre confirmação em {numero_resposta}")
+                                except Exception as e:
+                                    logger.warning(f"Erro ao notificar {tel.numero}: {e}")
+
                     elif verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO):
                         # Paciente respondeu NÃO (Opção 2)
                         # Perguntar se quer CANCELAR ou REAGENDAR
@@ -5631,6 +5644,15 @@ Aguarde o envio do comprovante.
 _Hospital Universitário Walter Cantídio_"""
                         enviar_e_registrar_consulta(ws, numero_resposta, msg_confirmacao, consulta)
                         logger.info(f"Consulta {consulta.id} reagendamento confirmado por {consulta.paciente}")
+
+                        # Notificar OUTROS telefones que a consulta já foi confirmada
+                        for tel in consulta.telefones:
+                            if tel.numero != numero_resposta and tel.enviado and not tel.invalido:
+                                try:
+                                    ws.enviar(tel.numero, f"ℹ️ A consulta de *{consulta.paciente}* já foi confirmada em outro telefone.\n\nNão é necessário responder por este número.")
+                                    logger.info(f"Notificação enviada para {tel.numero} sobre confirmação em {numero_resposta}")
+                                except Exception as e:
+                                    logger.warning(f"Erro ao notificar {tel.numero}: {e}")
 
                     elif verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO):
                         # Paciente não pode ir na nova data → perguntar o que quer fazer

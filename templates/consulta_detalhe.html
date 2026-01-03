@@ -214,7 +214,7 @@
                 </div>
                 <div class="card-body p-2">
                     {% for telefone in telefones %}
-                    <div class="phone-card card mb-2 {% if telefone.enviado %}enviado{% else %}pendente{% endif %}">
+                    <div class="phone-card card mb-2 {% if telefone.invalido %}border-danger{% elif telefone.enviado %}enviado{% else %}pendente{% endif %}">
                         <div class="card-body py-2 px-3">
                             <div class="d-flex justify-content-between align-items-center">
                                 <div>
@@ -222,17 +222,25 @@
                                     {% if telefone.prioridade == 1 %}
                                         <span class="badge bg-primary ms-1" style="font-size: 10px;">Principal</span>
                                     {% endif %}
+                                    {% if telefone.invalido %}
+                                        <span class="badge bg-danger ms-1" style="font-size: 10px;">Invalido</span>
+                                    {% endif %}
                                     <br>
                                     <small class="text-muted">
-                                        {% if telefone.enviado %}
+                                        {% if telefone.invalido %}
+                                            <i class="bi bi-exclamation-triangle text-danger"></i>
+                                            <span class="text-danger">{{ telefone.erro_envio or 'Numero invalido ou nao pertence ao paciente' }}</span>
+                                        {% elif telefone.enviado %}
                                             <i class="bi bi-check-circle text-success"></i> Enviado
                                         {% else %}
-                                            <i class="bi bi-x-circle text-danger"></i> Pendente
+                                            <i class="bi bi-clock text-warning"></i> Pendente
                                         {% endif %}
                                     </small>
                                 </div>
                                 <div>
-                                    {% if telefone.enviado %}
+                                    {% if telefone.invalido %}
+                                        <span class="badge bg-danger"><i class="bi bi-x"></i></span>
+                                    {% elif telefone.enviado %}
                                         <span class="badge bg-success"><i class="bi bi-check"></i></span>
                                     {% endif %}
                                 </div>

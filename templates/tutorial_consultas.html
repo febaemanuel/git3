@@ -13,8 +13,11 @@
                     <li class="breadcrumb-item active">Tutorial</li>
                 </ol>
             </nav>
-            <h2><i class="bi bi-book"></i> Tutorial Completo - Modo Consultas</h2>
+            <h2><i class="bi bi-book"></i> Manual Completo - Modo Consultas</h2>
             <p class="text-muted">Guia completo para usar o sistema de agendamento de consultas via WhatsApp</p>
+            <div class="alert alert-info">
+                <i class="bi bi-clock"></i> <strong>Fuso Horario:</strong> O sistema usa o horario de <strong>Fortaleza (UTC-3)</strong> para todas as operacoes.
+            </div>
         </div>
     </div>
 
@@ -27,25 +30,31 @@
                 </div>
                 <div class="card-body">
                     <div class="row">
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <ul class="list-unstyled">
                                 <li><a href="#visao-geral">1. Visao Geral</a></li>
                                 <li><a href="#preparar-planilha">2. Preparar Planilha</a></li>
                                 <li><a href="#importar">3. Importar Planilha</a></li>
                             </ul>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <ul class="list-unstyled">
                                 <li><a href="#iniciar-campanha">4. Iniciar Campanha</a></li>
                                 <li><a href="#fluxo-paciente">5. Fluxo do Paciente</a></li>
-                                <li><a href="#gerenciar">6. Gerenciar Consultas</a></li>
+                                <li><a href="#multinumeros">6. Multiplos Telefones</a></li>
                             </ul>
                         </div>
-                        <div class="col-md-4">
+                        <div class="col-md-3">
                             <ul class="list-unstyled">
-                                <li><a href="#comprovante">7. Enviar Comprovante</a></li>
-                                <li><a href="#historico">8. Historico</a></li>
-                                <li><a href="#dicas">9. Dicas e Solucoes</a></li>
+                                <li><a href="#gerenciar">7. Gerenciar Consultas</a></li>
+                                <li><a href="#comprovante">8. Enviar Comprovante</a></li>
+                                <li><a href="#pesquisa">9. Pesquisa Satisfacao</a></li>
+                            </ul>
+                        </div>
+                        <div class="col-md-3">
+                            <ul class="list-unstyled">
+                                <li><a href="#historico">10. Historico</a></li>
+                                <li><a href="#dicas">11. Dicas e Solucoes</a></li>
                             </ul>
                         </div>
                     </div>
@@ -69,9 +78,10 @@
                             <div class="alert alert-light">
                                 <h6><i class="bi bi-check-circle text-success"></i> O que o sistema faz:</h6>
                                 <ul class="mb-0">
-                                    <li>Envia mensagens de confirmacao automaticamente</li>
-                                    <li>Recebe respostas dos pacientes (SIM/NAO)</li>
-                                    <li>Gerencia reagendamentos</li>
+                                    <li>Envia mensagens de confirmacao com <strong>saudacao dinamica</strong> (Bom dia/Boa tarde/Boa noite)</li>
+                                    <li>Envia para <strong>TODOS os telefones</strong> cadastrados</li>
+                                    <li>Recebe respostas dos pacientes (SIM/NAO/DESCONHECO)</li>
+                                    <li>Gerencia reagendamentos automaticamente</li>
                                     <li>Registra motivos de cancelamento</li>
                                     <li>Envia comprovantes de agendamento</li>
                                     <li>Aplica pesquisa de satisfacao</li>
@@ -84,13 +94,23 @@
                                 <ol class="mb-0">
                                     <li>Importar planilha com consultas</li>
                                     <li>Iniciar campanha de envio</li>
-                                    <li>Paciente recebe mensagem</li>
+                                    <li>Paciente recebe mensagem em <strong>todos os telefones</strong></li>
                                     <li>Paciente responde SIM, NAO ou DESCONHECO</li>
-                                    <li>Operador envia comprovante</li>
-                                    <li>Consulta confirmada!</li>
+                                    <li>Se SIM: Operador envia comprovante</li>
+                                    <li>Se NAO: Pergunta se quer CANCELAR ou REAGENDAR</li>
+                                    <li>Consulta confirmada + Pesquisa de satisfacao</li>
                                 </ol>
                             </div>
                         </div>
+                    </div>
+
+                    <div class="alert alert-warning mt-3">
+                        <h6><i class="bi bi-clock"></i> Horarios de Funcionamento:</h6>
+                        <ul class="mb-0">
+                            <li><strong>Saudacao dinamica:</strong> 6h-12h = Bom dia! | 12h-18h = Boa tarde! | 18h-6h = Boa noite!</li>
+                            <li><strong>Meta diaria:</strong> Reseta a meia-noite (horario de Fortaleza)</li>
+                            <li><strong>Horario de envio:</strong> Configuravel (padrao: 8h-23h)</li>
+                        </ul>
                     </div>
                 </div>
             </div>
@@ -105,7 +125,7 @@
                     <h5 class="mb-0"><i class="bi bi-file-earmark-excel"></i> 2. Preparar a Planilha</h5>
                 </div>
                 <div class="card-body">
-                    <p>A planilha deve ter as seguintes colunas (nomes exatos):</p>
+                    <p>A planilha deve ter as seguintes colunas:</p>
 
                     <div class="table-responsive">
                         <table class="table table-bordered">
@@ -125,9 +145,15 @@
                                     <td>MARIA SILVA SANTOS</td>
                                 </tr>
                                 <tr>
-                                    <td><code>TELEFONE CADASTRO</code></td>
+                                    <td><code>TIPO</code></td>
                                     <td><span class="badge bg-danger">Sim</span></td>
-                                    <td>Telefone principal (pode ter varios separados por /)</td>
+                                    <td>RETORNO ou INTERCONSULTA</td>
+                                    <td>RETORNO</td>
+                                </tr>
+                                <tr>
+                                    <td><code>TELEFONE CADASTRO</code></td>
+                                    <td><span class="badge bg-warning text-dark">Recomendado</span></td>
+                                    <td>Telefone(s) principal - separe multiplos com " / "</td>
                                     <td>85998765432 / 85912345678</td>
                                 </tr>
                                 <tr>
@@ -138,69 +164,55 @@
                                 </tr>
                                 <tr>
                                     <td><code>DATA AGHU</code></td>
-                                    <td><span class="badge bg-danger">Sim</span></td>
+                                    <td><span class="badge bg-warning text-dark">Recomendado</span></td>
                                     <td>Data da consulta</td>
                                     <td>15/01/2026</td>
                                 </tr>
                                 <tr>
-                                    <td><code>HORA AGHU</code></td>
-                                    <td><span class="badge bg-secondary">Nao</span></td>
-                                    <td>Hora da consulta</td>
-                                    <td>14:30</td>
-                                </tr>
-                                <tr>
                                     <td><code>ESPECIALIDADE</code></td>
-                                    <td><span class="badge bg-danger">Sim</span></td>
+                                    <td><span class="badge bg-warning text-dark">Recomendado</span></td>
                                     <td>Especialidade medica</td>
                                     <td>CARDIOLOGIA</td>
                                 </tr>
                                 <tr>
-                                    <td><code>PROFISSIONAL</code></td>
+                                    <td><code>MEDICO SOLICITANTE</code></td>
                                     <td><span class="badge bg-secondary">Nao</span></td>
                                     <td>Nome do medico</td>
                                     <td>DR. JOAO SILVA</td>
                                 </tr>
                                 <tr>
-                                    <td><code>LOCAL</code></td>
+                                    <td><code>GRADE_AGHU</code></td>
                                     <td><span class="badge bg-secondary">Nao</span></td>
-                                    <td>Local da consulta</td>
-                                    <td>AMBULATORIO A - SALA 5</td>
-                                </tr>
-                                <tr>
-                                    <td><code>TIPO</code></td>
-                                    <td><span class="badge bg-secondary">Nao</span></td>
-                                    <td>RETORNO ou INTERCONSULTA</td>
-                                    <td>RETORNO</td>
-                                </tr>
-                                <tr>
-                                    <td><code>PRONTUARIO</code></td>
-                                    <td><span class="badge bg-secondary">Nao</span></td>
-                                    <td>Numero do prontuario</td>
-                                    <td>123456</td>
+                                    <td>Grade de atendimento</td>
+                                    <td>AMBULATORIO A</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
 
-                    <div class="alert alert-warning mt-3">
-                        <h6><i class="bi bi-lightbulb"></i> Dicas importantes:</h6>
-                        <ul class="mb-0">
-                            <li><strong>Multiplos telefones:</strong> Separe com " / " (espaco barra espaco). Ex: <code>85998765432 / 85912345678</code></li>
-                            <li><strong>Formato telefone:</strong> Pode ser com ou sem DDD, com ou sem 9. O sistema formata automaticamente.</li>
-                            <li><strong>Formato data:</strong> DD/MM/AAAA ou AAAA-MM-DD</li>
-                            <li><strong>Formatos aceitos:</strong> .xlsx, .xls, .csv</li>
-                        </ul>
-                    </div>
-
-                    <div class="alert alert-success">
-                        <h6><i class="bi bi-telephone"></i> Sobre multiplos telefones:</h6>
-                        <p class="mb-0">
-                            Quando a planilha tem <code>85998765432 / 85912345678</code>, o sistema:
-                            <br>1. <strong>Envia para TODOS</strong> os telefones
-                            <br>2. Basta <strong>UM confirmar</strong> para a consulta ser confirmada
-                            <br>3. Os <strong>outros sao avisados</strong> que ja foi confirmado em outro numero
-                            <br>4. Telefones <strong>invalidos</strong> sao marcados na pagina de detalhes
-                        </p>
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <div class="alert alert-warning">
+                                <h6><i class="bi bi-lightbulb"></i> Dicas de formatacao:</h6>
+                                <ul class="mb-0">
+                                    <li><strong>Multiplos telefones:</strong> Separe com " / " (espaco barra espaco)</li>
+                                    <li><strong>Formato telefone:</strong> Com ou sem DDD, com ou sem 9</li>
+                                    <li><strong>Formato data:</strong> DD/MM/AAAA ou AAAA-MM-DD</li>
+                                    <li><strong>Arquivos aceitos:</strong> .xlsx, .xls</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="alert alert-success">
+                                <h6><i class="bi bi-telephone-plus"></i> Formatacao automatica de telefone:</h6>
+                                <p class="mb-0">
+                                    O sistema formata automaticamente:
+                                    <br><code>998765432</code> → <code>5585998765432</code>
+                                    <br><code>85998765432</code> → <code>5585998765432</code>
+                                    <br><code>5585998765432</code> → <code>5585998765432</code>
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -222,18 +234,34 @@
                                 <li>Acesse <strong>Dashboard > Importar Planilha</strong></li>
                                 <li>Preencha o <strong>Nome da Campanha</strong> (ex: "Cardiologia Janeiro")</li>
                                 <li>Adicione uma <strong>Descricao</strong> (opcional)</li>
-                                <li>Selecione o <strong>arquivo</strong> (.xlsx, .xls ou .csv)</li>
+                                <li>Selecione o <strong>arquivo</strong> (.xlsx ou .xls)</li>
                                 <li>Clique em <strong>Importar</strong></li>
                             </ol>
                         </div>
                         <div class="col-md-6">
                             <h6>Configuracoes da campanha:</h6>
-                            <ul>
-                                <li><strong>Meta diaria:</strong> Quantas mensagens enviar por dia (padrao: 50)</li>
-                                <li><strong>Intervalo:</strong> Segundos entre cada envio (padrao: 30s)</li>
-                                <li><strong>Horario:</strong> Periodo de envio (padrao: 8h - 18h)</li>
-                                <li><strong>Duracao:</strong> Quantos dias a campanha roda (0 = ate acabar)</li>
-                            </ul>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Meta diaria</strong></td>
+                                    <td>Mensagens por dia (padrao: 50)</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Hora inicio</strong></td>
+                                    <td>Inicio dos envios (padrao: 8h)</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Hora fim</strong></td>
+                                    <td>Fim dos envios (padrao: 23h)</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Intervalo</strong></td>
+                                    <td>Segundos entre envios (padrao: 15s)</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Duracao</strong></td>
+                                    <td>Dias de campanha (0 = ate acabar)</td>
+                                </tr>
+                            </table>
                         </div>
                     </div>
 
@@ -268,7 +296,7 @@
                             <ul>
                                 <li><span class="badge bg-success">Iniciar</span> - Comeca/retoma o envio</li>
                                 <li><span class="badge bg-warning">Pausar</span> - Para temporariamente</li>
-                                <li><span class="badge bg-danger">Cancelar</span> - Encerra a campanha</li>
+                                <li><span class="badge bg-info">Continuar</span> - Retoma o envio pausado</li>
                             </ul>
                         </div>
                         <div class="col-md-6">
@@ -288,13 +316,22 @@
                                 </tr>
                                 <tr>
                                     <td><span class="badge bg-warning">Pausado</span></td>
-                                    <td>Pausada pelo operador ou horario</td>
+                                    <td>Pausada pelo operador ou fora do horario</td>
                                 </tr>
                                 <tr>
                                     <td><span class="badge bg-success">Concluido</span></td>
                                     <td>Todas as mensagens enviadas</td>
                                 </tr>
                             </table>
+
+                            <div class="alert alert-light mt-3">
+                                <small>
+                                    <i class="bi bi-clock"></i> A campanha <strong>pausa automaticamente</strong> quando:
+                                    <br>- Fora do horario configurado
+                                    <br>- Meta diaria atingida
+                                    <br>- WhatsApp desconectado
+                                </small>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -310,188 +347,307 @@
                     <h5 class="mb-0"><i class="bi bi-diagram-3"></i> 5. Fluxo de Respostas do Paciente</h5>
                 </div>
                 <div class="card-body">
-                    <h6>Mensagem inicial enviada ao paciente:</h6>
+                    <h6>Mensagem inicial enviada ao paciente (MSG 1):</h6>
                     <div class="alert alert-light border">
                         <small>
-                            Ola, <strong>MARIA SILVA</strong>!<br><br>
-                            Identificamos uma consulta agendada para voce:<br>
-                            Data: <strong>15/01/2026</strong><br>
-                            Hora: <strong>14:30</strong><br>
-                            Especialidade: <strong>CARDIOLOGIA</strong><br><br>
-                            Voce confirma sua presenca?<br>
-                            1 - SIM, confirmo<br>
-                            2 - NAO, nao poderei ir<br>
-                            3 - DESCONHECO este agendamento
+                            <strong>[Bom dia! / Boa tarde! / Boa noite!]</strong> <span class="text-muted">(automatico conforme horario)</span><br><br>
+                            Falamos do <strong>HOSPITAL UNIVERSITARIO WALTER CANTIDIO</strong>.<br>
+                            Estamos informando que a <strong>CONSULTA</strong> do paciente <strong>MARIA SILVA</strong>, foi <strong>MARCADA</strong> para o dia <strong>15/01/2026</strong>, com <strong>DR. JOAO SILVA</strong>, com especialidade em <strong>CARDIOLOGIA</strong>.<br><br>
+                            Caso nao haja confirmacao em ate 1 dia util, sua consulta sera cancelada!<br><br>
+                            Posso confirmar o agendamento?<br><br>
+                            1️⃣ <strong>SIM</strong> - Tenho interesse<br>
+                            2️⃣ <strong>NAO</strong> - Nao consigo ir / Nao quero mais<br>
+                            3️⃣ <strong>DESCONHECO</strong> - Nao sou essa pessoa
                         </small>
                     </div>
 
                     <h6 class="mt-4">Fluxo de respostas:</h6>
                     <div class="row">
                         <div class="col-md-4">
-                            <div class="card border-success">
+                            <div class="card border-success h-100">
                                 <div class="card-header bg-success text-white">
-                                    <strong>1 - SIM</strong>
+                                    <strong>1️⃣ SIM - Confirma</strong>
                                 </div>
                                 <div class="card-body">
                                     <p class="mb-2">Paciente confirma presenca</p>
                                     <i class="bi bi-arrow-down"></i>
-                                    <p class="mb-2">Status: <span class="badge bg-warning">Aguardando Comprovante</span></p>
+                                    <p class="mb-2">Resposta: "Consulta confirmada! Aguarde o envio do comprovante."</p>
                                     <i class="bi bi-arrow-down"></i>
-                                    <p class="mb-0">Operador envia comprovante</p>
+                                    <p class="mb-2">Status: <span class="badge bg-warning text-dark">Aguardando Comprovante</span></p>
+                                    <i class="bi bi-arrow-down"></i>
+                                    <p class="mb-0">Operador envia comprovante (MSG 2)</p>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="card border-warning">
+                            <div class="card border-warning h-100">
                                 <div class="card-header bg-warning">
-                                    <strong>2 - NAO</strong>
+                                    <strong>2️⃣ NAO - Nao pode ir</strong>
                                 </div>
                                 <div class="card-body">
-                                    <p class="mb-2">Paciente nao pode ir</p>
+                                    <p class="mb-2">Paciente nao pode comparecer</p>
                                     <i class="bi bi-arrow-down"></i>
                                     <p class="mb-2">Sistema pergunta:</p>
-                                    <small>
-                                        1 - CANCELAR<br>
-                                        2 - REAGENDAR
-                                    </small>
+                                    <div class="alert alert-light p-2">
+                                        <small>
+                                            Entendemos! O que voce deseja fazer?<br>
+                                            1️⃣ <strong>CANCELAR</strong><br>
+                                            2️⃣ <strong>REAGENDAR</strong>
+                                        </small>
+                                    </div>
                                     <hr>
                                     <small>
-                                        Se CANCELAR: pede motivo<br>
-                                        Se REAGENDAR: aguarda nova data
+                                        <strong>Se CANCELAR:</strong> Pede motivo → <span class="badge bg-danger">Rejeitado</span><br>
+                                        <strong>Se REAGENDAR:</strong> Aguarda nova data do operador
                                     </small>
                                 </div>
                             </div>
                         </div>
                         <div class="col-md-4">
-                            <div class="card border-danger">
-                                <div class="card-header bg-danger text-white">
-                                    <strong>3 - DESCONHECO</strong>
+                            <div class="card border-info h-100">
+                                <div class="card-header bg-info text-white">
+                                    <strong>3️⃣ DESCONHECO</strong>
                                 </div>
                                 <div class="card-body">
-                                    <p class="mb-2">Paciente nao reconhece o agendamento</p>
+                                    <p class="mb-2">Pessoa nao reconhece o agendamento</p>
                                     <i class="bi bi-arrow-down"></i>
-                                    <p class="mb-0">Status: <span class="badge bg-danger">Rejeitado</span></p>
-                                    <small class="text-muted">Motivo: "Paciente nao reconhece o agendamento"</small>
+                                    <p class="mb-2"><strong>Apenas aquele telefone</strong> e marcado como "Nao pertence"</p>
+                                    <i class="bi bi-arrow-down"></i>
+                                    <p class="mb-2">Sistema <strong>aguarda outros telefones</strong> responderem</p>
+                                    <hr>
+                                    <small class="text-muted">
+                                        <i class="bi bi-info-circle"></i> So rejeita a consulta se <strong>TODOS</strong> os telefones responderem DESCONHECO
+                                    </small>
                                 </div>
                             </div>
                         </div>
-                    </div>
-
-                    <div class="alert alert-info mt-4">
-                        <h6><i class="bi bi-telephone"></i> Multiplos telefones:</h6>
-                        <p class="mb-0">
-                            Quando um telefone confirma (responde "1"), os outros telefones recebem:
-                            <br><em>"A consulta de MARIA SILVA ja foi confirmada em outro telefone. Nao e necessario responder por este numero."</em>
-                        </p>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 6. Gerenciar Consultas -->
+    <!-- 6. Multiplos Telefones -->
+    <div class="row mb-4" id="multinumeros">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-telephone-plus"></i> 6. Multiplos Telefones - Como Funciona</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6><i class="bi bi-send"></i> Envio:</h6>
+                            <div class="alert alert-success">
+                                <ol class="mb-0">
+                                    <li>Sistema envia MSG 1 para <strong>TODOS os telefones</strong></li>
+                                    <li>Telefones iguais sao enviados apenas uma vez</li>
+                                    <li>Cada telefone tem seu status individual</li>
+                                </ol>
+                            </div>
+
+                            <h6><i class="bi bi-check-circle"></i> Confirmacao:</h6>
+                            <div class="alert alert-info">
+                                <ol class="mb-0">
+                                    <li>Basta <strong>UM telefone</strong> confirmar (responder SIM)</li>
+                                    <li>Os <strong>outros telefones</strong> recebem aviso automatico</li>
+                                    <li>Aviso: "A consulta ja foi confirmada em outro telefone"</li>
+                                </ol>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6><i class="bi bi-person-x"></i> DESCONHECO (Opcao 3):</h6>
+                            <div class="alert alert-warning">
+                                <p><strong>Nova logica:</strong></p>
+                                <ol class="mb-0">
+                                    <li>Marca <strong>apenas aquele telefone</strong> como "Nao pertence"</li>
+                                    <li>Consulta <strong>continua aguardando</strong> outros telefones</li>
+                                    <li>So rejeita se <strong>TODOS</strong> responderem DESCONHECO</li>
+                                    <li>Motivo: "Paciente nao localizado"</li>
+                                </ol>
+                            </div>
+
+                            <h6><i class="bi bi-eye"></i> Status dos telefones:</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><span class="badge bg-success"><i class="bi bi-check"></i></span></td>
+                                    <td>Enviado com sucesso</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="badge bg-danger"><i class="bi bi-x"></i></span></td>
+                                    <td>Invalido (numero nao existe no WhatsApp)</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="badge bg-warning text-dark"><i class="bi bi-person-x"></i></span></td>
+                                    <td>Nao pertence (respondeu DESCONHECO)</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="badge bg-secondary"><i class="bi bi-clock"></i></span></td>
+                                    <td>Pendente (ainda nao enviado)</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 7. Gerenciar Consultas -->
     <div class="row mb-4" id="gerenciar">
         <div class="col-12">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-gear"></i> 6. Gerenciar Consultas</h5>
+                    <h5 class="mb-0"><i class="bi bi-gear"></i> 7. Gerenciar Consultas</h5>
                 </div>
                 <div class="card-body">
-                    <h6>Na pagina de detalhes da campanha voce pode:</h6>
-
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="alert alert-light">
-                                <h6><i class="bi bi-funnel"></i> Filtrar por status:</h6>
-                                <ul class="mb-0">
-                                    <li><strong>Todos</strong> - Mostra todas as consultas</li>
-                                    <li><strong>Aguardando Envio</strong> - Ainda nao enviadas</li>
-                                    <li><strong>Aguardando Confirmacao</strong> - Enviadas, sem resposta</li>
-                                    <li><strong>Aguardando Comprovante</strong> - Confirmadas, falta enviar comprovante</li>
-                                    <li><strong>Confirmados</strong> - Processo completo</li>
-                                    <li><strong>Rejeitados</strong> - Canceladas/nao reconhecidas</li>
-                                </ul>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="alert alert-light">
-                                <h6><i class="bi bi-hand-index"></i> Acoes manuais:</h6>
-                                <ul class="mb-0">
-                                    <li><strong>Ver detalhes</strong> - Abre pagina com chat e historico</li>
-                                    <li><strong>Confirmar manualmente</strong> - Marca como confirmado</li>
-                                    <li><strong>Cancelar</strong> - Cancela a consulta (pede motivo)</li>
-                                    <li><strong>Reenviar</strong> - Reenvia a mensagem de confirmacao</li>
-                                    <li><strong>Enviar comprovante</strong> - Anexa PDF/imagem</li>
-                                    <li><strong>Excluir</strong> - Remove a consulta</li>
-                                </ul>
-                            </div>
-                        </div>
+                    <h6>Status das consultas:</h6>
+                    <div class="table-responsive">
+                        <table class="table table-bordered">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Status</th>
+                                    <th>Descricao</th>
+                                    <th>Proxima acao</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td><span class="badge bg-secondary">AGUARDANDO_ENVIO</span></td>
+                                    <td>MSG 1 ainda nao foi enviada</td>
+                                    <td>Aguardar campanha enviar ou enviar manualmente</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="badge bg-info">AGUARDANDO_CONFIRMACAO</span></td>
+                                    <td>MSG 1 enviada, aguardando resposta</td>
+                                    <td>Aguardar paciente responder</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="badge bg-warning text-dark">AGUARDANDO_COMPROVANTE</span></td>
+                                    <td>Paciente confirmou (SIM)</td>
+                                    <td><strong>Enviar comprovante</strong></td>
+                                </tr>
+                                <tr>
+                                    <td><span class="badge bg-primary">AGUARDANDO_OPCAO_REJEICAO</span></td>
+                                    <td>Paciente disse NAO</td>
+                                    <td>Aguardar escolha: CANCELAR ou REAGENDAR</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="badge bg-secondary">AGUARDANDO_MOTIVO_REJEICAO</span></td>
+                                    <td>Paciente escolheu CANCELAR</td>
+                                    <td>Aguardar motivo do cancelamento</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="badge bg-info">AGUARDANDO_REAGENDAMENTO</span></td>
+                                    <td>Paciente quer reagendar</td>
+                                    <td><strong>Operador define nova data</strong></td>
+                                </tr>
+                                <tr>
+                                    <td><span class="badge bg-success">CONFIRMADO</span></td>
+                                    <td>Consulta confirmada e comprovante enviado</td>
+                                    <td>Finalizado</td>
+                                </tr>
+                                <tr>
+                                    <td><span class="badge bg-danger">REJEITADO</span></td>
+                                    <td>Consulta cancelada</td>
+                                    <td>Finalizado (ver motivo)</td>
+                                </tr>
+                            </tbody>
+                        </table>
                     </div>
 
-                    <h6 class="mt-3">Status dos telefones (pagina de detalhes):</h6>
-                    <table class="table table-sm">
-                        <tr>
-                            <td><span class="badge bg-primary">Principal</span> <span class="badge bg-success"><i class="bi bi-check"></i></span></td>
-                            <td>Telefone principal, mensagem enviada com sucesso</td>
-                        </tr>
-                        <tr>
-                            <td><span class="badge bg-danger">Invalido</span> <span class="badge bg-danger"><i class="bi bi-x"></i></span></td>
-                            <td>Telefone invalido ou nao existe no WhatsApp</td>
-                        </tr>
-                        <tr>
-                            <td><span class="badge bg-warning"><i class="bi bi-clock"></i> Pendente</span></td>
-                            <td>Ainda nao foi enviado</td>
-                        </tr>
-                    </table>
+                    <h6 class="mt-4">Botoes de acao na tabela:</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><button class="btn btn-sm btn-outline-primary"><i class="bi bi-chat-dots"></i></button></td>
+                                    <td><strong>Ver detalhes</strong> - Abre pagina com chat e historico</td>
+                                </tr>
+                                <tr>
+                                    <td><button class="btn btn-sm btn-warning"><i class="bi bi-file-earmark-arrow-up"></i></button></td>
+                                    <td><strong>Enviar comprovante</strong> - So em AGUARDANDO_COMPROVANTE</td>
+                                </tr>
+                                <tr>
+                                    <td><button class="btn btn-sm btn-outline-success"><i class="bi bi-check-lg"></i></button></td>
+                                    <td><strong>Confirmar</strong> - Marca como confirmado manualmente</td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><button class="btn btn-sm btn-primary"><i class="bi bi-calendar-range"></i></button></td>
+                                    <td><strong>Reagendar</strong> - Define nova data</td>
+                                </tr>
+                                <tr>
+                                    <td><button class="btn btn-sm btn-outline-info"><i class="bi bi-arrow-repeat"></i></button></td>
+                                    <td><strong>Reenviar</strong> - Reenvia MSG 1</td>
+                                </tr>
+                                <tr>
+                                    <td><button class="btn btn-sm btn-outline-danger"><i class="bi bi-x-lg"></i></button></td>
+                                    <td><strong>Cancelar</strong> - Cancela a consulta</td>
+                                </tr>
+                                <tr>
+                                    <td><button class="btn btn-sm btn-danger"><i class="bi bi-trash"></i></button></td>
+                                    <td><strong>Excluir</strong> - Remove a consulta</td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 7. Enviar Comprovante -->
+    <!-- 8. Enviar Comprovante -->
     <div class="row mb-4" id="comprovante">
         <div class="col-12">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-file-pdf"></i> 7. Enviar Comprovante</h5>
+                    <h5 class="mb-0"><i class="bi bi-file-pdf"></i> 8. Enviar Comprovante (MSG 2)</h5>
                 </div>
                 <div class="card-body">
-                    <p>Apos o paciente confirmar (responder "1"), voce precisa enviar o comprovante de agendamento:</p>
+                    <p>Apos o paciente confirmar (responder "SIM"), voce precisa enviar o comprovante:</p>
 
                     <div class="row">
                         <div class="col-md-6">
                             <h6>Passo a passo:</h6>
                             <ol>
-                                <li>Va para a <strong>pagina de detalhes</strong> da consulta</li>
+                                <li>Clique no botao <button class="btn btn-sm btn-warning"><i class="bi bi-file-earmark-arrow-up"></i></button> ou va para detalhes</li>
                                 <li>Clique em <strong>"Escolher arquivo"</strong></li>
                                 <li>Selecione o <strong>PDF ou imagem</strong> do comprovante</li>
                                 <li>Clique em <strong>"Enviar Comprovante"</strong></li>
                             </ol>
+
+                            <h6 class="mt-3">Formatos aceitos:</h6>
+                            <ul>
+                                <li>PDF (.pdf) - <strong>Recomendado</strong></li>
+                                <li>Imagens (.jpg, .jpeg, .png)</li>
+                                <li>Tamanho maximo: 16MB</li>
+                            </ul>
                         </div>
                         <div class="col-md-6">
-                            <h6>Formatos aceitos:</h6>
-                            <ul>
-                                <li>PDF (.pdf)</li>
-                                <li>Imagens (.jpg, .jpeg, .png)</li>
-                            </ul>
-
-                            <h6 class="mt-3">O que acontece:</h6>
-                            <ul>
-                                <li>Comprovante e enviado via WhatsApp</li>
-                                <li>Status muda para <span class="badge bg-success">Confirmado</span></li>
-                                <li>Pesquisa de satisfacao e iniciada</li>
-                            </ul>
+                            <h6>Mensagem enviada (MSG 2):</h6>
+                            <div class="alert alert-light border">
+                                <small>
+                                    O Hospital Walter Cantidio agradece seu contato. <strong>CONSULTA CONFIRMADA!</strong><br><br>
+                                    <strong>Paciente:</strong> MARIA SILVA<br>
+                                    <strong>Data:</strong> 15/01/2026<br>
+                                    <strong>Horario:</strong> 14:30<br>
+                                    <strong>Medico(a):</strong> DR. JOAO SILVA<br>
+                                    <strong>Especialidade:</strong> CARDIOLOGIA<br><br>
+                                    <em>[+ informacoes sobre contatos do hospital, app HU Digital, etc.]</em>
+                                </small>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="alert alert-success mt-3">
-                        <h6><i class="bi bi-star"></i> Pesquisa de Satisfacao:</h6>
+                    <div class="alert alert-info mt-3">
+                        <h6><i class="bi bi-cpu"></i> OCR Automatico:</h6>
                         <p class="mb-0">
-                            Apos enviar o comprovante, o sistema automaticamente inicia a pesquisa:
-                            <br>1. Pergunta nota de 1 a 10
-                            <br>2. Pergunta sobre o atendimento
-                            <br>3. Pergunta se tem comentarios
-                            <br>Os resultados ficam em <strong>Dashboard > Pesquisas</strong>
+                            O sistema tenta extrair dados automaticamente do comprovante (paciente, data, hora, medico).
+                            Se nao conseguir, usa os dados da consulta importada.
                         </p>
                     </div>
                 </div>
@@ -499,41 +655,113 @@
         </div>
     </div>
 
-    <!-- 8. Historico -->
-    <div class="row mb-4" id="historico">
+    <!-- 9. Pesquisa de Satisfacao -->
+    <div class="row mb-4" id="pesquisa">
         <div class="col-12">
             <div class="card">
-                <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-clock-history"></i> 8. Historico de Consultas</h5>
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-star"></i> 9. Pesquisa de Satisfacao</h5>
                 </div>
                 <div class="card-body">
-                    <p>O sistema mantem um historico completo de todas as consultas confirmadas.</p>
+                    <p>Apos enviar o comprovante, o sistema <strong>automaticamente</strong> inicia a pesquisa:</p>
 
-                    <h6>Acessar historico:</h6>
-                    <ol>
-                        <li>Clique em <strong>Dashboard > Historico</strong></li>
-                        <li>Use os <strong>filtros</strong> para buscar por paciente, especialidade ou data</li>
-                        <li>Clique em <strong>"Ver Historico"</strong> para ver todas as consultas de um paciente</li>
-                    </ol>
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="card h-100">
+                                <div class="card-header">Pergunta 1: Nota</div>
+                                <div class="card-body">
+                                    <small>
+                                        "De <strong>1 a 10</strong>, qual sua satisfacao com a marcacao de consulta por WhatsApp?"
+                                    </small>
+                                    <hr>
+                                    <small class="text-muted">Resposta: numero de 1 a 10 ou "pular"</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card h-100">
+                                <div class="card-header">Pergunta 2: Atendimento</div>
+                                <div class="card-body">
+                                    <small>
+                                        "A equipe do hospital foi <strong>atenciosa</strong> durante o atendimento?"<br><br>
+                                        1️⃣ SIM<br>
+                                        2️⃣ NAO
+                                    </small>
+                                    <hr>
+                                    <small class="text-muted">Resposta: 1, 2 ou "pular"</small>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card h-100">
+                                <div class="card-header">Pergunta 3: Comentario</div>
+                                <div class="card-body">
+                                    <small>
+                                        "Deixe um <strong>comentario</strong> (opcional - ou digite 'pular')"
+                                    </small>
+                                    <hr>
+                                    <small class="text-muted">Resposta: texto livre ou "pular"</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
-                    <h6 class="mt-3">Recursos do historico:</h6>
-                    <ul>
-                        <li><strong>Filtrar</strong> por paciente, especialidade, periodo</li>
-                        <li><strong>Exportar CSV</strong> para Excel</li>
-                        <li><strong>Ver timeline</strong> de consultas por paciente</li>
-                        <li><strong>Estatisticas</strong> de pacientes, consultas e especialidades</li>
-                    </ul>
+                    <div class="alert alert-light mt-3">
+                        <h6><i class="bi bi-bar-chart"></i> Ver resultados:</h6>
+                        <p class="mb-0">
+                            Acesse <strong>Dashboard > Pesquisas</strong> para ver:
+                            <br>- Media de notas
+                            <br>- Porcentagem de atendimento atencioso
+                            <br>- Comentarios dos pacientes
+                            <br>- Filtros por especialidade
+                            <br>- Exportar para CSV
+                        </p>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- 9. Dicas e Solucoes -->
+    <!-- 10. Historico -->
+    <div class="row mb-4" id="historico">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5 class="mb-0"><i class="bi bi-clock-history"></i> 10. Historico de Consultas</h5>
+                </div>
+                <div class="card-body">
+                    <p>O sistema mantem um historico completo de todas as consultas confirmadas.</p>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Acessar historico:</h6>
+                            <ol>
+                                <li>Clique em <strong>Dashboard > Historico</strong></li>
+                                <li>Use os <strong>filtros</strong> para buscar</li>
+                                <li>Clique em <strong>"Ver Historico"</strong> para ver todas as consultas de um paciente</li>
+                            </ol>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Recursos do historico:</h6>
+                            <ul>
+                                <li><strong>Filtrar</strong> por paciente, especialidade, periodo</li>
+                                <li><strong>Exportar CSV</strong> para Excel</li>
+                                <li><strong>Ver timeline</strong> de consultas por paciente</li>
+                                <li><strong>Estatisticas</strong> de pacientes, consultas e especialidades</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 11. Dicas e Solucoes -->
     <div class="row mb-4" id="dicas">
         <div class="col-12">
             <div class="card">
                 <div class="card-header">
-                    <h5 class="mb-0"><i class="bi bi-lightbulb"></i> 9. Dicas e Solucao de Problemas</h5>
+                    <h5 class="mb-0"><i class="bi bi-lightbulb"></i> 11. Dicas e Solucao de Problemas</h5>
                 </div>
                 <div class="card-body">
                     <div class="accordion" id="accordionDicas">
@@ -548,8 +776,8 @@
                                 <div class="accordion-body">
                                     <ul>
                                         <li>Verifique se o WhatsApp esta <strong>conectado</strong> (Configuracoes)</li>
-                                        <li>Verifique se o numero esta no <strong>formato correto</strong></li>
-                                        <li>Telefones marcados como <strong>"Invalido"</strong> nao existem no WhatsApp</li>
+                                        <li>Verifique se esta dentro do <strong>horario de envio</strong> (ex: 8h-23h)</li>
+                                        <li>Verifique se nao atingiu a <strong>meta diaria</strong></li>
                                         <li>Use o botao <strong>"Reenviar"</strong> para tentar novamente</li>
                                     </ul>
                                 </div>
@@ -560,16 +788,16 @@
                         <div class="accordion-item">
                             <h2 class="accordion-header">
                                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#dica2">
-                                    Paciente nao recebeu a mensagem
+                                    Telefone marcado como "Invalido"
                                 </button>
                             </h2>
                             <div id="dica2" class="accordion-collapse collapse" data-bs-parent="#accordionDicas">
                                 <div class="accordion-body">
                                     <ul>
-                                        <li>Verifique o <strong>status do telefone</strong> na pagina de detalhes</li>
-                                        <li>Se aparece <strong>"Invalido"</strong>, o numero nao existe no WhatsApp</li>
+                                        <li>O numero <strong>nao existe no WhatsApp</strong></li>
+                                        <li>Verifique se o numero esta <strong>correto</strong> na planilha</li>
                                         <li>Tente adicionar o <strong>9</strong> apos o DDD (ex: 85 9 98765432)</li>
-                                        <li>Confirme se o numero esta <strong>correto</strong> na planilha original</li>
+                                        <li>Se houver <strong>outros telefones</strong>, eles ainda podem receber</li>
                                     </ul>
                                 </div>
                             </div>
@@ -579,16 +807,16 @@
                         <div class="accordion-item">
                             <h2 class="accordion-header">
                                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#dica3">
-                                    Campanha pausou sozinha
+                                    Telefone marcado como "Nao pertence"
                                 </button>
                             </h2>
                             <div id="dica3" class="accordion-collapse collapse" data-bs-parent="#accordionDicas">
                                 <div class="accordion-body">
                                     <ul>
-                                        <li><strong>Fora do horario:</strong> Campanha so envia entre os horarios configurados</li>
-                                        <li><strong>Meta diaria atingida:</strong> Atingiu o limite de envios do dia</li>
-                                        <li><strong>WhatsApp desconectado:</strong> Verifique a conexao</li>
-                                        <li>Basta clicar em <strong>"Iniciar Envio"</strong> novamente</li>
+                                        <li>A pessoa que recebeu respondeu <strong>"DESCONHECO"</strong> (opcao 3)</li>
+                                        <li>Isso significa que <strong>nao e o paciente</strong> naquele numero</li>
+                                        <li>Se houver <strong>outros telefones</strong>, o sistema aguarda resposta deles</li>
+                                        <li>So rejeita a consulta se <strong>TODOS</strong> os telefones forem "Nao pertence"</li>
                                     </ul>
                                 </div>
                             </div>
@@ -598,18 +826,17 @@
                         <div class="accordion-item">
                             <h2 class="accordion-header">
                                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#dica4">
-                                    Como reagendar uma consulta?
+                                    Campanha pausou sozinha
                                 </button>
                             </h2>
                             <div id="dica4" class="accordion-collapse collapse" data-bs-parent="#accordionDicas">
                                 <div class="accordion-body">
-                                    <ol>
-                                        <li>Quando o paciente responde <strong>"2" (NAO)</strong></li>
-                                        <li>Sistema pergunta: CANCELAR ou REAGENDAR?</li>
-                                        <li>Se paciente escolhe <strong>REAGENDAR</strong></li>
-                                        <li>Operador envia a <strong>nova data/hora</strong> pelo chat</li>
-                                        <li>Paciente confirma a nova data</li>
-                                    </ol>
+                                    <ul>
+                                        <li><strong>Fora do horario:</strong> Campanha so envia entre hora_inicio e hora_fim</li>
+                                        <li><strong>Meta diaria atingida:</strong> Reseta a meia-noite (horario Fortaleza)</li>
+                                        <li><strong>WhatsApp desconectado:</strong> Verifique a conexao</li>
+                                        <li>Clique em <strong>"Iniciar Envio"</strong> para retomar</li>
+                                    </ul>
                                 </div>
                             </div>
                         </div>
@@ -618,18 +845,20 @@
                         <div class="accordion-item">
                             <h2 class="accordion-header">
                                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#dica5">
-                                    Erro ao importar planilha
+                                    Como reagendar uma consulta?
                                 </button>
                             </h2>
                             <div id="dica5" class="accordion-collapse collapse" data-bs-parent="#accordionDicas">
                                 <div class="accordion-body">
-                                    <ul>
-                                        <li>Verifique se os <strong>nomes das colunas</strong> estao corretos</li>
-                                        <li>Colunas obrigatorias: PACIENTE, TELEFONE CADASTRO, DATA AGHU, ESPECIALIDADE</li>
-                                        <li>Remova <strong>linhas vazias</strong> da planilha</li>
-                                        <li>Salve como <strong>.xlsx</strong> (Excel)</li>
-                                        <li>Verifique se nao tem <strong>caracteres especiais</strong> nos nomes</li>
-                                    </ul>
+                                    <ol>
+                                        <li>Paciente responde <strong>"2" (NAO)</strong> na MSG 1</li>
+                                        <li>Sistema pergunta: CANCELAR ou REAGENDAR?</li>
+                                        <li>Paciente escolhe <strong>"2" (REAGENDAR)</strong></li>
+                                        <li>Status muda para <strong>AGUARDANDO_REAGENDAMENTO</strong></li>
+                                        <li>Operador clica no botao <button class="btn btn-sm btn-primary"><i class="bi bi-calendar-range"></i></button></li>
+                                        <li>Define <strong>nova data e hora</strong></li>
+                                        <li>Sistema envia mensagem com nova data para o paciente confirmar</li>
+                                    </ol>
                                 </div>
                             </div>
                         </div>
@@ -638,19 +867,38 @@
                         <div class="accordion-item">
                             <h2 class="accordion-header">
                                 <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#dica6">
-                                    Multiplos telefones - como funciona?
+                                    Erro ao importar planilha
                                 </button>
                             </h2>
                             <div id="dica6" class="accordion-collapse collapse" data-bs-parent="#accordionDicas">
                                 <div class="accordion-body">
-                                    <p>Quando a planilha tem telefones separados por " / " (ex: <code>85998765432 / 85912345678</code>):</p>
-                                    <ol>
-                                        <li>Sistema <strong>envia para TODOS</strong> os telefones</li>
-                                        <li>Telefones <strong>iguais</strong> sao enviados apenas uma vez</li>
-                                        <li>Basta <strong>UM responder</strong> para confirmar</li>
-                                        <li>Os outros telefones recebem aviso que <strong>ja foi confirmado</strong></li>
-                                        <li>Telefones <strong>invalidos</strong> aparecem marcados na pagina de detalhes</li>
-                                    </ol>
+                                    <ul>
+                                        <li>Verifique se os <strong>nomes das colunas</strong> estao corretos</li>
+                                        <li>Colunas obrigatorias: <strong>PACIENTE</strong> e <strong>TIPO</strong></li>
+                                        <li>Remova <strong>linhas vazias</strong> da planilha</li>
+                                        <li>Salve como <strong>.xlsx</strong> (Excel)</li>
+                                        <li>TIPO deve ser <strong>RETORNO</strong> ou <strong>INTERCONSULTA</strong></li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Dica 7 -->
+                        <div class="accordion-item">
+                            <h2 class="accordion-header">
+                                <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#dica7">
+                                    Saudacao esta errada (Bom dia as 15h)
+                                </button>
+                            </h2>
+                            <div id="dica7" class="accordion-collapse collapse" data-bs-parent="#accordionDicas">
+                                <div class="accordion-body">
+                                    <ul>
+                                        <li>O sistema usa o <strong>horario de Fortaleza (UTC-3)</strong></li>
+                                        <li><strong>Bom dia:</strong> 6h - 11h59</li>
+                                        <li><strong>Boa tarde:</strong> 12h - 17h59</li>
+                                        <li><strong>Boa noite:</strong> 18h - 5h59</li>
+                                        <li>Se o servidor estiver em outro fuso, nao afeta - sempre usa Fortaleza</li>
+                                    </ul>
                                 </div>
                             </div>
                         </div>
@@ -663,7 +911,7 @@
     <!-- Botao voltar -->
     <div class="row">
         <div class="col-12 text-center mb-4">
-            <a href="{{ url_for('consultas_dashboard') }}" class="btn btn-primary">
+            <a href="{{ url_for('consultas_dashboard') }}" class="btn btn-primary btn-lg">
                 <i class="bi bi-arrow-left"></i> Voltar ao Dashboard
             </a>
         </div>

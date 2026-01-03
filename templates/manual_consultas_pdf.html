@@ -1,0 +1,1126 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manual do Sistema - Modo Consultas</title>
+    <style>
+        /* Reset e Base */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-size: 11pt;
+            line-height: 1.6;
+            color: #333;
+            background: #fff;
+            padding: 20mm;
+        }
+
+        /* Configurações de impressão */
+        @media print {
+            body {
+                padding: 15mm;
+            }
+            .page-break {
+                page-break-before: always;
+            }
+            .no-print {
+                display: none;
+            }
+        }
+
+        /* Capa */
+        .cover {
+            text-align: center;
+            padding: 60px 20px;
+            border: 3px solid #0d6efd;
+            border-radius: 10px;
+            margin-bottom: 40px;
+        }
+
+        .cover h1 {
+            color: #0d6efd;
+            font-size: 32pt;
+            margin-bottom: 10px;
+        }
+
+        .cover h2 {
+            color: #666;
+            font-size: 18pt;
+            font-weight: normal;
+            margin-bottom: 30px;
+        }
+
+        .cover .subtitle {
+            font-size: 14pt;
+            color: #888;
+        }
+
+        .cover .logo {
+            font-size: 60pt;
+            margin-bottom: 20px;
+        }
+
+        .cover .version {
+            margin-top: 40px;
+            font-size: 10pt;
+            color: #999;
+        }
+
+        /* Índice */
+        .toc {
+            background: #f8f9fa;
+            padding: 20px 30px;
+            border-radius: 8px;
+            margin-bottom: 40px;
+        }
+
+        .toc h2 {
+            color: #0d6efd;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #0d6efd;
+            padding-bottom: 10px;
+        }
+
+        .toc ul {
+            list-style: none;
+        }
+
+        .toc li {
+            padding: 8px 0;
+            border-bottom: 1px dotted #ddd;
+        }
+
+        .toc li:last-child {
+            border-bottom: none;
+        }
+
+        .toc a {
+            color: #333;
+            text-decoration: none;
+        }
+
+        .toc .page-num {
+            float: right;
+            color: #666;
+        }
+
+        /* Seções */
+        .section {
+            margin-bottom: 40px;
+        }
+
+        .section h2 {
+            color: #0d6efd;
+            font-size: 18pt;
+            border-bottom: 3px solid #0d6efd;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+        }
+
+        .section h3 {
+            color: #333;
+            font-size: 14pt;
+            margin: 25px 0 15px 0;
+            padding-left: 10px;
+            border-left: 4px solid #0d6efd;
+        }
+
+        .section h4 {
+            color: #555;
+            font-size: 12pt;
+            margin: 20px 0 10px 0;
+        }
+
+        /* Placeholder para imagens */
+        .image-placeholder {
+            background: #f0f0f0;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 40px 20px;
+            text-align: center;
+            margin: 20px 0;
+            color: #888;
+        }
+
+        .image-placeholder .icon {
+            font-size: 40pt;
+            margin-bottom: 10px;
+        }
+
+        .image-placeholder p {
+            margin: 5px 0;
+        }
+
+        .image-placeholder .instruction {
+            font-size: 9pt;
+            font-style: italic;
+            color: #aaa;
+        }
+
+        /* Imagem real quando adicionada */
+        .screenshot {
+            max-width: 100%;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            margin: 20px 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        /* Boxes informativos */
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #0d6efd;
+            padding: 15px 20px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .warning-box {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 15px 20px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .success-box {
+            background: #d1e7dd;
+            border-left: 4px solid #198754;
+            padding: 15px 20px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .danger-box {
+            background: #f8d7da;
+            border-left: 4px solid #dc3545;
+            padding: 15px 20px;
+            margin: 15px 0;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .box-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        /* Tabelas */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+        }
+
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px 12px;
+            text-align: left;
+        }
+
+        th {
+            background: #0d6efd;
+            color: white;
+        }
+
+        tr:nth-child(even) {
+            background: #f8f9fa;
+        }
+
+        /* Listas */
+        ul, ol {
+            margin: 10px 0 10px 25px;
+        }
+
+        li {
+            margin: 8px 0;
+        }
+
+        /* Código */
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            font-size: 10pt;
+        }
+
+        /* Steps numerados */
+        .steps {
+            counter-reset: step;
+            list-style: none;
+            margin-left: 0;
+        }
+
+        .steps li {
+            counter-increment: step;
+            position: relative;
+            padding-left: 50px;
+            margin: 15px 0;
+        }
+
+        .steps li::before {
+            content: counter(step);
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 35px;
+            height: 35px;
+            background: #0d6efd;
+            color: white;
+            border-radius: 50%;
+            text-align: center;
+            line-height: 35px;
+            font-weight: bold;
+        }
+
+        /* Fluxo visual */
+        .flow {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 20px 0;
+        }
+
+        .flow-item {
+            background: #0d6efd;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 10pt;
+        }
+
+        .flow-arrow {
+            font-size: 20pt;
+            color: #0d6efd;
+        }
+
+        /* Badges */
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 9pt;
+            font-weight: bold;
+        }
+
+        .badge-primary { background: #0d6efd; color: white; }
+        .badge-success { background: #198754; color: white; }
+        .badge-warning { background: #ffc107; color: #333; }
+        .badge-danger { background: #dc3545; color: white; }
+        .badge-secondary { background: #6c757d; color: white; }
+        .badge-info { background: #0dcaf0; color: #333; }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 1px solid #ddd;
+            color: #888;
+            font-size: 9pt;
+        }
+
+        /* Botão de impressão */
+        .print-btn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: #0d6efd;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14pt;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+
+        .print-btn:hover {
+            background: #0b5ed7;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Botão de impressão/PDF -->
+    <button class="print-btn no-print" onclick="window.print()">
+        🖨️ Imprimir / Salvar PDF
+    </button>
+
+    <!-- ========== CAPA ========== -->
+    <div class="cover">
+        <div class="logo">📋</div>
+        <h1>Manual do Sistema</h1>
+        <h2>Modo Consultas - Agendamento via WhatsApp</h2>
+        <p class="subtitle">Hospital Universitário Walter Cantídio</p>
+        <p class="version">
+            Versão 1.0 - Janeiro 2026<br>
+            Sistema de Busca Ativa
+        </p>
+    </div>
+
+    <!-- ========== ÍNDICE ========== -->
+    <div class="toc">
+        <h2>📑 Índice</h2>
+        <ul>
+            <li><a href="#intro">1. Introdução ao Sistema</a> <span class="page-num">2</span></li>
+            <li><a href="#acesso">2. Acesso ao Sistema</a> <span class="page-num">3</span></li>
+            <li><a href="#config">3. Configurações Iniciais</a> <span class="page-num">4</span></li>
+            <li><a href="#planilha">4. Preparar Planilha</a> <span class="page-num">6</span></li>
+            <li><a href="#importar">5. Importar Planilha</a> <span class="page-num">8</span></li>
+            <li><a href="#campanha">6. Gerenciar Campanha</a> <span class="page-num">10</span></li>
+            <li><a href="#fluxo">7. Fluxo do Paciente</a> <span class="page-num">12</span></li>
+            <li><a href="#detalhes">8. Detalhes da Consulta</a> <span class="page-num">14</span></li>
+            <li><a href="#comprovante">9. Enviar Comprovante</a> <span class="page-num">16</span></li>
+            <li><a href="#historico">10. Histórico</a> <span class="page-num">17</span></li>
+            <li><a href="#problemas">11. Solução de Problemas</a> <span class="page-num">18</span></li>
+        </ul>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- ========== 1. INTRODUÇÃO ========== -->
+    <div class="section" id="intro">
+        <h2>1. Introdução ao Sistema</h2>
+
+        <p>O <strong>Modo Consultas</strong> é um sistema automatizado para confirmação de agendamentos de consultas via WhatsApp. Ele permite enviar mensagens em massa para pacientes, receber confirmações e gerenciar reagendamentos de forma eficiente.</p>
+
+        <h3>1.1 O que o sistema faz?</h3>
+        <ul>
+            <li>✅ Envia mensagens automáticas de confirmação de consulta</li>
+            <li>✅ Recebe e processa respostas dos pacientes (SIM/NÃO/DESCONHEÇO)</li>
+            <li>✅ Gerencia reagendamentos e cancelamentos</li>
+            <li>✅ Envia comprovantes de agendamento (PDF/imagem)</li>
+            <li>✅ Aplica pesquisa de satisfação automaticamente</li>
+            <li>✅ Mantém histórico completo de todas as consultas</li>
+        </ul>
+
+        <h3>1.2 Fluxo Geral do Sistema</h3>
+        <div class="flow">
+            <span class="flow-item">Importar Planilha</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-item">Iniciar Campanha</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-item">Paciente Recebe</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-item">Paciente Responde</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-item">Enviar Comprovante</span>
+        </div>
+
+        <div class="image-placeholder">
+            <div class="icon">📊</div>
+            <p><strong>Inserir imagem:</strong> Dashboard principal do sistema</p>
+            <p class="instruction">Capturar tela: /consultas/dashboard</p>
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- ========== 2. ACESSO ========== -->
+    <div class="section" id="acesso">
+        <h2>2. Acesso ao Sistema</h2>
+
+        <h3>2.1 Criar Conta</h3>
+        <p>Para acessar o sistema, primeiro é necessário criar uma conta:</p>
+
+        <ol class="steps">
+            <li>Acesse o endereço do sistema no navegador</li>
+            <li>Clique em <strong>"Criar Conta"</strong> ou <strong>"Cadastrar"</strong></li>
+            <li>Preencha os dados:
+                <ul>
+                    <li>Nome completo</li>
+                    <li>E-mail (será seu login)</li>
+                    <li>Senha (mínimo 6 caracteres)</li>
+                </ul>
+            </li>
+            <li>Selecione o tipo de sistema: <strong>"Agendamento de Consultas"</strong></li>
+            <li>Clique em <strong>"Cadastrar"</strong></li>
+        </ol>
+
+        <div class="image-placeholder">
+            <div class="icon">📝</div>
+            <p><strong>Inserir imagem:</strong> Tela de cadastro</p>
+            <p class="instruction">Capturar tela: /cadastro</p>
+        </div>
+
+        <h3>2.2 Fazer Login</h3>
+        <ol class="steps">
+            <li>Acesse o endereço do sistema</li>
+            <li>Digite seu <strong>e-mail</strong></li>
+            <li>Digite sua <strong>senha</strong></li>
+            <li>Clique em <strong>"Entrar"</strong></li>
+        </ol>
+
+        <div class="image-placeholder">
+            <div class="icon">🔐</div>
+            <p><strong>Inserir imagem:</strong> Tela de login</p>
+            <p class="instruction">Capturar tela: /login</p>
+        </div>
+
+        <div class="warning-box">
+            <p class="box-title">⚠️ Importante</p>
+            <p>Guarde sua senha em local seguro. Caso esqueça, será necessário solicitar ao administrador.</p>
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- ========== 3. CONFIGURAÇÕES ========== -->
+    <div class="section" id="config">
+        <h2>3. Configurações Iniciais</h2>
+
+        <p>Antes de começar a usar o sistema, você precisa configurar o WhatsApp.</p>
+
+        <h3>3.1 Acessar Configurações</h3>
+        <ol class="steps">
+            <li>No menu lateral, clique em <strong>"Configurações"</strong></li>
+            <li>Você verá a seção de <strong>"WhatsApp"</strong></li>
+        </ol>
+
+        <div class="image-placeholder">
+            <div class="icon">⚙️</div>
+            <p><strong>Inserir imagem:</strong> Página de configurações</p>
+            <p class="instruction">Capturar tela: /configuracoes</p>
+        </div>
+
+        <h3>3.2 Conectar WhatsApp</h3>
+        <ol class="steps">
+            <li>Na seção WhatsApp, clique em <strong>"Conectar"</strong></li>
+            <li>Um <strong>QR Code</strong> será exibido na tela</li>
+            <li>Abra o <strong>WhatsApp</strong> no seu celular</li>
+            <li>Vá em <strong>Configurações → Dispositivos Conectados → Conectar Dispositivo</strong></li>
+            <li>Escaneie o <strong>QR Code</strong> da tela</li>
+            <li>Aguarde a conexão ser estabelecida</li>
+        </ol>
+
+        <div class="image-placeholder">
+            <div class="icon">📱</div>
+            <p><strong>Inserir imagem:</strong> QR Code do WhatsApp</p>
+            <p class="instruction">Capturar tela quando aparecer o QR Code</p>
+        </div>
+
+        <div class="success-box">
+            <p class="box-title">✅ Conexão estabelecida</p>
+            <p>Quando conectado, o status mudará para <span class="badge badge-success">Conectado</span> e você verá o número do WhatsApp conectado.</p>
+        </div>
+
+        <div class="danger-box">
+            <p class="box-title">❌ Problemas de conexão</p>
+            <p>Se a conexão falhar:</p>
+            <ul>
+                <li>Verifique sua conexão com a internet</li>
+                <li>Atualize a página e tente novamente</li>
+                <li>Certifique-se que o WhatsApp do celular está atualizado</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- ========== 4. PLANILHA ========== -->
+    <div class="section" id="planilha">
+        <h2>4. Preparar a Planilha</h2>
+
+        <p>A planilha com os dados das consultas deve seguir um formato específico. Use o Excel ou Google Sheets para criar a planilha.</p>
+
+        <h3>4.1 Colunas Obrigatórias</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Nome da Coluna</th>
+                    <th>Descrição</th>
+                    <th>Exemplo</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>PACIENTE</code></td>
+                    <td>Nome completo do paciente</td>
+                    <td>MARIA SILVA SANTOS</td>
+                </tr>
+                <tr>
+                    <td><code>TELEFONE CADASTRO</code></td>
+                    <td>Telefone principal</td>
+                    <td>85998765432</td>
+                </tr>
+                <tr>
+                    <td><code>DATA AGHU</code></td>
+                    <td>Data da consulta</td>
+                    <td>15/01/2026</td>
+                </tr>
+                <tr>
+                    <td><code>ESPECIALIDADE</code></td>
+                    <td>Especialidade médica</td>
+                    <td>CARDIOLOGIA</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>4.2 Colunas Opcionais</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Nome da Coluna</th>
+                    <th>Descrição</th>
+                    <th>Exemplo</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>TELEFONE REGISTRO</code></td>
+                    <td>Telefone secundário</td>
+                    <td>85987654321</td>
+                </tr>
+                <tr>
+                    <td><code>HORA AGHU</code></td>
+                    <td>Hora da consulta</td>
+                    <td>14:30</td>
+                </tr>
+                <tr>
+                    <td><code>PROFISSIONAL</code></td>
+                    <td>Nome do médico</td>
+                    <td>DR. JOÃO SILVA</td>
+                </tr>
+                <tr>
+                    <td><code>LOCAL</code></td>
+                    <td>Local da consulta</td>
+                    <td>AMBULATÓRIO A - SALA 5</td>
+                </tr>
+                <tr>
+                    <td><code>TIPO</code></td>
+                    <td>Tipo de consulta</td>
+                    <td>RETORNO ou INTERCONSULTA</td>
+                </tr>
+                <tr>
+                    <td><code>PRONTUARIO</code></td>
+                    <td>Número do prontuário</td>
+                    <td>123456</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>4.3 Exemplo de Planilha</h3>
+        <div class="image-placeholder">
+            <div class="icon">📊</div>
+            <p><strong>Inserir imagem:</strong> Exemplo de planilha no Excel</p>
+            <p class="instruction">Criar exemplo de planilha e capturar</p>
+        </div>
+
+        <h3>4.4 Múltiplos Telefones</h3>
+        <div class="info-box">
+            <p class="box-title">📱 Importante: Múltiplos números</p>
+            <p>Você pode colocar vários telefones na mesma célula, separados por <code> / </code> (espaço, barra, espaço):</p>
+            <p><code>85998765432 / 85912345678</code></p>
+            <p><strong>O sistema irá:</strong></p>
+            <ul>
+                <li>Enviar mensagem para <strong>TODOS</strong> os telefones</li>
+                <li>Basta <strong>UM confirmar</strong> para a consulta ser confirmada</li>
+                <li>Os outros receberão aviso de que já foi confirmado</li>
+            </ul>
+        </div>
+
+        <h3>4.5 Formato do Telefone</h3>
+        <p>O sistema aceita vários formatos de telefone:</p>
+        <ul>
+            <li><code>85998765432</code> - DDD + número</li>
+            <li><code>5585998765432</code> - Código do país + DDD + número</li>
+            <li><code>998765432</code> - Apenas número (usará DDD padrão)</li>
+            <li><code>(85) 99876-5432</code> - Com formatação</li>
+        </ul>
+
+        <div class="warning-box">
+            <p class="box-title">⚠️ Atenção</p>
+            <p>O sistema formata automaticamente os números para o padrão internacional (5585...).</p>
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- ========== 5. IMPORTAR ========== -->
+    <div class="section" id="importar">
+        <h2>5. Importar Planilha</h2>
+
+        <h3>5.1 Acessar Importação</h3>
+        <ol class="steps">
+            <li>No Dashboard, clique em <strong>"Importar Planilha"</strong></li>
+            <li>A página de importação será exibida</li>
+        </ol>
+
+        <div class="image-placeholder">
+            <div class="icon">📤</div>
+            <p><strong>Inserir imagem:</strong> Página de importação</p>
+            <p class="instruction">Capturar tela: /consultas/importar</p>
+        </div>
+
+        <h3>5.2 Preencher Dados da Campanha</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Campo</th>
+                    <th>Descrição</th>
+                    <th>Exemplo</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Nome da Campanha</td>
+                    <td>Identificação da campanha</td>
+                    <td>Cardiologia - Janeiro 2026</td>
+                </tr>
+                <tr>
+                    <td>Descrição</td>
+                    <td>Detalhes adicionais (opcional)</td>
+                    <td>Consultas de retorno</td>
+                </tr>
+                <tr>
+                    <td>Meta Diária</td>
+                    <td>Quantas mensagens por dia</td>
+                    <td>50</td>
+                </tr>
+                <tr>
+                    <td>Intervalo (segundos)</td>
+                    <td>Tempo entre cada envio</td>
+                    <td>30</td>
+                </tr>
+                <tr>
+                    <td>Horário Início</td>
+                    <td>Hora de começar envios</td>
+                    <td>08:00</td>
+                </tr>
+                <tr>
+                    <td>Horário Fim</td>
+                    <td>Hora de parar envios</td>
+                    <td>18:00</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>5.3 Selecionar Arquivo</h3>
+        <ol class="steps">
+            <li>Clique em <strong>"Escolher arquivo"</strong></li>
+            <li>Selecione a planilha (.xlsx, .xls ou .csv)</li>
+            <li>Clique em <strong>"Importar"</strong></li>
+        </ol>
+
+        <div class="success-box">
+            <p class="box-title">✅ Importação bem-sucedida</p>
+            <p>Após importar, você verá a mensagem: "Campanha criada com sucesso! X consultas importadas."</p>
+        </div>
+
+        <h3>5.4 Status da Campanha</h3>
+        <p>Após importar, a campanha terá o status:</p>
+        <p><span class="badge badge-info">Pronta</span> - Aguardando início do envio</p>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- ========== 6. GERENCIAR CAMPANHA ========== -->
+    <div class="section" id="campanha">
+        <h2>6. Gerenciar Campanha</h2>
+
+        <h3>6.1 Visualizar Campanhas</h3>
+        <p>No Dashboard você verá todas as suas campanhas com:</p>
+        <ul>
+            <li><strong>Nome</strong> da campanha</li>
+            <li><strong>Status</strong> atual</li>
+            <li><strong>Total</strong> de consultas</li>
+            <li><strong>Enviados</strong> - quantas mensagens foram enviadas</li>
+            <li><strong>Confirmados</strong> - quantos pacientes confirmaram</li>
+            <li><strong>Aguardando</strong> - aguardando comprovante</li>
+            <li><strong>Rejeitados</strong> - cancelados ou não reconhecidos</li>
+        </ul>
+
+        <div class="image-placeholder">
+            <div class="icon">📋</div>
+            <p><strong>Inserir imagem:</strong> Lista de campanhas no dashboard</p>
+            <p class="instruction">Capturar tela: /consultas/dashboard com campanhas</p>
+        </div>
+
+        <h3>6.2 Status das Campanhas</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Status</th>
+                    <th>Significado</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><span class="badge badge-secondary">Pendente</span></td>
+                    <td>Recém importada, aguardando configuração</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-info">Pronta</span></td>
+                    <td>Configurada, pronta para iniciar</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-primary">Enviando</span></td>
+                    <td>Enviando mensagens automaticamente</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-warning">Pausado</span></td>
+                    <td>Pausada (manual, horário ou meta atingida)</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-success">Concluído</span></td>
+                    <td>Todas as mensagens foram enviadas</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-danger">Erro</span></td>
+                    <td>Erro no envio (WhatsApp desconectado, etc)</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>6.3 Iniciar Envio</h3>
+        <ol class="steps">
+            <li>Clique em <strong>"Ver"</strong> na campanha desejada</li>
+            <li>Na página de detalhes, clique em <strong>"Iniciar Envio"</strong></li>
+            <li>Confirme a ação</li>
+            <li>O sistema começará a enviar as mensagens automaticamente</li>
+        </ol>
+
+        <div class="image-placeholder">
+            <div class="icon">▶️</div>
+            <p><strong>Inserir imagem:</strong> Botão de iniciar campanha</p>
+            <p class="instruction">Capturar tela: /consultas/campanha/X com botões de ação</p>
+        </div>
+
+        <h3>6.4 Controles da Campanha</h3>
+        <ul>
+            <li><span class="badge badge-success">Iniciar</span> - Inicia ou retoma o envio</li>
+            <li><span class="badge badge-warning">Pausar</span> - Pausa temporariamente</li>
+            <li><span class="badge badge-danger">Cancelar</span> - Encerra a campanha definitivamente</li>
+        </ul>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- ========== 7. FLUXO DO PACIENTE ========== -->
+    <div class="section" id="fluxo">
+        <h2>7. Fluxo de Respostas do Paciente</h2>
+
+        <h3>7.1 Mensagem Inicial</h3>
+        <p>O paciente recebe a seguinte mensagem no WhatsApp:</p>
+
+        <div style="background: #dcf8c6; padding: 15px; border-radius: 10px; margin: 15px 0; max-width: 400px;">
+            <p style="margin: 0;">
+                Olá, <strong>MARIA SILVA</strong>!<br><br>
+                Identificamos uma consulta agendada para você:<br><br>
+                📅 Data: <strong>15/01/2026</strong><br>
+                ⏰ Hora: <strong>14:30</strong><br>
+                👨‍⚕️ Especialidade: <strong>CARDIOLOGIA</strong><br><br>
+                Você confirma sua presença?<br><br>
+                1️⃣ SIM, confirmo<br>
+                2️⃣ NÃO, não poderei ir<br>
+                3️⃣ DESCONHEÇO este agendamento
+            </p>
+        </div>
+
+        <h3>7.2 Opções de Resposta</h3>
+
+        <h4>Opção 1 - SIM (Confirma)</h4>
+        <div class="flow">
+            <span class="flow-item">Paciente responde "1"</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-item" style="background: #ffc107; color: #333;">Aguardando Comprovante</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-item" style="background: #198754;">Confirmado</span>
+        </div>
+        <p>O paciente recebe: "✅ Consulta confirmada! Aguarde o envio do comprovante."</p>
+
+        <h4>Opção 2 - NÃO (Não pode ir)</h4>
+        <div class="flow">
+            <span class="flow-item">Paciente responde "2"</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-item" style="background: #ffc107; color: #333;">Escolher opção</span>
+        </div>
+        <p>O sistema pergunta:</p>
+        <div style="background: #dcf8c6; padding: 15px; border-radius: 10px; margin: 15px 0; max-width: 400px;">
+            <p style="margin: 0;">
+                Entendemos! O que você deseja fazer?<br><br>
+                1️⃣ <strong>CANCELAR</strong> - Não quero mais a consulta<br>
+                2️⃣ <strong>REAGENDAR</strong> - Quero mudar a data/horário
+            </p>
+        </div>
+
+        <h4>Opção 3 - DESCONHEÇO</h4>
+        <div class="flow">
+            <span class="flow-item">Paciente responde "3"</span>
+            <span class="flow-arrow">→</span>
+            <span class="flow-item" style="background: #dc3545;">Rejeitado</span>
+        </div>
+        <p>A consulta é marcada como rejeitada com o motivo "Paciente não reconhece o agendamento".</p>
+
+        <h3>7.3 Fluxo de Cancelamento</h3>
+        <p>Se o paciente escolhe CANCELAR:</p>
+        <ol>
+            <li>Sistema pede o <strong>motivo do cancelamento</strong></li>
+            <li>Paciente digita o motivo</li>
+            <li>Consulta marcada como <span class="badge badge-danger">Rejeitada</span></li>
+        </ol>
+
+        <h3>7.4 Fluxo de Reagendamento</h3>
+        <p>Se o paciente escolhe REAGENDAR:</p>
+        <ol>
+            <li>Consulta muda para <span class="badge badge-info">Aguardando Reagendamento</span></li>
+            <li>Operador envia a nova data/hora pelo chat</li>
+            <li>Paciente confirma a nova data</li>
+            <li>Status muda para <span class="badge badge-warning">Aguardando Comprovante</span></li>
+        </ol>
+
+        <div class="info-box">
+            <p class="box-title">📱 Múltiplos telefones</p>
+            <p>Quando há vários telefones e um confirma, os outros recebem:</p>
+            <p><em>"ℹ️ A consulta de MARIA SILVA já foi confirmada em outro telefone. Não é necessário responder por este número."</em></p>
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- ========== 8. DETALHES DA CONSULTA ========== -->
+    <div class="section" id="detalhes">
+        <h2>8. Detalhes da Consulta</h2>
+
+        <h3>8.1 Acessar Detalhes</h3>
+        <ol class="steps">
+            <li>Na página da campanha, localize a consulta desejada</li>
+            <li>Clique no <strong>ícone de olho</strong> ou <strong>"Ver"</strong></li>
+            <li>A página de detalhes será exibida</li>
+        </ol>
+
+        <div class="image-placeholder">
+            <div class="icon">👁️</div>
+            <p><strong>Inserir imagem:</strong> Página de detalhes da consulta</p>
+            <p class="instruction">Capturar tela: /consultas/consulta/X</p>
+        </div>
+
+        <h3>8.2 Informações Exibidas</h3>
+        <ul>
+            <li><strong>Dados do paciente</strong>: Nome, prontuário</li>
+            <li><strong>Dados da consulta</strong>: Data, hora, especialidade, profissional, local</li>
+            <li><strong>Status atual</strong>: Com cores indicativas</li>
+            <li><strong>Telefones</strong>: Lista de todos os telefones com status de envio</li>
+            <li><strong>Chat</strong>: Histórico de mensagens trocadas</li>
+        </ul>
+
+        <h3>8.3 Status dos Telefones</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Indicador</th>
+                    <th>Significado</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><span class="badge badge-primary">Principal</span> <span class="badge badge-success">✓</span></td>
+                    <td>Telefone principal, mensagem enviada com sucesso</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-success">✓ Enviado</span></td>
+                    <td>Mensagem enviada com sucesso</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-warning">⏳ Pendente</span></td>
+                    <td>Ainda não foi enviado</td>
+                </tr>
+                <tr>
+                    <td><span class="badge badge-danger">✗ Inválido</span></td>
+                    <td>Número não existe no WhatsApp ou erro no envio</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="image-placeholder">
+            <div class="icon">📱</div>
+            <p><strong>Inserir imagem:</strong> Seção de telefones mostrando status</p>
+            <p class="instruction">Capturar tela: seção de telefones com diferentes status</p>
+        </div>
+
+        <h3>8.4 Ações Disponíveis</h3>
+        <ul>
+            <li><strong>Confirmar manualmente</strong> - Marca como confirmado sem resposta do paciente</li>
+            <li><strong>Cancelar</strong> - Cancela a consulta (solicita motivo)</li>
+            <li><strong>Reenviar mensagem</strong> - Reenvia a mensagem de confirmação</li>
+            <li><strong>Enviar comprovante</strong> - Anexa e envia PDF/imagem</li>
+            <li><strong>Reagendar</strong> - Inicia processo de reagendamento</li>
+        </ul>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- ========== 9. COMPROVANTE ========== -->
+    <div class="section" id="comprovante">
+        <h2>9. Enviar Comprovante</h2>
+
+        <p>Após o paciente confirmar a consulta (status <span class="badge badge-warning">Aguardando Comprovante</span>), você deve enviar o comprovante de agendamento.</p>
+
+        <h3>9.1 Passo a Passo</h3>
+        <ol class="steps">
+            <li>Acesse a página de <strong>detalhes da consulta</strong></li>
+            <li>Localize a seção <strong>"Enviar Comprovante"</strong></li>
+            <li>Clique em <strong>"Escolher arquivo"</strong></li>
+            <li>Selecione o arquivo <strong>PDF ou imagem</strong> do comprovante</li>
+            <li>Clique em <strong>"Enviar Comprovante"</strong></li>
+        </ol>
+
+        <div class="image-placeholder">
+            <div class="icon">📄</div>
+            <p><strong>Inserir imagem:</strong> Formulário de envio de comprovante</p>
+            <p class="instruction">Capturar tela: seção de upload de comprovante</p>
+        </div>
+
+        <h3>9.2 Formatos Aceitos</h3>
+        <ul>
+            <li>PDF (.pdf)</li>
+            <li>Imagens (.jpg, .jpeg, .png)</li>
+        </ul>
+
+        <h3>9.3 O que acontece após enviar</h3>
+        <ol>
+            <li>O comprovante é enviado via WhatsApp para o paciente</li>
+            <li>O status muda para <span class="badge badge-success">Confirmado</span></li>
+            <li>A <strong>pesquisa de satisfação</strong> é iniciada automaticamente</li>
+        </ol>
+
+        <div class="success-box">
+            <p class="box-title">✅ Pesquisa de Satisfação</p>
+            <p>Após enviar o comprovante, o sistema automaticamente:</p>
+            <ol>
+                <li>Pergunta uma nota de 1 a 10</li>
+                <li>Pergunta sobre o atendimento</li>
+                <li>Pergunta se tem comentários</li>
+            </ol>
+            <p>Os resultados ficam disponíveis em <strong>Dashboard → Pesquisas</strong></p>
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- ========== 10. HISTÓRICO ========== -->
+    <div class="section" id="historico">
+        <h2>10. Histórico de Consultas</h2>
+
+        <h3>10.1 Acessar Histórico</h3>
+        <ol class="steps">
+            <li>No Dashboard, clique em <strong>"Histórico"</strong></li>
+            <li>A página de histórico será exibida</li>
+        </ol>
+
+        <div class="image-placeholder">
+            <div class="icon">📚</div>
+            <p><strong>Inserir imagem:</strong> Página de histórico</p>
+            <p class="instruction">Capturar tela: /consultas/historico</p>
+        </div>
+
+        <h3>10.2 Funcionalidades</h3>
+        <ul>
+            <li><strong>Filtrar</strong> por paciente, especialidade, período</li>
+            <li><strong>Buscar</strong> por nome do paciente</li>
+            <li><strong>Exportar CSV</strong> para análise no Excel</li>
+            <li><strong>Ver timeline</strong> de consultas por paciente</li>
+        </ul>
+
+        <h3>10.3 Histórico por Paciente</h3>
+        <p>Clique em "Ver Histórico" ao lado do nome do paciente para ver todas as consultas daquele paciente em formato de timeline.</p>
+
+        <div class="image-placeholder">
+            <div class="icon">👤</div>
+            <p><strong>Inserir imagem:</strong> Timeline de consultas do paciente</p>
+            <p class="instruction">Capturar tela: /consultas/historico/paciente/X</p>
+        </div>
+    </div>
+
+    <div class="page-break"></div>
+
+    <!-- ========== 11. PROBLEMAS ========== -->
+    <div class="section" id="problemas">
+        <h2>11. Solução de Problemas</h2>
+
+        <h3>❓ Mensagem não foi enviada</h3>
+        <div class="info-box">
+            <ul>
+                <li>Verifique se o WhatsApp está <strong>conectado</strong> (Configurações)</li>
+                <li>Verifique se o número está no <strong>formato correto</strong></li>
+                <li>Telefones marcados como <strong>"Inválido"</strong> não existem no WhatsApp</li>
+                <li>Use o botão <strong>"Reenviar"</strong> para tentar novamente</li>
+            </ul>
+        </div>
+
+        <h3>❓ Paciente não recebeu a mensagem</h3>
+        <div class="info-box">
+            <ul>
+                <li>Verifique o <strong>status do telefone</strong> na página de detalhes</li>
+                <li>Se aparece <strong>"Inválido"</strong>, o número não existe no WhatsApp</li>
+                <li>Tente adicionar o <strong>9</strong> após o DDD (ex: 85 9 98765432)</li>
+                <li>Confirme se o número está <strong>correto</strong> na planilha original</li>
+            </ul>
+        </div>
+
+        <h3>❓ Campanha pausou sozinha</h3>
+        <div class="info-box">
+            <ul>
+                <li><strong>Fora do horário:</strong> Campanha só envia entre os horários configurados</li>
+                <li><strong>Meta diária atingida:</strong> Atingiu o limite de envios do dia</li>
+                <li><strong>WhatsApp desconectado:</strong> Verifique a conexão</li>
+                <li>Basta clicar em <strong>"Iniciar Envio"</strong> novamente</li>
+            </ul>
+        </div>
+
+        <h3>❓ Erro ao importar planilha</h3>
+        <div class="info-box">
+            <ul>
+                <li>Verifique se os <strong>nomes das colunas</strong> estão corretos</li>
+                <li>Colunas obrigatórias: PACIENTE, TELEFONE CADASTRO, DATA AGHU, ESPECIALIDADE</li>
+                <li>Remova <strong>linhas vazias</strong> da planilha</li>
+                <li>Salve como <strong>.xlsx</strong> (Excel)</li>
+                <li>Verifique se não tem <strong>caracteres especiais</strong> nos nomes</li>
+            </ul>
+        </div>
+
+        <h3>❓ WhatsApp desconectou</h3>
+        <div class="info-box">
+            <ul>
+                <li>Vá em <strong>Configurações</strong></li>
+                <li>Clique em <strong>"Conectar"</strong> novamente</li>
+                <li>Escaneie o novo <strong>QR Code</strong></li>
+                <li>Após conectar, retome a campanha</li>
+            </ul>
+        </div>
+
+        <h3>❓ Como reagendar uma consulta?</h3>
+        <div class="info-box">
+            <ol>
+                <li>Quando o paciente responde <strong>"2" (NÃO)</strong></li>
+                <li>Sistema pergunta: CANCELAR ou REAGENDAR?</li>
+                <li>Se paciente escolhe <strong>REAGENDAR</strong></li>
+                <li>Operador envia a <strong>nova data/hora</strong> pelo chat</li>
+                <li>Paciente confirma a nova data</li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- ========== FOOTER ========== -->
+    <div class="footer">
+        <p>
+            <strong>Sistema de Agendamento de Consultas - Modo Consultas</strong><br>
+            Hospital Universitário Walter Cantídio<br>
+            Manual versão 1.0 - Janeiro 2026
+        </p>
+        <p style="margin-top: 10px;">
+            Em caso de dúvidas, entre em contato com o suporte técnico.
+        </p>
+    </div>
+
+</body>
+</html>

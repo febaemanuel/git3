@@ -87,6 +87,13 @@ def init_consultas_routes(app, db):
         return render_template('tutorial_consultas.html')
 
 
+    @app.route('/consultas/manual')
+    @login_required
+    def consultas_manual_pdf():
+        """Manual PDF do Modo Consulta - pronto para impressao"""
+        return render_template('manual_consultas_pdf.html')
+
+
     # =========================================================================
     # IMPORTAR PLANILHA
     # =========================================================================

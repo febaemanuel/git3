@@ -398,7 +398,7 @@
                                     <hr>
                                     <small>
                                         <strong>Se CANCELAR:</strong> Pede motivo → <span class="badge bg-danger">Rejeitado</span><br>
-                                        <strong>Se REAGENDAR:</strong> Aguarda nova data do operador
+                                        <strong>Se REAGENDAR:</strong> Operador define nova data → <span class="badge bg-primary">Reagendado</span> → Paciente confirma
                                     </small>
                                 </div>
                             </div>
@@ -543,6 +543,11 @@
                                     <td><strong>Operador define nova data</strong></td>
                                 </tr>
                                 <tr>
+                                    <td><span class="badge bg-primary">REAGENDADO</span></td>
+                                    <td>Nova data enviada, aguardando confirmação</td>
+                                    <td>Aguardar paciente confirmar nova data</td>
+                                </tr>
+                                <tr>
                                     <td><span class="badge bg-success">CONFIRMADO</span></td>
                                     <td>Consulta confirmada e comprovante enviado</td>
                                     <td>Finalizado</td>
@@ -683,7 +688,7 @@
                                 <div class="card-header">Pergunta 2: Atendimento</div>
                                 <div class="card-body">
                                     <small>
-                                        "A equipe do hospital foi <strong>atenciosa</strong> durante o atendimento?"<br><br>
+                                        "A equipe foi <strong>atenciosa</strong> e o processo foi <strong>ágil</strong>?"<br><br>
                                         1️⃣ SIM<br>
                                         2️⃣ NÃO
                                     </small>
@@ -857,8 +862,13 @@
                                         <li>Status muda para <strong>AGUARDANDO_REAGENDAMENTO</strong></li>
                                         <li>Operador clica no botão <button class="btn btn-sm btn-primary"><i class="bi bi-calendar-range"></i></button></li>
                                         <li>Define <strong>nova data e hora</strong></li>
-                                        <li>Sistema envia mensagem com nova data para o paciente confirmar</li>
+                                        <li>Sistema envia mensagem com nova data → Status: <strong>REAGENDADO</strong></li>
+                                        <li>Paciente responde <strong>SIM</strong> → Status: <strong>AGUARDANDO_COMPROVANTE</strong></li>
+                                        <li>Operador envia comprovante → <strong>CONFIRMADO</strong></li>
                                     </ol>
+                                    <div class="alert alert-info mt-2 mb-0">
+                                        <small><i class="bi bi-info-circle"></i> Se o paciente responder NÃO na nova data, volta para a etapa de escolher CANCELAR ou REAGENDAR novamente.</small>
+                                    </div>
                                 </div>
                             </div>
                         </div>

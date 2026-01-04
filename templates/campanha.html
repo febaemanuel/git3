@@ -385,7 +385,7 @@ function iniciarCampanha() {
                 alert('Erro: ' + data.erro);
             }
         })
-        .catch(err => alert('Erro: ' + err));
+        .catch(err => alert('Erro: ' + (err.message || err)));
 }
 
 // Funcao para pausar campanha
@@ -401,7 +401,7 @@ function pausarCampanha() {
                 alert('Erro: ' + data.erro);
             }
         })
-        .catch(err => alert('Erro: ' + err));
+        .catch(err => alert('Erro: ' + (err.message || err)));
 }
 
 // Funcao para cancelar campanha
@@ -417,7 +417,7 @@ function cancelarCampanha() {
                 alert('Erro: ' + data.erro);
             }
         })
-        .catch(err => alert('Erro: ' + err));
+        .catch(err => alert('Erro: ' + (err.message || err)));
 }
 
 // Funcao para confirmar contato
@@ -431,7 +431,7 @@ function confirmarContato(id) {
                 alert('Erro: ' + data.erro);
             }
         })
-        .catch(err => alert('Erro: ' + err));
+        .catch(err => alert('Erro: ' + (err.message || err)));
 }
 
 // Funcao para rejeitar contato
@@ -445,7 +445,7 @@ function rejeitarContato(id) {
                 alert('Erro: ' + data.erro);
             }
         })
-        .catch(err => alert('Erro: ' + err));
+        .catch(err => alert('Erro: ' + (err.message || err)));
 }
 
 // Funcao para reenviar mensagem
@@ -462,7 +462,7 @@ function reenviarContato(id) {
                 alert('Erro: ' + data.erro);
             }
         })
-        .catch(err => alert('Erro: ' + err));
+        .catch(err => alert('Erro: ' + (err.message || err)));
 }
 
 // Auto-refresh se campanha em andamento

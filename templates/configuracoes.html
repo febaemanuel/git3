@@ -252,7 +252,7 @@ function verificarStatusSilent() {
                 setTimeout(verificarStatusSilent, 5000);
             }
         })
-        .catch(() => {});
+        .catch(err => console.error('Erro ao verificar status:', err.message || err));
 }
 
 function configurarWebhook() {

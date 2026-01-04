@@ -395,7 +395,7 @@ function enviarMensagem() {
             alert('Erro: ' + (data.erro || 'Desconhecido'));
         }
     })
-    .catch(err => alert('Erro ao enviar: ' + err));
+    .catch(err => alert('Erro ao enviar: ' + (err.message || err)));
 }
 
 // Enter para enviar
@@ -449,7 +449,7 @@ document.getElementById('formComprovante').addEventListener('submit', function(e
         }
     })
     .catch(error => {
-        alert('Erro ao enviar: ' + error);
+        alert('Erro ao enviar: ' + (error.message || error));
         enviandoComprovante = false;
         btn.disabled = false;
         btn.innerHTML = '<i class="bi bi-send"></i> Enviar Comprovante';

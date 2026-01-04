@@ -640,7 +640,7 @@
                 }
             })
             .catch(err => {
-                alert('Erro: ' + err);
+                alert('Erro: ' + (err.message || err));
                 enviandoComprovante = false;
                 btn.disabled = false;
                 btn.innerHTML = '<i class="bi bi-send"></i> Enviar Comprovante';
@@ -680,7 +680,7 @@
             })
             .catch(err => {
                 reenviando[consultaId] = false;
-                alert('Erro: ' + err);
+                alert('Erro: ' + (err.message || err));
             });
     }
 
@@ -701,7 +701,7 @@
                     alert('Erro: ' + (data.erro || 'Desconhecido'));
                 }
             })
-            .catch(err => alert('Erro: ' + err));
+            .catch(err => alert('Erro: ' + (err.message || err)));
     }
 
     // Salvar campanha
@@ -729,7 +729,7 @@
                     alert('Erro: ' + (data.erro || 'Desconhecido'));
                 }
             })
-            .catch(err => alert('Erro: ' + err));
+            .catch(err => alert('Erro: ' + (err.message || err)));
     }
 
     // Excluir campanha
@@ -749,7 +749,7 @@
                     alert('Erro: ' + (data.erro || 'Desconhecido'));
                 }
             })
-            .catch(err => alert('Erro: ' + err));
+            .catch(err => alert('Erro: ' + (err.message || err)));
     }
 </script>
 

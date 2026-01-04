@@ -87,7 +87,6 @@ function updateProgress() {
     fetch(`/api/campanha/status/${taskId}`)
         .then(response => response.json())
         .then(data => {
-            console.log('Status:', data);
 
             const statusText = document.getElementById('status-text');
             const detailsText = document.getElementById('details-text');

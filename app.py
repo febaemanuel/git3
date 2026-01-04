@@ -29,7 +29,6 @@ from datetime import datetime, timedelta, date
 from sqlalchemy.exc import IntegrityError
 import pandas as pd
 import os
-import threading
 import time
 import logging
 import requests
@@ -5323,7 +5322,7 @@ def webhook():
 
             todas_pendencias = consultas_pendentes + cirurgias_pendentes
 
-            if escolha == 'TODOS' or escolha == 'TODAS':
+            if escolha.upper() in ('TODOS', 'TODAS'):
                 # Confirmar/rejeitar TODAS as pendências
                 ws = WhatsApp(usuario_id)
                 confirmados = 0

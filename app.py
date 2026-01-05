@@ -5682,16 +5682,6 @@ def webhook():
                                 except Exception as e:
                                     logger.warning(f"Erro ao notificar {tel.numero}: {e}")
 
-                        # Notificar OUTROS telefones que a consulta já foi confirmada
-                        # (exceto os que responderam DESCONHEÇO)
-                        for tel in consulta.telefones:
-                            if tel.numero != numero_resposta and tel.enviado and not tel.invalido and not tel.nao_pertence:
-                                try:
-                                    ws.enviar(tel.numero, f"ℹ️ A consulta de *{consulta.paciente}* já foi confirmada em outro telefone.\n\nNão é necessário responder por este número.")
-                                    logger.info(f"Notificação enviada para {tel.numero} sobre confirmação em {numero_resposta}")
-                                except Exception as e:
-                                    logger.warning(f"Erro ao notificar {tel.numero}: {e}")
-
                     elif verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO):
                         # Paciente respondeu NÃO (Opção 2)
                         # Ir direto para perguntar motivo (reagendamento desativado)

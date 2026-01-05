@@ -11,45 +11,50 @@ def migrate():
         try:
             print("🔄 Iniciando migração...")
             
-            # Verificar se as colunas já existem
-            result = db.engine.execute(text("""
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_name='agendamentos_consultas' 
-                AND column_name IN ('tentativas_contato', 'data_ultima_tentativa', 'cancelado_sem_resposta')
-            """))
-            
-            existing_columns = [row[0] for row in result]
-            
-            # Adicionar tentativas_contato se não existir
-            if 'tentativas_contato' not in existing_columns:
-                print("➕ Adicionando coluna 'tentativas_contato'...")
-                db.engine.execute(text(
-                    "ALTER TABLE agendamentos_consultas ADD COLUMN tentativas_contato INTEGER DEFAULT 0"
-                ))
-                print("   ✅ Coluna 'tentativas_contato' adicionada")
-            else:
-                print("   ⏭️  Coluna 'tentativas_contato' já existe")
-            
-            # Adicionar data_ultima_tentativa se não existir
-            if 'data_ultima_tentativa' not in existing_columns:
-                print("➕ Adicionando coluna 'data_ultima_tentativa'...")
-                db.engine.execute(text(
-                    "ALTER TABLE agendamentos_consultas ADD COLUMN data_ultima_tentativa TIMESTAMP"
-                ))
-                print("   ✅ Coluna 'data_ultima_tentativa' adicionada")
-            else:
-                print("   ⏭️  Coluna 'data_ultima_tentativa' já existe")
-            
-            # Adicionar cancelado_sem_resposta se não existir
-            if 'cancelado_sem_resposta' not in existing_columns:
-                print("➕ Adicionando coluna 'cancelado_sem_resposta'...")
-                db.engine.execute(text(
-                    "ALTER TABLE agendamentos_consultas ADD COLUMN cancelado_sem_resposta BOOLEAN DEFAULT FALSE"
-                ))
-                print("   ✅ Coluna 'cancelado_sem_resposta' adicionada")
-            else:
-                print("   ⏭️  Coluna 'cancelado_sem_resposta' já existe")
+            # Usar connection() para SQLAlchemy 2.x
+            with db.engine.connect() as conn:
+                # Verificar se as colunas já existem
+                result = conn.execute(text("""
+                    SELECT column_name 
+                    FROM information_schema.columns 
+                    WHERE table_name='agendamentos_consultas' 
+                    AND column_name IN ('tentativas_contato', 'data_ultima_tentativa', 'cancelado_sem_resposta')
+                """))
+                
+                existing_columns = [row[0] for row in result]
+                
+                # Adicionar tentativas_contato se não existir
+                if 'tentativas_contato' not in existing_columns:
+                    print("➕ Adicionando coluna 'tentativas_contato'...")
+                    conn.execute(text(
+                        "ALTER TABLE agendamentos_consultas ADD COLUMN tentativas_contato INTEGER DEFAULT 0"
+                    ))
+                    conn.commit()
+                    print("   ✅ Coluna 'tentativas_contato' adicionada")
+                else:
+                    print("   ⏭️  Coluna 'tentativas_contato' já existe")
+                
+                # Adicionar data_ultima_tentativa se não existir
+                if 'data_ultima_tentativa' not in existing_columns:
+                    print("➕ Adicionando coluna 'data_ultima_tentativa'...")
+                    conn.execute(text(
+                        "ALTER TABLE agendamentos_consultas ADD COLUMN data_ultima_tentativa TIMESTAMP"
+                    ))
+                    conn.commit()
+                    print("   ✅ Coluna 'data_ultima_tentativa' adicionada")
+                else:
+                    print("   ⏭️  Coluna 'data_ultima_tentativa' já existe")
+                
+                # Adicionar cancelado_sem_resposta se não existir
+                if 'cancelado_sem_resposta' not in existing_columns:
+                    print("➕ Adicionando coluna 'cancelado_sem_resposta'...")
+                    conn.execute(text(
+                        "ALTER TABLE agendamentos_consultas ADD COLUMN cancelado_sem_resposta BOOLEAN DEFAULT FALSE"
+                    ))
+                    conn.commit()
+                    print("   ✅ Coluna 'cancelado_sem_resposta' adicionada")
+                else:
+                    print("   ⏭️  Coluna 'cancelado_sem_resposta' já existe")
             
             print("\n✅ Migração concluída com sucesso!")
             print("\n📊 Próximos passos:")

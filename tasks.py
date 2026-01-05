@@ -1298,3 +1298,175 @@ def enviar_campanha_consultas_task(self, campanha_id):
             camp.status_msg = str(e)[:200]
             db.session.commit()
         raise
+
+
+@celery.task(
+    base=DatabaseTask,
+    name='tasks.retry_consultas_sem_resposta'
+)
+def retry_consultas_sem_resposta():
+    """
+    Task periódica para retentar contato com consultas sem resposta
+    Executada a cada hora via Celery Beat
+    
+    Lógica (DENTRO DE 24H):
+    - 1ª Retry: ~8h após envio inicial
+    - 2ª Retry: ~16h após envio inicial
+    - Cancelamento: 24h após envio inicial (se não responder)
+    """
+    from app import (
+        db, AgendamentoConsulta, WhatsApp, 
+        formatar_mensagem_consulta_inicial, formatar_mensagem_consulta_retry1, 
+        formatar_mensagem_consulta_retry2, formatar_mensagem_cancelamento_sem_resposta,
+        enviar_e_registrar_consulta
+    )
+    from datetime import datetime, timedelta
+    
+    logger.info("Verificando consultas sem resposta para retry")
+    
+    try:
+        # Buscar consultas em AGUARDANDO_CONFIRMACAO
+        consultas = AgendamentoConsulta.query.filter_by(
+            status='AGUARDANDO_CONFIRMACAO'
+        ).all()
+        
+        if not consultas:
+            logger.info("Nenhuma consulta aguardando confirmação encontrada")
+            return {'sucesso': True, 'processadas': 0}
+        
+        agora = datetime.utcnow()
+        processadas = 0
+        canceladas = 0
+        
+        for consulta in consultas:
+            # Determinar data do envio inicial
+            if consulta.data_envio_mensagem:
+                envio_inicial = consulta.data_envio_mensagem
+            else:
+                # Sem data de envio, pular
+                continue
+            
+            # Calcular tempo desde o envio inicial
+            tempo_desde_envio = agora - envio_inicial
+            horas_desde_envio = tempo_desde_envio.total_seconds() / 3600
+            
+            # Inicializar contador se necessário
+            if consulta.tentativas_contato is None:
+                consulta.tentativas_contato = 0
+            
+            # Determinar qual ação tomar baseado no tempo e tentativas
+            # Retry 1: Entre 8h e 9h após envio inicial
+            if 8 <= horas_desde_envio < 9 and consulta.tentativas_contato == 0:
+                # 1ª Retry (~8h após envio)
+                ws = WhatsApp(consulta.campanha.criador_id)
+                if not ws.ok():
+                    logger.warning(f"WhatsApp não configurado para campanha {consulta.campanha_id}")
+                    continue
+                
+                # Buscar telefone para enviar
+                telefone_envio = None
+                for tel in consulta.telefones:
+                    if tel.enviado and not tel.invalido and not tel.nao_pertence:
+                        telefone_envio = tel.numero
+                        break
+                
+                if not telefone_envio:
+                    logger.warning(f"Nenhum telefone válido para consulta {consulta.id}")
+                    continue
+                
+                # Enviar retry 1
+                msg = formatar_mensagem_consulta_retry1(consulta)
+                enviar_e_registrar_consulta(ws, telefone_envio, msg, consulta)
+                
+                consulta.tentativas_contato = 1
+                consulta.data_ultima_tentativa = agora
+                db.session.commit()
+                
+                logger.info(f"Retry 1 (8h) enviado para consulta {consulta.id} - {consulta.paciente}")
+                processadas += 1
+            
+            # Retry 2: Entre 16h e 17h após envio inicial
+            elif 16 <= horas_desde_envio < 17 and consulta.tentativas_contato == 1:
+                # 2ª Retry (~16h após envio)
+                ws = WhatsApp(consulta.campanha.criador_id)
+                if not ws.ok():
+                    logger.warning(f"WhatsApp não configurado para campanha {consulta.campanha_id}")
+                    continue
+                
+                # Buscar telefone para enviar
+                telefone_envio = None
+                for tel in consulta.telefones:
+                    if tel.enviado and not tel.invalido and not tel.nao_pertence:
+                        telefone_envio = tel.numero
+                        break
+                
+                if not telefone_envio:
+                    logger.warning(f"Nenhum telefone válido para consulta {consulta.id}")
+                    continue
+                
+                # Enviar retry 2 (ÚLTIMA TENTATIVA)
+                msg = formatar_mensagem_consulta_retry2(consulta)
+                enviar_e_registrar_consulta(ws, telefone_envio, msg, consulta)
+                
+                consulta.tentativas_contato = 2
+                consulta.data_ultima_tentativa = agora
+                db.session.commit()
+                
+                logger.info(f"Retry 2 (16h) enviado para consulta {consulta.id} - {consulta.paciente}")
+                processadas += 1
+            
+            # Cancelamento: 24h após envio inicial
+            elif horas_desde_envio >= 24 and consulta.tentativas_contato >= 2:
+                # Cancelamento automático (24h sem resposta)
+                ws = WhatsApp(consulta.campanha.criador_id)
+                if not ws.ok():
+                    logger.warning(f"WhatsApp não configurado para campanha {consulta.campanha_id}")
+                    continue
+                
+                # Buscar telefone para enviar
+                telefone_envio = None
+                for tel in consulta.telefones:
+                    if tel.enviado and not tel.invalido and not tel.nao_pertence:
+                        telefone_envio = tel.numero
+                        break
+                
+                if not telefone_envio:
+                    logger.warning(f"Nenhum telefone válido para consulta {consulta.id}")
+                    continue
+                
+                # Enviar mensagem de cancelamento
+                msg_cancelamento = formatar_mensagem_cancelamento_sem_resposta(consulta)
+                enviar_e_registrar_consulta(ws, telefone_envio, msg_cancelamento, consulta)
+                
+                # Marcar como cancelado
+                consulta.status = 'CANCELADO'
+                consulta.cancelado_sem_resposta = True
+                consulta.tentativas_contato = 3
+                consulta.motivo_rejeicao = 'Cancelado automaticamente por falta de resposta após 24h (3 tentativas)'
+                consulta.data_rejeicao = agora
+                consulta.data_ultima_tentativa = agora
+                
+                db.session.commit()
+                
+                # Atualizar stats da campanha
+                consulta.campanha.atualizar_stats()
+                db.session.commit()
+                
+                logger.info(f"Consulta {consulta.id} cancelada por falta de resposta (24h) - {consulta.paciente}")
+                canceladas += 1
+            
+            # Pequena pausa entre envios
+            time.sleep(1)
+        
+        logger.info(f"Retry automático concluído: {processadas} retries enviados, {canceladas} cancelamentos")
+        
+        return {
+            'sucesso': True,
+            'processadas': processadas,
+            'canceladas': canceladas,
+            'total_verificadas': len(consultas)
+        }
+    
+    except Exception as e:
+        logger.exception(f"Erro no retry automático de consultas: {e}")
+        return {'sucesso': False, 'erro': str(e)}

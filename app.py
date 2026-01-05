@@ -929,6 +929,11 @@ class AgendamentoConsulta(db.Model):
     # Campo específico para INTERCONSULTA
     paciente_voltar_posto_sms = db.Column(db.String(10))  # SIM ou NÃO
 
+    # Controle de tentativas de contato (retry logic)
+    tentativas_contato = db.Column(db.Integer, default=0)  # Número de tentativas de contato
+    data_ultima_tentativa = db.Column(db.DateTime)  # Data da última tentativa de contato
+    cancelado_sem_resposta = db.Column(db.Boolean, default=False)  # Cancelado por falta de resposta
+
     # Controle de status do fluxo
     status = db.Column(db.String(50), default='AGUARDANDO_ENVIO')
     # Fluxo: AGUARDANDO_ENVIO → AGUARDANDO_CONFIRMACAO → AGUARDANDO_COMPROVANTE → CONFIRMADO
@@ -1179,11 +1184,14 @@ def extrair_dados_comprovante(filepath):
                 break
 
         # Hora: procura por padrão HH:MM
+        # Padrões específicos primeiro (maior prioridade) para evitar capturar horário de impressão
         hora_patterns = [
-            r'Hora[:\s]+(\d{2}:\d{2})',
-            r'Horário[:\s]+(\d{2}:\d{2})',
-            r'(?:às|as)[:\s]+(\d{2}:\d{2})',
-            r'(\d{2}:\d{2})(?:h|hs|hrs)?',
+            r'Hora[:\s]+(\d{2}:\d{2})',                    # "Hora: 07:00"
+            r'Horário[:\s]+(\d{2}:\d{2})',                 # "Horário: 14:42"
+            r'(?:às|as)[:\s]+(\d{2}:\d{2})',              # "às 07:00"
+            # Padrão genérico apenas como último recurso
+            # Evita capturar horários de cabeçalho (que geralmente têm data antes)
+            r'(?<![\d/])\s+(\d{2}:\d{2})(?:h|hs|hrs)?(?!\s*[\d/])',  # Evita "11/12/2025 14:52"
         ]
         for pattern in hora_patterns:
             match = re.search(pattern, full_text, re.IGNORECASE)
@@ -1333,6 +1341,58 @@ Posso confirmar o agendamento?
 3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
 
 
+def formatar_mensagem_consulta_retry1(consulta):
+    """
+    MSG 1 RETRY: Primeira tentativa de recontato (8h após envio inicial)
+    """
+    saudacao = obter_saudacao_dinamica()
+    return f"""{saudacao}
+
+📋 *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*
+
+Ainda não recebemos sua confirmação para a consulta de *{consulta.paciente}*.
+
+*Dados da consulta:*
+📅 Data: *{formatar_data_consulta(consulta.data_aghu)}*
+👨‍⚕️ Médico: *{consulta.medico_solicitante}*
+🏥 Especialidade: *{consulta.especialidade}*
+
+⚠️ *IMPORTANTE:* Caso não haja confirmação em até 1 dia útil, sua consulta será cancelada!
+
+Posso confirmar o agendamento?
+
+1️⃣ *SIM* - Tenho interesse
+2️⃣ *NÃO* - Não consigo ir / Não quero mais
+3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
+
+
+def formatar_mensagem_consulta_retry2(consulta):
+    """
+    MSG 1 RETRY FINAL: Segunda e última tentativa de recontato (16h após envio inicial)
+    """
+    saudacao = obter_saudacao_dinamica()
+    return f"""{saudacao}
+
+🚨 *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*
+⚠️ *ÚLTIMA TENTATIVA DE CONTATO*
+
+Esta é nossa *ÚLTIMA TENTATIVA* antes do cancelamento automático da consulta de *{consulta.paciente}*.
+
+*Dados da consulta:*
+📅 Data: *{formatar_data_consulta(consulta.data_aghu)}*
+👨‍⚕️ Médico: *{consulta.medico_solicitante}*
+🏥 Especialidade: *{consulta.especialidade}*
+
+❌ *Se não recebermos sua resposta, a consulta será CANCELADA automaticamente.*
+
+Posso confirmar o agendamento?
+
+1️⃣ *SIM* - Tenho interesse
+2️⃣ *NÃO* - Não consigo ir / Não quero mais
+3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
+
+
+
 def formatar_mensagem_comprovante(consulta=None, dados_ocr=None):
     """
     MSG 2: Mensagem de comprovante (enviada manualmente com arquivo anexo)
@@ -1418,6 +1478,61 @@ def formatar_mensagem_voltar_posto(consulta):
     """
     return f"""HOSPITAL WALTER CANTIDIO
 Boa tarde! Falo com {consulta.paciente}? Sua consulta para o serviço de {consulta.especialidade} foi avaliada e por não se encaixar nos critérios do hospital, não foi possível seguir com o agendamento, portanto será necessário procurar um posto de saúde para realizar seu atendimento. Agradecemos a compreensão, tenha uma boa tarde!"""
+
+
+def formatar_mensagem_interconsulta_aprovada(consulta):
+    """
+    MSG INTERCONSULTA APROVADA: Mensagem de aprovação para interconsulta (sem necessidade de ir ao posto)
+    Enviada para: INTERCONSULTA com PACIENTE_VOLTAR_POSTO_SMS = NÃO (quando paciente responde SIM)
+    Status: AGUARDANDO_CONFIRMACAO → CONFIRMADO
+    """
+    return f"""✅ *HOSPITAL WALTER CANTÍDIO*
+
+Olá, {consulta.paciente}!
+
+Solicitação de interconsulta avaliada e aprovada para marcação no HUWC, em breve entraremos em contato informando a data da consulta.
+
+Especialidade: *{consulta.especialidade}*
+
+_Hospital Universitário Walter Cantídio_"""
+
+
+def formatar_mensagem_confirmacao_rejeicao(consulta):
+    """
+    MSG CONFIRMAÇÃO REJEIÇÃO: Mensagem de confirmação após paciente informar motivo
+    Enviada para: Consultas que foram rejeitadas pelo paciente (após informar motivo)
+    Status: AGUARDANDO_MOTIVO_REJEICAO → REJEITADO
+    """
+    return f"""✅ *HOSPITAL WALTER CANTÍDIO*
+
+Entendido, {consulta.paciente}.
+
+Sua consulta de *{consulta.especialidade}* foi cancelada conforme solicitado.
+
+Caso precise reagendar, entre em contato com o seu ambulatório para ser inserida novamente e aguardar nova data.
+
+Obrigado!
+
+_Hospital Universitário Walter Cantídio_"""
+
+
+def formatar_mensagem_cancelamento_sem_resposta(consulta):
+    """
+    MSG CANCELAMENTO: Mensagem de cancelamento por falta de resposta
+    Enviada para: Consultas que não responderam após 24h e 2 tentativas adicionais
+    Status: AGUARDANDO_CONFIRMACAO → CANCELADO
+    """
+    return f"""❌ *HOSPITAL WALTER CANTÍDIO*
+
+Olá, {consulta.paciente}.
+
+Não recebemos sua confirmação para a consulta de *{consulta.especialidade}* marcada para *{formatar_data_consulta(consulta.data_aghu)}*.
+
+Sua consulta foi *CANCELADA* por falta de resposta.
+
+Caso ainda tenha interesse, procure o posto de saúde para reagendar.
+
+_Hospital Universitário Walter Cantídio_"""
 
 
 # =============================================================================
@@ -5527,16 +5642,45 @@ def webhook():
                 if consulta.status == 'AGUARDANDO_CONFIRMACAO':
                     # Verificar se é SIM, NÃO ou DESCONHEÇO
                     if verificar_resposta_em_lista(texto_up, RESPOSTAS_SIM):
-                        # Paciente confirmou! → AGUARDANDO_COMPROVANTE
-                        consulta.status = 'AGUARDANDO_COMPROVANTE'
+                        # Paciente confirmou!
                         consulta.data_confirmacao = datetime.utcnow()
-                        db.session.commit()
+                        
+                        # Verificar se é INTERCONSULTA que NÃO precisa ir ao posto
+                        if (consulta.tipo == 'INTERCONSULTA' and 
+                            consulta.paciente_voltar_posto_sms and 
+                            consulta.paciente_voltar_posto_sms.upper() == 'NÃO'):
+                            # INTERCONSULTA aprovada sem necessidade de ir ao posto
+                            # Pula o passo de aguardar comprovante e vai direto para CONFIRMADO
+                            consulta.status = 'CONFIRMADO'
+                            db.session.commit()
+                            
+                            consulta.campanha.atualizar_stats()
+                            db.session.commit()
+                            
+                            # Enviar mensagem de aprovação da interconsulta
+                            msg_aprovacao = formatar_mensagem_interconsulta_aprovada(consulta)
+                            enviar_e_registrar_consulta(ws, numero_resposta, msg_aprovacao, consulta)
+                            logger.info(f"Interconsulta {consulta.id} aprovada diretamente (não precisa ir ao posto) - {consulta.paciente}")
+                        else:
+                            # Fluxo normal: aguardar comprovante
+                            consulta.status = 'AGUARDANDO_COMPROVANTE'
+                            db.session.commit()
 
-                        consulta.campanha.atualizar_stats()
-                        db.session.commit()
+                            consulta.campanha.atualizar_stats()
+                            db.session.commit()
 
-                        enviar_e_registrar_consulta(ws, numero_resposta, "✅ Consulta confirmada! Aguarde o envio do comprovante.", consulta)
-                        logger.info(f"Consulta {consulta.id} confirmada por {consulta.paciente}")
+                            enviar_e_registrar_consulta(ws, numero_resposta, "✅ Consulta confirmada! Aguarde o envio do comprovante.", consulta)
+                            logger.info(f"Consulta {consulta.id} confirmada por {consulta.paciente}")
+
+                        # Notificar OUTROS telefones que a consulta já foi confirmada
+                        # (exceto os que responderam DESCONHEÇO)
+                        for tel in consulta.telefones:
+                            if tel.numero != numero_resposta and tel.enviado and not tel.invalido and not tel.nao_pertence:
+                                try:
+                                    ws.enviar(tel.numero, f"ℹ️ A consulta de *{consulta.paciente}* já foi confirmada em outro telefone.\n\nNão é necessário responder por este número.")
+                                    logger.info(f"Notificação enviada para {tel.numero} sobre confirmação em {numero_resposta}")
+                                except Exception as e:
+                                    logger.warning(f"Erro ao notificar {tel.numero}: {e}")
 
                         # Notificar OUTROS telefones que a consulta já foi confirmada
                         # (exceto os que responderam DESCONHEÇO)
@@ -5550,17 +5694,13 @@ def webhook():
 
                     elif verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO):
                         # Paciente respondeu NÃO (Opção 2)
-                        # Perguntar se quer CANCELAR ou REAGENDAR
-                        consulta.status = 'AGUARDANDO_OPCAO_REJEICAO'
+                        # Ir direto para perguntar motivo (reagendamento desativado)
+                        consulta.status = 'AGUARDANDO_MOTIVO_REJEICAO'
                         db.session.commit()
 
-                        msg_opcao = """Entendemos! O que você deseja fazer?
-
-1️⃣ *CANCELAR* - Não quero mais a consulta
-2️⃣ *REAGENDAR* - Quero mudar a data/horário"""
-                        
-                        enviar_e_registrar_consulta(ws, numero_resposta, msg_opcao, consulta)
-                        logger.info(f"Consulta {consulta.id}: paciente escolheu opção 2 (NÃO), oferecendo cancelar/reagendar")
+                        msg_perguntar_motivo = formatar_mensagem_perguntar_motivo()
+                        enviar_e_registrar_consulta(ws, numero_resposta, msg_perguntar_motivo, consulta)
+                        logger.info(f"Consulta {consulta.id}: paciente escolheu opção 2 (NÃO), aguardando motivo da rejeição")
 
                     elif verificar_resposta_em_lista(texto_up, RESPOSTAS_DESCONHECO):
                         # Paciente não conhece → Marcar APENAS este telefone como "não pertence"
@@ -5668,6 +5808,11 @@ _Hospital Universitário Walter Cantídio_""", consulta)
                         msg_voltar_posto = formatar_mensagem_voltar_posto(consulta)
                         enviar_e_registrar_consulta(ws, numero_resposta, msg_voltar_posto, consulta)
                         logger.info(f"MSG 3B enviada para {consulta.paciente} (INTERCONSULTA + voltar posto)")
+                    else:
+                        # Outros casos: enviar mensagem de confirmação de cancelamento
+                        msg_confirmacao = formatar_mensagem_confirmacao_rejeicao(consulta)
+                        enviar_e_registrar_consulta(ws, numero_resposta, msg_confirmacao, consulta)
+                        logger.info(f"Consulta {consulta.id} cancelada - confirmação enviada")
 
                     consulta.campanha.atualizar_stats()
                     db.session.commit()

@@ -308,6 +308,8 @@ def init_consultas_routes(app, db):
             query = query.filter_by(status='AGUARDANDO_COMPROVANTE')
         elif filtro == 'confirmados':
             query = query.filter_by(status='CONFIRMADO')
+        elif filtro == 'cancelados':
+            query = query.filter_by(status='CANCELADO')
         elif filtro == 'rejeitados':
             query = query.filter_by(status='REJEITADO')
 

@@ -276,6 +276,10 @@
                             class="btn {% if filtro == 'confirmados' %}btn-success{% else %}btn-outline-success{% endif %}">
                             Confirmados
                         </a>
+                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='cancelados') }}"
+                            class="btn {% if filtro == 'cancelados' %}btn-dark{% else %}btn-outline-dark{% endif %}">
+                            Cancelados
+                        </a>
                         <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='rejeitados') }}"
                             class="btn {% if filtro == 'rejeitados' %}btn-danger{% else %}btn-outline-danger{% endif %}">
                             Rejeitados
@@ -326,6 +330,8 @@
                                     {% elif consulta.status == 'AGUARDANDO_CONFIRMACAO' %}
                                     <span class="badge bg-info"><i class="bi bi-hourglass-split"></i> Ag.
                                         Confirmacao</span>
+                                    {% elif consulta.status == 'CANCELADO' %}
+                                    <span class="badge bg-dark"><i class="bi bi-x-octagon"></i> Cancelado</span>
                                     {% elif consulta.status == 'REJEITADO' %}
                                     <span class="badge bg-danger"><i class="bi bi-x-circle"></i> Rejeitado</span>
                                     {% elif consulta.status == 'AGUARDANDO_ENVIO' %}

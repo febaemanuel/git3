@@ -198,7 +198,11 @@ def init_consultas_routes(app, db):
                             estimativa_agendamento=str(row.get('ESTIMATIVA AGENDAMENTO', '')).strip(),
                             data_aghu=str(row.get('DATA AGHU', '')).strip(),
                             paciente_voltar_posto_sms=str(row.get('PACIENTE_VOLTAR_POSTO_SMS', '')).strip().upper(),
-                            status='AGUARDANDO_ENVIO'
+                            status='AGUARDANDO_ENVIO',
+                            # Campos de retry tracking (inicializar com valores padrão)
+                            tentativas_contato=0,
+                            data_ultima_tentativa=None,
+                            cancelado_sem_resposta=False
                         )
 
                         if not consulta.paciente:

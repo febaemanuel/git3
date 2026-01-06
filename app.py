@@ -115,9 +115,22 @@ ADMIN_EMAIL = 'admin@huwc.com'
 ADMIN_SENHA = 'admin123'
 ADMIN_NOME = 'Administrador'
 
-RESPOSTAS_SIM = ['SIM', 'S', '1', 'CONFIRMO', 'QUERO', 'TENHO', 'CLARO', 'POSITIVO', 'TENHO INTERESSE']
-RESPOSTAS_NAO = ['NAO', 'NÃO', 'N', '2', 'DESISTO', 'CANCELA', 'NEGATIVO', 'NAO QUERO', 'NAO TENHO']
-RESPOSTAS_DESCONHECO = ['3', 'DESCONHECO', 'DESCONHEÇO', 'NAO SOU', 'ENGANO', 'ERRADO']
+# RESPOSTAS VÁLIDAS - DEVEM SER EXATAS (não aceita palavras soltas em frases)
+RESPOSTAS_SIM = [
+    'SIM', 'S', '1',
+    'CONFIRMO', 'CONFIRMADO',
+    'TENHO INTERESSE', 'ACEITO', 'OK'
+]
+RESPOSTAS_NAO = [
+    'NAO', 'NÃO', 'N', '2',
+    'NAO QUERO', 'NÃO QUERO',
+    'NAO TENHO INTERESSE', 'NÃO TENHO INTERESSE'
+]
+RESPOSTAS_DESCONHECO = [
+    '3', 'DESCONHECO', 'DESCONHEÇO',
+    'NAO SOU', 'NÃO SOU',
+    'ENGANO', 'NUMERO ERRADO', 'NÚMERO ERRADO'
+]
 
 MENSAGEM_PADRAO = """📋 *Olá, {nome}*!
 
@@ -908,8 +921,8 @@ class AgendamentoConsulta(db.Model):
     cod_master = db.Column(db.String(50))
     codigo_aghu = db.Column(db.String(50))
     paciente = db.Column(db.String(200), nullable=False)
-    telefone_cadastro = db.Column(db.String(20))
-    telefone_registro = db.Column(db.String(20))
+    telefone_cadastro = db.Column(db.String(200))  # Pode conter múltiplos telefones separados por /
+    telefone_registro = db.Column(db.String(200))  # Pode conter múltiplos telefones separados por /
     data_registro = db.Column(db.String(50))
     procedencia = db.Column(db.String(200))
     medico_solicitante = db.Column(db.String(200))
@@ -5153,23 +5166,20 @@ def api_ws_status():
 # Funcao auxiliar para verificar respostas validas
 def verificar_resposta_em_lista(texto_up, lista_respostas):
     """
-    Verifica se o texto contém alguma resposta válida.
-    Para respostas de uma palavra/número, verifica palavra completa (evita "teste" conter "S").
-    Para frases com espaço, verifica substring.
+    Verifica se o texto É EXATAMENTE uma resposta válida.
+    MUDANÇA CRÍTICA: Agora aceita SOMENTE respostas exatas (mensagem completa).
+    Exemplos:
+    - "SIM" → ✅ aceito
+    - "1" → ✅ aceito  
+    - "TENHO INTERESSE" → ✅ aceito
+    - "Boa tarde! Não sei quando posso ir" → ❌ rejeitado (não é resposta exata)
+    - "Sim, quero" → ❌ rejeitado (não é resposta exata)
     """
-    palavras = set(texto_up.split())
-
-    for resposta in lista_respostas:
-        if ' ' not in resposta:
-            # Resposta de uma palavra - verificar palavra completa
-            if resposta in palavras:
-                return True
-        else:
-            # Frase - pode usar substring
-            if resposta in texto_up:
-                return True
-
-    return False
+    # Remove espaços extras e normaliza
+    texto_normalizado = ' '.join(texto_up.split())
+    
+    # Verifica se a mensagem COMPLETA é exatamente uma das respostas válidas
+    return texto_normalizado in lista_respostas
 
 
 # Webhook
@@ -5745,9 +5755,9 @@ _Hospital Universitário Walter Cantídio_""", consulta)
 
                 # ESTADO 1.5: AGUARDANDO_OPCAO_REJEICAO (resposta se quer cancelar ou reagendar)
                 elif consulta.status == 'AGUARDANDO_OPCAO_REJEICAO':
-                    # Verificar resposta (1=CANCELAR, 2=REAGENDAR)
+                    # Verificar resposta (deve ser EXATAMENTE: 1, UM ou CANCELAR como mensagem completa)
                     
-                    if verificar_resposta_em_lista(texto_up, ['1', 'UM', 'CANCELAR']):
+                    if verificar_resposta_em_lista(texto_up, ['1', 'UM']):
                         # Quer CANCELAR → Perguntar motivo (fluxo antigo)
                         consulta.status = 'AGUARDANDO_MOTIVO_REJEICAO'
                         db.session.commit()
@@ -5756,7 +5766,7 @@ _Hospital Universitário Walter Cantídio_""", consulta)
                         enviar_e_registrar_consulta(ws, numero_resposta, msg_perguntar_motivo, consulta)
                         logger.info(f"Consulta {consulta.id}: paciente escolheu CANCELAR, aguardando motivo")
                         
-                    elif verificar_resposta_em_lista(texto_up, ['2', 'DOIS', 'REAGENDAR']):
+                    elif verificar_resposta_em_lista(texto_up, ['2', 'DOIS']):
                         # Quer REAGENDAR → Status especial para equipe atuar
                         consulta.status = 'AGUARDANDO_REAGENDAMENTO'
                         db.session.commit()

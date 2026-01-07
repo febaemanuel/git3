@@ -536,12 +536,18 @@ def init_consultas_routes(app, db):
             if not ws.ok():
                 return jsonify({'erro': 'WhatsApp não configurado'}), 500
 
-            # Buscar telefone válido
+            # Buscar telefone - PRIORITIZAR o que confirmou (telefone_confirmacao)
             telefone = None
-            for tel in consulta.telefones:
-                if tel.enviado:
-                    telefone = tel.numero
-                    break
+            
+            # Primeiro: usar o telefone que respondeu SIM (confirmou)
+            if consulta.telefone_confirmacao:
+                telefone = consulta.telefone_confirmacao
+            else:
+                # Fallback: usar primeiro telefone enviado
+                for tel in consulta.telefones:
+                    if tel.enviado:
+                        telefone = tel.numero
+                        break
 
             if not telefone:
                 return jsonify({'erro': 'Nenhum telefone válido encontrado'}), 400

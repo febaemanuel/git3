@@ -968,6 +968,10 @@ class AgendamentoConsulta(db.Model):
     # Comprovante (PDF/JPG)
     comprovante_path = db.Column(db.String(255))
     comprovante_nome = db.Column(db.String(255))
+    
+    # Telefone que confirmou (para enviar comprovante ao número certo)
+    telefone_confirmacao = db.Column(db.String(20))  # Armazena qual telefone respondeu SIM
+
 
     # Rejeição
     motivo_rejeicao = db.Column(db.Text)  # Armazena o motivo quando paciente rejeita
@@ -5704,6 +5708,7 @@ def webhook():
                         else:
                             # Fluxo normal: aguardar comprovante
                             consulta.status = 'AGUARDANDO_COMPROVANTE'
+                            consulta.telefone_confirmacao = numero_resposta  # Salvar qual telefone confirmou
                             db.session.commit()
 
                             consulta.campanha.atualizar_stats()

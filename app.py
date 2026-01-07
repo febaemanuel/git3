@@ -116,20 +116,25 @@ ADMIN_SENHA = 'admin123'
 ADMIN_NOME = 'Administrador'
 
 # RESPOSTAS VÁLIDAS - DEVEM SER EXATAS (não aceita palavras soltas em frases)
+# Aceita combinações como "1 SIM", "2 NAO" etc.
 RESPOSTAS_SIM = [
     'SIM', 'S', '1',
     'CONFIRMO', 'CONFIRMADO',
-    'TENHO INTERESSE', 'ACEITO', 'OK'
+    'TENHO INTERESSE', 'ACEITO', 'OK',
+    '1 SIM', '1SIM', 'SIM 1', 'SIM1'
 ]
 RESPOSTAS_NAO = [
     'NAO', 'NÃO', 'N', '2',
     'NAO QUERO', 'NÃO QUERO',
-    'NAO TENHO INTERESSE', 'NÃO TENHO INTERESSE'
+    'NAO TENHO INTERESSE', 'NÃO TENHO INTERESSE',
+    '2 NAO', '2NAO', 'NAO 2', 'NAO2',
+    '2 NÃO', '2NÃO', 'NÃO 2', 'NÃO2'
 ]
 RESPOSTAS_DESCONHECO = [
     '3', 'DESCONHECO', 'DESCONHEÇO',
     'NAO SOU', 'NÃO SOU',
-    'ENGANO', 'NUMERO ERRADO', 'NÚMERO ERRADO'
+    'ENGANO', 'NUMERO ERRADO', 'NÚMERO ERRADO',
+    '3 DESCONHECO', '3DESCONHECO', '3 DESCONHEÇO', '3DESCONHEÇO'
 ]
 
 MENSAGEM_PADRAO = """📋 *Olá, {nome}*!
@@ -942,6 +947,10 @@ class AgendamentoConsulta(db.Model):
     # Campo específico para INTERCONSULTA
     paciente_voltar_posto_sms = db.Column(db.String(10))  # SIM ou NÃO
 
+    # Campos específicos para REMARCACAO
+    motivo_remarcacao = db.Column(db.String(200))  # Motivo da remarcação (atestado, férias, etc.)
+    data_anterior = db.Column(db.String(50))  # Data anterior da consulta (antes da remarcação)
+
     # Controle de tentativas de contato (retry logic)
     tentativas_contato = db.Column(db.Integer, default=0)  # Número de tentativas de contato
     data_ultima_tentativa = db.Column(db.DateTime)  # Data da última tentativa de contato
@@ -1336,16 +1345,37 @@ def obter_saudacao_dinamica():
 def formatar_mensagem_consulta_inicial(consulta):
     """
     MSG 1: Mensagem inicial de confirmação de consulta (enviada automaticamente)
-    Enviada para: TODOS (RETORNO e INTERCONSULTA)
+    Enviada para: TODOS (RETORNO, INTERCONSULTA e REMARCACAO)
     Status: AGUARDANDO_ENVIO → AGUARDANDO_CONFIRMACAO
     """
     saudacao = obter_saudacao_dinamica()
+    
+    # TIPO REMARCACAO: Mensagem específica para consultas remarcadas
+    if consulta.tipo == 'REMARCACAO':
+        return f"""{saudacao}
+
+📅 *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*
+
+Informamos que sua consulta de *{consulta.especialidade}* com *{consulta.medico_solicitante}* foi *REMARCADA*.
+
+📌 *Motivo:* {consulta.motivo_remarcacao or 'Motivo administrativo'}
+
+❌ Data anterior: *{consulta.data_anterior or 'Não informada'}*
+✅ *Nova data:* *{formatar_data_consulta(consulta.data_aghu)}*
+
+Pode confirmar sua presença na nova data?
+
+1️⃣ *SIM* - Confirmo presença
+2️⃣ *NÃO* - Não posso comparecer
+3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
+    
+    # TIPOS RETORNO e INTERCONSULTA: Mensagem padrão
     return f"""{saudacao}
 
 Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
 Estamos informando que a *CONSULTA* do paciente *{consulta.paciente}*, foi *MARCADA* para o dia *{formatar_data_consulta(consulta.data_aghu)}*, com *{consulta.medico_solicitante}*, com especialidade em *{consulta.especialidade}*.
 
-Caso não haja confirmação em até 1 dia útil, sua consulta será cancelada!
+Caso não haja confirmação em até *2 dias*, sua consulta será cancelada!
 
 Posso confirmar o agendamento?
 
@@ -1356,7 +1386,7 @@ Posso confirmar o agendamento?
 
 def formatar_mensagem_consulta_retry1(consulta):
     """
-    MSG 1 RETRY: Primeira tentativa de recontato (8h após envio inicial)
+    MSG 1 RETRY: Primeira tentativa de recontato (16h após envio inicial)
     """
     saudacao = obter_saudacao_dinamica()
     return f"""{saudacao}
@@ -1370,7 +1400,7 @@ Ainda não recebemos sua confirmação para a consulta de *{consulta.paciente}*.
 👨‍⚕️ Médico: *{consulta.medico_solicitante}*
 🏥 Especialidade: *{consulta.especialidade}*
 
-⚠️ *IMPORTANTE:* Caso não haja confirmação em até 1 dia útil, sua consulta será cancelada!
+⚠️ *IMPORTANTE:* Caso não haja confirmação em até *2 dias*, sua consulta será cancelada!
 
 Posso confirmar o agendamento?
 
@@ -1381,7 +1411,7 @@ Posso confirmar o agendamento?
 
 def formatar_mensagem_consulta_retry2(consulta):
     """
-    MSG 1 RETRY FINAL: Segunda e última tentativa de recontato (16h após envio inicial)
+    MSG 1 RETRY FINAL: Segunda e última tentativa de recontato (32h após envio inicial)
     """
     saudacao = obter_saudacao_dinamica()
     return f"""{saudacao}
@@ -5745,11 +5775,13 @@ _Hospital Universitário Walter Cantídio_""", consulta)
 
                     else:
                         # Resposta não reconhecida
-                        enviar_e_registrar_consulta(ws, numero_resposta, """Por favor, responda com uma das opções:
+                        enviar_e_registrar_consulta(ws, numero_resposta, """⚠️ *Não entendi sua resposta.*
 
-1️⃣ *SIM* - Tenho interesse
-2️⃣ *NÃO* - Não consigo ir / Não quero mais
-3️⃣ *DESCONHEÇO* - Não sou essa pessoa""", consulta)
+Por favor, responda *APENAS* com:
+
+*1* ou *SIM* ✅ para confirmar
+*2* ou *NÃO* ❌ para cancelar
+*3* ou *DESCONHEÇO* se não é você""", consulta)
 
                     return jsonify({'status': 'ok'}), 200
 
@@ -6027,7 +6059,16 @@ _Hospital Universitário Walter Cantídio_""", consulta)
                         # Se já enviou, ignora silenciosamente (fluxo encerrado)
                         
                     elif consulta.status == 'AGUARDANDO_COMPROVANTE':
-                        enviar_e_registrar_consulta(ws, numero_resposta, "✅ Sua consulta está confirmada! Aguarde o envio do comprovante.", consulta)
+                        # Verificar se já enviou mensagem de confirmação para evitar duplicatas
+                        msg_ja_enviada = LogMsgConsulta.query.filter(
+                            LogMsgConsulta.consulta_id == consulta.id,
+                            LogMsgConsulta.direcao == 'enviada',
+                            LogMsgConsulta.mensagem.like('%confirmada%Aguarde%comprovante%')
+                        ).first()
+                        
+                        if not msg_ja_enviada:
+                            enviar_e_registrar_consulta(ws, numero_resposta, "✅ Sua consulta está confirmada! Aguarde o envio do comprovante.", consulta)
+                        # Se já enviou, ignora silenciosamente (não envia duplicatas)
                     else:
                         enviar_e_registrar_consulta(ws, numero_resposta, "Recebemos sua mensagem. Obrigado!", consulta)
 
@@ -7097,7 +7138,6 @@ def task_cancel(task_id):
 # Importar e inicializar rotas do modo consulta
 from consultas_routes import init_consultas_routes
 init_consultas_routes(app, db)
-
 
 # =============================================================================
 # INICIALIZACAO

@@ -198,6 +198,9 @@ def init_consultas_routes(app, db):
                             estimativa_agendamento=str(row.get('ESTIMATIVA AGENDAMENTO', '')).strip(),
                             data_aghu=str(row.get('DATA AGHU', '')).strip(),
                             paciente_voltar_posto_sms=str(row.get('PACIENTE_VOLTAR_POSTO_SMS', '')).strip().upper(),
+                            # Campos específicos para REMARCACAO
+                            motivo_remarcacao=str(row.get('MOTIVO_REMARCACAO', '')).strip(),
+                            data_anterior=str(row.get('DATA_ANTERIOR', '')).strip(),
                             status='AGUARDANDO_ENVIO',
                             # Campos de retry tracking (inicializar com valores padrão)
                             tentativas_contato=0,
@@ -209,7 +212,7 @@ def init_consultas_routes(app, db):
                             logger.warning(f"Linha {idx+2}: Paciente vazio, pulando")
                             continue
 
-                        if consulta.tipo not in ['RETORNO', 'INTERCONSULTA']:
+                        if consulta.tipo not in ['RETORNO', 'INTERCONSULTA', 'REMARCACAO']:
                             logger.warning(f"Linha {idx+2}: Tipo inválido '{consulta.tipo}', ajustando para RETORNO")
                             consulta.tipo = 'RETORNO'
 

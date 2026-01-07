@@ -1355,9 +1355,9 @@ def retry_consultas_sem_resposta():
                 consulta.tentativas_contato = 0
             
             # Determinar qual ação tomar baseado no tempo e tentativas
-            # Retry 1: Entre 8h e 9h após envio inicial
-            if 8 <= horas_desde_envio < 9 and consulta.tentativas_contato == 0:
-                # 1ª Retry (~8h após envio)
+            # Retry 1: Entre 16h e 17h após envio inicial
+            if 16 <= horas_desde_envio < 17 and consulta.tentativas_contato == 0:
+                # 1ª Retry (~16h após envio)
                 ws = WhatsApp(consulta.campanha.criador_id)
                 if not ws.ok():
                     logger.warning(f"WhatsApp não configurado para campanha {consulta.campanha_id}")
@@ -1382,12 +1382,12 @@ def retry_consultas_sem_resposta():
                 consulta.data_ultima_tentativa = agora
                 db.session.commit()
                 
-                logger.info(f"Retry 1 (8h) enviado para consulta {consulta.id} - {consulta.paciente}")
+                logger.info(f"Retry 1 (16h) enviado para consulta {consulta.id} - {consulta.paciente}")
                 processadas += 1
             
-            # Retry 2: Entre 16h e 17h após envio inicial
-            elif 16 <= horas_desde_envio < 17 and consulta.tentativas_contato == 1:
-                # 2ª Retry (~16h após envio)
+            # Retry 2: Entre 32h e 33h após envio inicial
+            elif 32 <= horas_desde_envio < 33 and consulta.tentativas_contato == 1:
+                # 2ª Retry (~32h após envio)
                 ws = WhatsApp(consulta.campanha.criador_id)
                 if not ws.ok():
                     logger.warning(f"WhatsApp não configurado para campanha {consulta.campanha_id}")
@@ -1412,12 +1412,12 @@ def retry_consultas_sem_resposta():
                 consulta.data_ultima_tentativa = agora
                 db.session.commit()
                 
-                logger.info(f"Retry 2 (16h) enviado para consulta {consulta.id} - {consulta.paciente}")
+                logger.info(f"Retry 2 (32h) enviado para consulta {consulta.id} - {consulta.paciente}")
                 processadas += 1
             
-            # Cancelamento: 24h após envio inicial
-            elif horas_desde_envio >= 24 and consulta.tentativas_contato >= 2:
-                # Cancelamento automático (24h sem resposta)
+            # Cancelamento: 48h após envio inicial
+            elif horas_desde_envio >= 48 and consulta.tentativas_contato >= 2:
+                # Cancelamento automático (48h sem resposta)
                 ws = WhatsApp(consulta.campanha.criador_id)
                 if not ws.ok():
                     logger.warning(f"WhatsApp não configurado para campanha {consulta.campanha_id}")

@@ -1490,7 +1490,33 @@ def formatar_mensagem_comprovante(consulta=None, dados_ocr=None):
     medico_str = medico if medico else '-'
     especialidade_str = especialidade if especialidade else '-'
 
-    return f"""O Hospital Walter Cantídio agradece seu contato. *CONSULTA CONFIRMADA!*
+    # Verifica se é EXAME (coluna EXAMES preenchida na planilha)
+    exames = None
+    if consulta and consulta.exames:
+        exames = consulta.exames
+
+    if exames:
+        # Mensagem para EXAME
+        return f"""O Hospital Walter Cantídio agradece seu contato. *EXAME CONFIRMADO!*
+
+*Paciente:* *{paciente_str}*
+*Data:* *{data_str}*
+*Horário:* *{hora_str}*
+*Exame:* *{exames}*
+*Especialidade:* *{especialidade_str}*
+
+O hospital entra em contato através do: (85) 992081534 / (85)996700783 / (85)991565903 / (85) 992614237 / (85) 992726080. É importante que atenda as ligações e responda as mensagens desses números. Por tanto, salve-os!
+
+Confira seu comprovante: data, horário e exame.
+
+Caso falte, procurar o ambulatório para ser colocado novamente no pré-agendamento.
+
+Você sabia que pode verificar sua consulta no app HU Digital? https://play.google.com/store/apps/details?id=br.gov.ebserh.hudigital&pcampaignid=web_share . Após 5 horas dessa mensagem, verifique sua consulta agendada no app.
+
+Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital."""
+    else:
+        # Mensagem para CONSULTA
+        return f"""O Hospital Walter Cantídio agradece seu contato. *CONSULTA CONFIRMADA!*
 
 *Paciente:* *{paciente_str}*
 *Data:* *{data_str}*

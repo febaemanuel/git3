@@ -1378,8 +1378,24 @@ Pode confirmar sua presença na nova data?
 2️⃣ *NÃO* - Não posso comparecer
 3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
     
-    # TIPOS RETORNO e INTERCONSULTA: Mensagem padrão
-    return f"""{saudacao}
+    # TIPOS RETORNO e INTERCONSULTA: Verifica se é EXAME ou CONSULTA
+    if consulta.exames:
+        # Mensagem para EXAME
+        return f"""{saudacao}
+
+Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
+Estamos informando que o *EXAME* do paciente *{consulta.paciente}*, foi *MARCADO* para o dia *{formatar_data_consulta(consulta.data_aghu)}*, exame *{consulta.exames}*, com especialidade em *{consulta.especialidade}*.
+
+Caso não haja confirmação em até *2 dias*, seu exame será cancelado!
+
+Posso confirmar o agendamento?
+
+1️⃣ *SIM* - Tenho interesse
+2️⃣ *NÃO* - Não consigo ir / Não quero mais
+3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
+    else:
+        # Mensagem para CONSULTA
+        return f"""{saudacao}
 
 Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
 Estamos informando que a *CONSULTA* do paciente *{consulta.paciente}*, foi *MARCADA* para o dia *{formatar_data_consulta(consulta.data_aghu)}*, com *{consulta.medico_solicitante}*, com especialidade em *{consulta.especialidade}*.

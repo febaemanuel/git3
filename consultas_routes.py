@@ -635,6 +635,7 @@ def init_consultas_routes(app, db):
                     equipe=dados_ocr.get('equipe'),
                     profissional=dados_ocr.get('profissional'),
                     especialidade=consulta.especialidade,
+                    exames=consulta.exames,
                     marcado_por=dados_ocr.get('marcado_por'),
                     observacao=dados_ocr.get('observacao'),
                     nro_autorizacao=dados_ocr.get('nro_autorizacao'),

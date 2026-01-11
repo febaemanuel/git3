@@ -1104,6 +1104,7 @@ class HistoricoConsulta(db.Model):
     equipe = db.Column(db.String(100))
     profissional = db.Column(db.String(200))   # Médico
     especialidade = db.Column(db.String(100))
+    exames = db.Column(db.Text)  # Nome do exame (da planilha)
     marcado_por = db.Column(db.String(100))
     observacao = db.Column(db.Text)
     nro_autorizacao = db.Column(db.String(50))
@@ -1240,8 +1241,13 @@ def extrair_dados_comprovante(filepath):
 
         # Especialidade/Unidade Funcional
         especialidade_patterns = [
+            # Padrão 1: ESPECIALIDADE em uma linha e o valor na linha seguinte
+            r'ESPECIALIDADE\s*\n\s*([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ]+(?:\s+[A-ZÁÉÍÓÚÀÂÊÔÃÕÇ]+)*)',
+            # Padrão 2: Unidade Funcional com valor na mesma linha
             r'Unidade\s+Funcional[:\s]+(?:AMBULATÓRIO\s+)?([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)(?:\n|$|\.|,)',
+            # Padrão 3: Especialidade: valor na mesma linha
             r'Especialidade[:\s]+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)(?:\n|$)',
+            # Padrão 4: AMBULATÓRIO seguido do nome
             r'AMBULATÓRIO\s+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)(?:\n|$|\.|,)',
         ]
         for pattern in especialidade_patterns:
@@ -1373,8 +1379,24 @@ Pode confirmar sua presença na nova data?
 2️⃣ *NÃO* - Não posso comparecer
 3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
     
-    # TIPOS RETORNO e INTERCONSULTA: Mensagem padrão
-    return f"""{saudacao}
+    # TIPOS RETORNO e INTERCONSULTA: Verifica se é EXAME ou CONSULTA
+    if consulta.exames:
+        # Mensagem para EXAME
+        return f"""{saudacao}
+
+Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
+Estamos informando que o *EXAME* do paciente *{consulta.paciente}*, foi *MARCADO* para o dia *{formatar_data_consulta(consulta.data_aghu)}*, exame *{consulta.exames}*, com especialidade em *{consulta.especialidade}*.
+
+Caso não haja confirmação em até *2 dias*, seu exame será cancelado!
+
+Posso confirmar o agendamento?
+
+1️⃣ *SIM* - Tenho interesse
+2️⃣ *NÃO* - Não consigo ir / Não quero mais
+3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
+    else:
+        # Mensagem para CONSULTA
+        return f"""{saudacao}
 
 Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
 Estamos informando que a *CONSULTA* do paciente *{consulta.paciente}*, foi *MARCADA* para o dia *{formatar_data_consulta(consulta.data_aghu)}*, com *{consulta.medico_solicitante}*, com especialidade em *{consulta.especialidade}*.
@@ -1451,19 +1473,23 @@ def formatar_mensagem_comprovante(consulta=None, dados_ocr=None):
         dados_ocr: Dict com dados extraídos do comprovante via OCR (opcional)
                    Keys: paciente, data, hora, medico, especialidade
     """
-    # Prioriza dados do OCR, com fallback para dados da consulta
+    # OCR para tudo, EXCETO especialidade que vem da planilha
     paciente = None
     data = None
     hora = None
     medico = None
     especialidade = None
 
+    # Dados do OCR (paciente, data, hora, médico)
     if dados_ocr:
         paciente = dados_ocr.get('paciente')
         data = dados_ocr.get('data')
         hora = dados_ocr.get('hora')
         medico = dados_ocr.get('medico')
-        especialidade = dados_ocr.get('especialidade')
+
+    # ESPECIALIDADE vem da planilha (consulta), não do OCR
+    if consulta:
+        especialidade = consulta.especialidade
 
     # Fallback para dados da consulta se OCR não extraiu
     if consulta:
@@ -1473,8 +1499,6 @@ def formatar_mensagem_comprovante(consulta=None, dados_ocr=None):
             data = consulta.data_aghu
         if not medico:
             medico = consulta.medico_solicitante or consulta.grade_aghu
-        if not especialidade:
-            especialidade = consulta.especialidade
 
     # Formata dados para exibição
     paciente_str = paciente if paciente else 'Paciente'
@@ -1483,7 +1507,33 @@ def formatar_mensagem_comprovante(consulta=None, dados_ocr=None):
     medico_str = medico if medico else '-'
     especialidade_str = especialidade if especialidade else '-'
 
-    return f"""O Hospital Walter Cantídio agradece seu contato. *CONSULTA CONFIRMADA!*
+    # Verifica se é EXAME (coluna EXAMES preenchida na planilha)
+    exames = None
+    if consulta and consulta.exames:
+        exames = consulta.exames
+
+    if exames:
+        # Mensagem para EXAME
+        return f"""O Hospital Walter Cantídio agradece seu contato. *EXAME CONFIRMADO!*
+
+*Paciente:* *{paciente_str}*
+*Data:* *{data_str}*
+*Horário:* *{hora_str}*
+*Exame:* *{exames}*
+*Especialidade:* *{especialidade_str}*
+
+O hospital entra em contato através do: (85) 992081534 / (85)996700783 / (85)991565903 / (85) 992614237 / (85) 992726080. É importante que atenda as ligações e responda as mensagens desses números. Por tanto, salve-os!
+
+Confira seu comprovante: data, horário e exame.
+
+Caso falte, procurar o ambulatório para ser colocado novamente no pré-agendamento.
+
+Você sabia que pode verificar sua consulta no app HU Digital? https://play.google.com/store/apps/details?id=br.gov.ebserh.hudigital&pcampaignid=web_share . Após 5 horas dessa mensagem, verifique sua consulta agendada no app.
+
+Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital."""
+    else:
+        # Mensagem para CONSULTA
+        return f"""O Hospital Walter Cantídio agradece seu contato. *CONSULTA CONFIRMADA!*
 
 *Paciente:* *{paciente_str}*
 *Data:* *{data_str}*

@@ -1240,8 +1240,13 @@ def extrair_dados_comprovante(filepath):
 
         # Especialidade/Unidade Funcional
         especialidade_patterns = [
+            # Padrão 1: ESPECIALIDADE em uma linha e o valor na linha seguinte
+            r'ESPECIALIDADE\s*\n\s*([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ]+(?:\s+[A-ZÁÉÍÓÚÀÂÊÔÃÕÇ]+)*)',
+            # Padrão 2: Unidade Funcional com valor na mesma linha
             r'Unidade\s+Funcional[:\s]+(?:AMBULATÓRIO\s+)?([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)(?:\n|$|\.|,)',
+            # Padrão 3: Especialidade: valor na mesma linha
             r'Especialidade[:\s]+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)(?:\n|$)',
+            # Padrão 4: AMBULATÓRIO seguido do nome
             r'AMBULATÓRIO\s+([A-ZÁÉÍÓÚÀÂÊÔÃÕÇ\s]+?)(?:\n|$|\.|,)',
         ]
         for pattern in especialidade_patterns:
@@ -1451,30 +1456,32 @@ def formatar_mensagem_comprovante(consulta=None, dados_ocr=None):
         dados_ocr: Dict com dados extraídos do comprovante via OCR (opcional)
                    Keys: paciente, data, hora, medico, especialidade
     """
-    # Prioriza dados do OCR, com fallback para dados da consulta
+    # Prioriza dados da planilha (consulta), com fallback para OCR
     paciente = None
     data = None
     hora = None
     medico = None
     especialidade = None
 
-    if dados_ocr:
-        paciente = dados_ocr.get('paciente')
-        data = dados_ocr.get('data')
-        hora = dados_ocr.get('hora')
-        medico = dados_ocr.get('medico')
-        especialidade = dados_ocr.get('especialidade')
-
-    # Fallback para dados da consulta se OCR não extraiu
+    # Primeiro: dados da planilha (consulta)
     if consulta:
+        paciente = consulta.paciente
+        data = consulta.data_aghu
+        medico = consulta.medico_solicitante or consulta.grade_aghu
+        especialidade = consulta.especialidade
+
+    # Fallback para OCR apenas se a planilha não tiver o dado
+    if dados_ocr:
         if not paciente:
-            paciente = consulta.paciente
+            paciente = dados_ocr.get('paciente')
         if not data:
-            data = consulta.data_aghu
+            data = dados_ocr.get('data')
+        if not hora:
+            hora = dados_ocr.get('hora')
         if not medico:
-            medico = consulta.medico_solicitante or consulta.grade_aghu
+            medico = dados_ocr.get('medico')
         if not especialidade:
-            especialidade = consulta.especialidade
+            especialidade = dados_ocr.get('especialidade')
 
     # Formata dados para exibição
     paciente_str = paciente if paciente else 'Paciente'

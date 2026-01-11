@@ -1104,6 +1104,7 @@ class HistoricoConsulta(db.Model):
     equipe = db.Column(db.String(100))
     profissional = db.Column(db.String(200))   # Médico
     especialidade = db.Column(db.String(100))
+    exames = db.Column(db.Text)  # Nome do exame (da planilha)
     marcado_por = db.Column(db.String(100))
     observacao = db.Column(db.Text)
     nro_autorizacao = db.Column(db.String(50))

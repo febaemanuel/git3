@@ -1456,32 +1456,32 @@ def formatar_mensagem_comprovante(consulta=None, dados_ocr=None):
         dados_ocr: Dict com dados extraídos do comprovante via OCR (opcional)
                    Keys: paciente, data, hora, medico, especialidade
     """
-    # Prioriza dados da planilha (consulta), com fallback para OCR
+    # OCR para tudo, EXCETO especialidade que vem da planilha
     paciente = None
     data = None
     hora = None
     medico = None
     especialidade = None
 
-    # Primeiro: dados da planilha (consulta)
+    # Dados do OCR (paciente, data, hora, médico)
+    if dados_ocr:
+        paciente = dados_ocr.get('paciente')
+        data = dados_ocr.get('data')
+        hora = dados_ocr.get('hora')
+        medico = dados_ocr.get('medico')
+
+    # ESPECIALIDADE vem da planilha (consulta), não do OCR
     if consulta:
-        paciente = consulta.paciente
-        data = consulta.data_aghu
-        medico = consulta.medico_solicitante or consulta.grade_aghu
         especialidade = consulta.especialidade
 
-    # Fallback para OCR apenas se a planilha não tiver o dado
-    if dados_ocr:
+    # Fallback para dados da consulta se OCR não extraiu
+    if consulta:
         if not paciente:
-            paciente = dados_ocr.get('paciente')
+            paciente = consulta.paciente
         if not data:
-            data = dados_ocr.get('data')
-        if not hora:
-            hora = dados_ocr.get('hora')
+            data = consulta.data_aghu
         if not medico:
-            medico = dados_ocr.get('medico')
-        if not especialidade:
-            especialidade = dados_ocr.get('especialidade')
+            medico = consulta.medico_solicitante or consulta.grade_aghu
 
     # Formata dados para exibição
     paciente_str = paciente if paciente else 'Paciente'

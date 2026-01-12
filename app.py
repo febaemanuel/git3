@@ -5136,6 +5136,292 @@ def configuracoes_global():
     return redirect(url_for('configuracoes'))
 
 
+# =============================================================================
+# ADMIN DASHBOARD - Painel de Performance do Sistema
+# =============================================================================
+
+@app.route('/admin/dashboard')
+@login_required
+@admin_required
+def admin_dashboard():
+    """Dashboard administrativo com métricas globais do sistema"""
+    from sqlalchemy import func, case
+
+    # =====================================================================
+    # ESTATÍSTICAS DE USUÁRIOS
+    # =====================================================================
+    total_usuarios = Usuario.query.count()
+    usuarios_ativos = Usuario.query.filter_by(ativo=True).count()
+    usuarios_admin = Usuario.query.filter_by(is_admin=True).count()
+
+    # Usuários por tipo de sistema
+    usuarios_fila = Usuario.query.filter_by(tipo_sistema='BUSCA_ATIVA').count()
+    usuarios_consulta = Usuario.query.filter_by(tipo_sistema='AGENDAMENTO_CONSULTA').count()
+
+    # =====================================================================
+    # ESTATÍSTICAS DO MODO FILA (BUSCA_ATIVA)
+    # =====================================================================
+    total_campanhas_fila = Campanha.query.count()
+    campanhas_fila_ativas = Campanha.query.filter(Campanha.status.in_(['validando', 'pronta', 'enviando'])).count()
+
+    # Totais agregados de todas as campanhas de fila
+    stats_fila = db.session.query(
+        func.coalesce(func.sum(Campanha.total_contatos), 0).label('total_contatos'),
+        func.coalesce(func.sum(Campanha.total_enviados), 0).label('total_enviados'),
+        func.coalesce(func.sum(Campanha.total_confirmados), 0).label('total_confirmados'),
+        func.coalesce(func.sum(Campanha.total_rejeitados), 0).label('total_rejeitados'),
+        func.coalesce(func.sum(Campanha.total_erros), 0).label('total_erros')
+    ).first()
+
+    fila_total_contatos = stats_fila.total_contatos or 0
+    fila_total_enviados = stats_fila.total_enviados or 0
+    fila_total_confirmados = stats_fila.total_confirmados or 0
+    fila_total_rejeitados = stats_fila.total_rejeitados or 0
+    fila_total_erros = stats_fila.total_erros or 0
+
+    # Taxa de confirmação da fila
+    fila_taxa_confirmacao = round((fila_total_confirmados / fila_total_enviados * 100), 1) if fila_total_enviados > 0 else 0
+
+    # =====================================================================
+    # ESTATÍSTICAS DO MODO CONSULTA (AGENDAMENTO_CONSULTA)
+    # =====================================================================
+    total_campanhas_consulta = CampanhaConsulta.query.count()
+    campanhas_consulta_ativas = CampanhaConsulta.query.filter(CampanhaConsulta.status.in_(['pronta', 'enviando'])).count()
+
+    # Totais agregados de todas as campanhas de consulta
+    stats_consulta = db.session.query(
+        func.coalesce(func.sum(CampanhaConsulta.total_consultas), 0).label('total_consultas'),
+        func.coalesce(func.sum(CampanhaConsulta.total_enviados), 0).label('total_enviados'),
+        func.coalesce(func.sum(CampanhaConsulta.total_confirmados), 0).label('total_confirmados'),
+        func.coalesce(func.sum(CampanhaConsulta.total_rejeitados), 0).label('total_rejeitados')
+    ).first()
+
+    consulta_total = stats_consulta.total_consultas or 0
+    consulta_enviados = stats_consulta.total_enviados or 0
+    consulta_confirmados = stats_consulta.total_confirmados or 0
+    consulta_rejeitados = stats_consulta.total_rejeitados or 0
+
+    # Taxa de confirmação de consultas
+    consulta_taxa_confirmacao = round((consulta_confirmados / consulta_enviados * 100), 1) if consulta_enviados > 0 else 0
+
+    # =====================================================================
+    # MENSAGENS POR USUÁRIO
+    # =====================================================================
+    # Modo Consulta - mensagens enviadas por usuário (via criador da campanha)
+    msgs_por_usuario_consulta = db.session.query(
+        Usuario.nome,
+        Usuario.id.label('usuario_id'),
+        func.count(LogMsgConsulta.id).label('total_msgs'),
+        func.sum(case((LogMsgConsulta.direcao == 'enviada', 1), else_=0)).label('enviadas'),
+        func.sum(case((LogMsgConsulta.direcao == 'recebida', 1), else_=0)).label('recebidas')
+    ).join(CampanhaConsulta, CampanhaConsulta.id == LogMsgConsulta.campanha_id
+    ).join(Usuario, Usuario.id == CampanhaConsulta.criador_id
+    ).group_by(Usuario.id, Usuario.nome
+    ).order_by(func.count(LogMsgConsulta.id).desc()
+    ).limit(15).all()
+
+    # Modo Fila - mensagens enviadas por usuário
+    msgs_por_usuario_fila = db.session.query(
+        Usuario.nome,
+        Usuario.id.label('usuario_id'),
+        func.count(LogMsg.id).label('total_msgs'),
+        func.sum(case((LogMsg.direcao == 'enviada', 1), else_=0)).label('enviadas'),
+        func.sum(case((LogMsg.direcao == 'recebida', 1), else_=0)).label('recebidas')
+    ).join(Campanha, Campanha.id == LogMsg.campanha_id
+    ).join(Usuario, Usuario.id == Campanha.criador_id
+    ).group_by(Usuario.id, Usuario.nome
+    ).order_by(func.count(LogMsg.id).desc()
+    ).limit(15).all()
+
+    # =====================================================================
+    # TAXA DE CONFIRMAÇÃO POR USUÁRIO (MODO CONSULTA)
+    # =====================================================================
+    confirmacao_por_usuario = db.session.query(
+        Usuario.nome,
+        func.count(AgendamentoConsulta.id).label('total'),
+        func.sum(case((AgendamentoConsulta.status == 'CONFIRMADO', 1), else_=0)).label('confirmados'),
+        func.sum(case((AgendamentoConsulta.status == 'REJEITADO', 1), else_=0)).label('rejeitados'),
+        func.sum(case((AgendamentoConsulta.mensagem_enviada == True, 1), else_=0)).label('enviados')
+    ).join(CampanhaConsulta, CampanhaConsulta.id == AgendamentoConsulta.campanha_id
+    ).join(Usuario, Usuario.id == CampanhaConsulta.criador_id
+    ).group_by(Usuario.id, Usuario.nome
+    ).having(func.sum(case((AgendamentoConsulta.mensagem_enviada == True, 1), else_=0)) > 0
+    ).order_by(func.count(AgendamentoConsulta.id).desc()
+    ).limit(15).all()
+
+    # =====================================================================
+    # PESQUISAS DE SATISFAÇÃO
+    # =====================================================================
+    # Total de pesquisas
+    total_pesquisas = PesquisaSatisfacao.query.count()
+    pesquisas_respondidas = PesquisaSatisfacao.query.filter(PesquisaSatisfacao.nota_satisfacao.isnot(None)).count()
+    pesquisas_puladas = PesquisaSatisfacao.query.filter_by(pulou=True).count()
+
+    # Média de nota
+    media_nota = db.session.query(func.avg(PesquisaSatisfacao.nota_satisfacao)).filter(
+        PesquisaSatisfacao.nota_satisfacao.isnot(None)
+    ).scalar() or 0
+    media_nota = round(media_nota, 1)
+
+    # Porcentagem de equipe atenciosa
+    total_com_resposta_atenciosa = PesquisaSatisfacao.query.filter(PesquisaSatisfacao.equipe_atenciosa.isnot(None)).count()
+    equipe_atenciosa_sim = PesquisaSatisfacao.query.filter_by(equipe_atenciosa=True).count()
+    pct_atenciosa = round((equipe_atenciosa_sim / total_com_resposta_atenciosa * 100), 1) if total_com_resposta_atenciosa > 0 else 0
+
+    # Distribuição de notas para gráfico
+    distribuicao_notas = db.session.query(
+        PesquisaSatisfacao.nota_satisfacao,
+        func.count(PesquisaSatisfacao.id)
+    ).filter(PesquisaSatisfacao.nota_satisfacao.isnot(None)
+    ).group_by(PesquisaSatisfacao.nota_satisfacao
+    ).order_by(PesquisaSatisfacao.nota_satisfacao
+    ).all()
+
+    notas_labels = [str(n[0]) for n in distribuicao_notas]
+    notas_data = [n[1] for n in distribuicao_notas]
+
+    # Comentários recentes
+    comentarios_recentes = db.session.query(
+        PesquisaSatisfacao,
+        AgendamentoConsulta.paciente
+    ).join(AgendamentoConsulta, AgendamentoConsulta.id == PesquisaSatisfacao.consulta_id
+    ).filter(
+        PesquisaSatisfacao.comentario.isnot(None),
+        PesquisaSatisfacao.comentario != ''
+    ).order_by(PesquisaSatisfacao.data_resposta.desc()
+    ).limit(20).all()
+
+    # =====================================================================
+    # DADOS PARA GRÁFICOS - EVOLUÇÃO DIÁRIA (últimos 30 dias)
+    # =====================================================================
+    from datetime import timedelta
+    data_inicio = datetime.utcnow() - timedelta(days=30)
+
+    # Mensagens por dia (Modo Consulta)
+    msgs_por_dia_consulta = db.session.query(
+        func.date(LogMsgConsulta.data).label('dia'),
+        func.sum(case((LogMsgConsulta.direcao == 'enviada', 1), else_=0)).label('enviadas'),
+        func.sum(case((LogMsgConsulta.direcao == 'recebida', 1), else_=0)).label('recebidas')
+    ).filter(LogMsgConsulta.data >= data_inicio
+    ).group_by(func.date(LogMsgConsulta.data)
+    ).order_by(func.date(LogMsgConsulta.data)
+    ).all()
+
+    # Confirmações por dia (Modo Consulta)
+    confirmacoes_por_dia = db.session.query(
+        func.date(AgendamentoConsulta.data_confirmacao).label('dia'),
+        func.count(AgendamentoConsulta.id).label('confirmados')
+    ).filter(
+        AgendamentoConsulta.data_confirmacao >= data_inicio,
+        AgendamentoConsulta.status == 'CONFIRMADO'
+    ).group_by(func.date(AgendamentoConsulta.data_confirmacao)
+    ).order_by(func.date(AgendamentoConsulta.data_confirmacao)
+    ).all()
+
+    # Preparar dados para Chart.js
+    dias_labels = [(data_inicio + timedelta(days=i)).strftime('%d/%m') for i in range(31)]
+
+    # Mapear dados
+    msgs_enviadas_dict = {str(m.dia): m.enviadas for m in msgs_por_dia_consulta}
+    msgs_recebidas_dict = {str(m.dia): m.recebidas for m in msgs_por_dia_consulta}
+    confirmacoes_dict = {str(c.dia): c.confirmados for c in confirmacoes_por_dia}
+
+    msgs_enviadas_data = []
+    msgs_recebidas_data = []
+    confirmacoes_data = []
+
+    for i in range(31):
+        dia = (data_inicio + timedelta(days=i)).strftime('%Y-%m-%d')
+        msgs_enviadas_data.append(msgs_enviadas_dict.get(dia, 0))
+        msgs_recebidas_data.append(msgs_recebidas_dict.get(dia, 0))
+        confirmacoes_data.append(confirmacoes_dict.get(dia, 0))
+
+    # =====================================================================
+    # ESPECIALIDADES MAIS FREQUENTES
+    # =====================================================================
+    especialidades_top = db.session.query(
+        AgendamentoConsulta.especialidade,
+        func.count(AgendamentoConsulta.id).label('total'),
+        func.sum(case((AgendamentoConsulta.status == 'CONFIRMADO', 1), else_=0)).label('confirmados'),
+        func.sum(case((AgendamentoConsulta.status == 'REJEITADO', 1), else_=0)).label('rejeitados')
+    ).filter(AgendamentoConsulta.especialidade.isnot(None)
+    ).group_by(AgendamentoConsulta.especialidade
+    ).order_by(func.count(AgendamentoConsulta.id).desc()
+    ).limit(10).all()
+
+    # =====================================================================
+    # TOTAIS GERAIS DO SISTEMA
+    # =====================================================================
+    total_msgs_consulta = LogMsgConsulta.query.count()
+    total_msgs_fila = LogMsg.query.count()
+    total_msgs_sistema = total_msgs_consulta + total_msgs_fila
+
+    total_campanhas = total_campanhas_fila + total_campanhas_consulta
+    total_enviados = fila_total_enviados + consulta_enviados
+    total_confirmados = fila_total_confirmados + consulta_confirmados
+
+    taxa_confirmacao_geral = round((total_confirmados / total_enviados * 100), 1) if total_enviados > 0 else 0
+
+    return render_template('admin_dashboard.html',
+        # Usuários
+        total_usuarios=total_usuarios,
+        usuarios_ativos=usuarios_ativos,
+        usuarios_admin=usuarios_admin,
+        usuarios_fila=usuarios_fila,
+        usuarios_consulta=usuarios_consulta,
+
+        # Modo Fila
+        total_campanhas_fila=total_campanhas_fila,
+        campanhas_fila_ativas=campanhas_fila_ativas,
+        fila_total_contatos=fila_total_contatos,
+        fila_total_enviados=fila_total_enviados,
+        fila_total_confirmados=fila_total_confirmados,
+        fila_total_rejeitados=fila_total_rejeitados,
+        fila_total_erros=fila_total_erros,
+        fila_taxa_confirmacao=fila_taxa_confirmacao,
+
+        # Modo Consulta
+        total_campanhas_consulta=total_campanhas_consulta,
+        campanhas_consulta_ativas=campanhas_consulta_ativas,
+        consulta_total=consulta_total,
+        consulta_enviados=consulta_enviados,
+        consulta_confirmados=consulta_confirmados,
+        consulta_rejeitados=consulta_rejeitados,
+        consulta_taxa_confirmacao=consulta_taxa_confirmacao,
+
+        # Mensagens por usuário
+        msgs_por_usuario_consulta=msgs_por_usuario_consulta,
+        msgs_por_usuario_fila=msgs_por_usuario_fila,
+        confirmacao_por_usuario=confirmacao_por_usuario,
+
+        # Pesquisas de satisfação
+        total_pesquisas=total_pesquisas,
+        pesquisas_respondidas=pesquisas_respondidas,
+        pesquisas_puladas=pesquisas_puladas,
+        media_nota=media_nota,
+        pct_atenciosa=pct_atenciosa,
+        notas_labels=notas_labels,
+        notas_data=notas_data,
+        comentarios_recentes=comentarios_recentes,
+
+        # Dados para gráficos
+        dias_labels=dias_labels,
+        msgs_enviadas_data=msgs_enviadas_data,
+        msgs_recebidas_data=msgs_recebidas_data,
+        confirmacoes_data=confirmacoes_data,
+
+        # Especialidades
+        especialidades_top=especialidades_top,
+
+        # Totais gerais
+        total_msgs_sistema=total_msgs_sistema,
+        total_campanhas=total_campanhas,
+        total_enviados=total_enviados,
+        total_confirmados=total_confirmados,
+        taxa_confirmacao_geral=taxa_confirmacao_geral
+    )
+
+
 @app.route('/api/whatsapp/conectar', methods=['POST'])
 @login_required
 def api_conectar_whatsapp():

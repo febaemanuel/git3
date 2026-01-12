@@ -1,0 +1,591 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-shield-lock me-2"></i>Painel Administrativo</h2>
+            <p class="text-muted mb-0">Visao geral da performance do sistema</p>
+        </div>
+        <div>
+            <button class="btn btn-outline-secondary" onclick="window.location.reload()">
+                <i class="bi bi-arrow-clockwise me-1"></i> Atualizar
+            </button>
+        </div>
+    </div>
+
+    <!-- Cards de Resumo Geral -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-primary">{{ total_usuarios }}</div>
+                    <div class="text-muted small">Usuarios</div>
+                    <div class="mt-1">
+                        <span class="badge bg-success">{{ usuarios_ativos }} ativos</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-info">{{ total_campanhas }}</div>
+                    <div class="text-muted small">Campanhas</div>
+                    <div class="mt-1">
+                        <span class="badge bg-secondary">{{ campanhas_fila_ativas + campanhas_consulta_ativas }} ativas</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-success">{{ "{:,}".format(total_msgs_sistema).replace(",", ".") }}</div>
+                    <div class="text-muted small">Mensagens</div>
+                    <div class="mt-1">
+                        <span class="badge bg-light text-dark">total enviadas</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-warning">{{ "{:,}".format(total_enviados).replace(",", ".") }}</div>
+                    <div class="text-muted small">Contatos</div>
+                    <div class="mt-1">
+                        <span class="badge bg-light text-dark">contactados</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-success">{{ "{:,}".format(total_confirmados).replace(",", ".") }}</div>
+                    <div class="text-muted small">Confirmados</div>
+                    <div class="mt-1">
+                        <span class="badge bg-success">{{ taxa_confirmacao_geral }}%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-warning">{{ media_nota }}</div>
+                    <div class="text-muted small">Nota Media</div>
+                    <div class="mt-1">
+                        {% for i in range(media_nota|int) %}
+                        <i class="bi bi-star-fill text-warning small"></i>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Comparativo Fila vs Consulta -->
+    <div class="row g-4 mb-4">
+        <!-- MODO FILA -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="bi bi-people-fill me-2"></i>Modo Fila (Busca Ativa)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="p-3 bg-light rounded">
+                                <div class="h4 mb-0">{{ total_campanhas_fila }}</div>
+                                <small class="text-muted">Campanhas</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-3 bg-light rounded">
+                                <div class="h4 mb-0">{{ "{:,}".format(fila_total_contatos).replace(",", ".") }}</div>
+                                <small class="text-muted">Contatos</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 bg-info bg-opacity-10 rounded text-center">
+                                <div class="h5 mb-0 text-info">{{ "{:,}".format(fila_total_enviados).replace(",", ".") }}</div>
+                                <small class="text-muted">Enviados</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 bg-success bg-opacity-10 rounded text-center">
+                                <div class="h5 mb-0 text-success">{{ "{:,}".format(fila_total_confirmados).replace(",", ".") }}</div>
+                                <small class="text-muted">Confirmados</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 bg-warning bg-opacity-10 rounded text-center">
+                                <div class="h5 mb-0 text-warning">{{ "{:,}".format(fila_total_rejeitados).replace(",", ".") }}</div>
+                                <small class="text-muted">Rejeitados</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span>Taxa de Confirmacao</span>
+                            <span class="fw-bold text-success">{{ fila_taxa_confirmacao }}%</span>
+                        </div>
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar bg-success" style="width: {{ fila_taxa_confirmacao }}%"></div>
+                        </div>
+                    </div>
+                    {% if fila_total_erros > 0 %}
+                    <div class="mt-2 text-danger small">
+                        <i class="bi bi-exclamation-triangle"></i> {{ fila_total_erros }} erros de envio
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- MODO CONSULTA -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header" style="background: linear-gradient(135deg, #128C7E 0%, #25D366 100%); color: white;">
+                    <h5 class="mb-0"><i class="bi bi-calendar-check me-2"></i>Modo Consulta (Agendamentos)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="p-3 bg-light rounded">
+                                <div class="h4 mb-0">{{ total_campanhas_consulta }}</div>
+                                <small class="text-muted">Campanhas</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-3 bg-light rounded">
+                                <div class="h4 mb-0">{{ "{:,}".format(consulta_total).replace(",", ".") }}</div>
+                                <small class="text-muted">Consultas</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 bg-info bg-opacity-10 rounded text-center">
+                                <div class="h5 mb-0 text-info">{{ "{:,}".format(consulta_enviados).replace(",", ".") }}</div>
+                                <small class="text-muted">Enviados</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 bg-success bg-opacity-10 rounded text-center">
+                                <div class="h5 mb-0 text-success">{{ "{:,}".format(consulta_confirmados).replace(",", ".") }}</div>
+                                <small class="text-muted">Confirmados</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 bg-warning bg-opacity-10 rounded text-center">
+                                <div class="h5 mb-0 text-warning">{{ "{:,}".format(consulta_rejeitados).replace(",", ".") }}</div>
+                                <small class="text-muted">Rejeitados</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span>Taxa de Confirmacao</span>
+                            <span class="fw-bold text-success">{{ consulta_taxa_confirmacao }}%</span>
+                        </div>
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar bg-success" style="width: {{ consulta_taxa_confirmacao }}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Graficos -->
+    <div class="row g-4 mb-4">
+        <!-- Grafico de Mensagens por Dia -->
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Atividade dos Ultimos 30 Dias (Modo Consulta)</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="chartAtividade" height="100"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Grafico de Distribuicao de Notas -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Distribuicao de Notas</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="chartNotas" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabelas de Performance -->
+    <div class="row g-4 mb-4">
+        <!-- Performance por Usuario - Modo Consulta -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-person-badge me-2"></i>Mensagens por Usuario (Consulta)</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Usuario</th>
+                                    <th class="text-center">Enviadas</th>
+                                    <th class="text-center">Recebidas</th>
+                                    <th class="text-center">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for u in msgs_por_usuario_consulta %}
+                                <tr>
+                                    <td>{{ u.nome }}</td>
+                                    <td class="text-center"><span class="badge bg-info">{{ u.enviadas or 0 }}</span></td>
+                                    <td class="text-center"><span class="badge bg-secondary">{{ u.recebidas or 0 }}</span></td>
+                                    <td class="text-center"><strong>{{ u.total_msgs }}</strong></td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="4" class="text-center text-muted">Nenhum dado disponivel</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Taxa de Confirmacao por Usuario -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-check2-circle me-2"></i>Taxa de Confirmacao por Usuario</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Usuario</th>
+                                    <th class="text-center">Enviados</th>
+                                    <th class="text-center">Confirmados</th>
+                                    <th class="text-center">Rejeitados</th>
+                                    <th class="text-center">Taxa</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for u in confirmacao_por_usuario %}
+                                {% set taxa = ((u.confirmados or 0) / u.enviados * 100)|round(1) if u.enviados > 0 else 0 %}
+                                <tr>
+                                    <td>{{ u.nome }}</td>
+                                    <td class="text-center">{{ u.enviados or 0 }}</td>
+                                    <td class="text-center"><span class="badge bg-success">{{ u.confirmados or 0 }}</span></td>
+                                    <td class="text-center"><span class="badge bg-warning">{{ u.rejeitados or 0 }}</span></td>
+                                    <td class="text-center">
+                                        <span class="badge {% if taxa >= 70 %}bg-success{% elif taxa >= 40 %}bg-warning{% else %}bg-danger{% endif %}">
+                                            {{ taxa }}%
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">Nenhum dado disponivel</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Especialidades e Pesquisa de Satisfacao -->
+    <div class="row g-4 mb-4">
+        <!-- Top Especialidades -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-hospital me-2"></i>Top Especialidades</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Especialidade</th>
+                                    <th class="text-center">Total</th>
+                                    <th class="text-center">Confirmados</th>
+                                    <th class="text-center">Rejeitados</th>
+                                    <th class="text-center">Taxa</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for e in especialidades_top %}
+                                {% set taxa = ((e.confirmados or 0) / e.total * 100)|round(1) if e.total > 0 else 0 %}
+                                <tr>
+                                    <td>{{ e.especialidade or '-' }}</td>
+                                    <td class="text-center">{{ e.total }}</td>
+                                    <td class="text-center"><span class="badge bg-success">{{ e.confirmados or 0 }}</span></td>
+                                    <td class="text-center"><span class="badge bg-warning">{{ e.rejeitados or 0 }}</span></td>
+                                    <td class="text-center">
+                                        <div class="progress" style="height: 20px; min-width: 60px;">
+                                            <div class="progress-bar bg-success" style="width: {{ taxa }}%">{{ taxa }}%</div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">Nenhum dado disponivel</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resumo Pesquisa de Satisfacao -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-star me-2"></i>Pesquisa de Satisfacao</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-4">
+                            <div class="text-center p-3 bg-primary bg-opacity-10 rounded">
+                                <div class="h3 mb-0 text-primary">{{ total_pesquisas }}</div>
+                                <small class="text-muted">Total</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-center p-3 bg-success bg-opacity-10 rounded">
+                                <div class="h3 mb-0 text-success">{{ pesquisas_respondidas }}</div>
+                                <small class="text-muted">Respondidas</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-center p-3 bg-secondary bg-opacity-10 rounded">
+                                <div class="h3 mb-0 text-secondary">{{ pesquisas_puladas }}</div>
+                                <small class="text-muted">Puladas</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="p-3 border rounded text-center">
+                                <div class="display-5 fw-bold text-warning">{{ media_nota }}</div>
+                                <div class="text-muted">Nota Media</div>
+                                <div class="mt-1">
+                                    {% for i in range(10) %}
+                                    {% if i < media_nota|int %}
+                                    <i class="bi bi-star-fill text-warning"></i>
+                                    {% else %}
+                                    <i class="bi bi-star text-muted"></i>
+                                    {% endif %}
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-3 border rounded text-center">
+                                <div class="display-5 fw-bold text-success">{{ pct_atenciosa }}%</div>
+                                <div class="text-muted">Equipe Atenciosa</div>
+                                <div class="progress mt-2" style="height: 8px;">
+                                    <div class="progress-bar bg-success" style="width: {{ pct_atenciosa }}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Comentarios Recentes -->
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0"><i class="bi bi-chat-quote me-2"></i>Comentarios Recentes</h5>
+                    <span class="badge bg-primary">{{ comentarios_recentes|length }} comentarios</span>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    {% if comentarios_recentes %}
+                    <div class="row g-3">
+                        {% for pesquisa, paciente in comentarios_recentes %}
+                        <div class="col-md-6">
+                            <div class="p-3 border rounded h-100">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div>
+                                        {% for i in range(pesquisa.nota_satisfacao or 0) %}
+                                        <i class="bi bi-star-fill text-warning"></i>
+                                        {% endfor %}
+                                        {% for i in range(10 - (pesquisa.nota_satisfacao or 0)) %}
+                                        <i class="bi bi-star text-muted"></i>
+                                        {% endfor %}
+                                    </div>
+                                    <span class="badge bg-light text-dark">{{ pesquisa.especialidade or '-' }}</span>
+                                </div>
+                                <p class="mb-2 fst-italic">"{{ pesquisa.comentario }}"</p>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small class="text-muted">{{ paciente }}</small>
+                                    <small class="text-muted">{{ pesquisa.data_resposta.strftime('%d/%m/%Y %H:%M') if pesquisa.data_resposta else '-' }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-chat-text" style="font-size: 48px;"></i>
+                        <p class="mt-2">Nenhum comentario ainda</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mensagens por Usuario - Modo Fila -->
+    {% if msgs_por_usuario_fila %}
+    <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="bi bi-person-badge me-2"></i>Mensagens por Usuario (Fila)</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Usuario</th>
+                                    <th class="text-center">Enviadas</th>
+                                    <th class="text-center">Recebidas</th>
+                                    <th class="text-center">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for u in msgs_por_usuario_fila %}
+                                <tr>
+                                    <td>{{ u.nome }}</td>
+                                    <td class="text-center"><span class="badge bg-info">{{ u.enviadas or 0 }}</span></td>
+                                    <td class="text-center"><span class="badge bg-secondary">{{ u.recebidas or 0 }}</span></td>
+                                    <td class="text-center"><strong>{{ u.total_msgs }}</strong></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+// Grafico de Atividade (Mensagens por Dia)
+const ctxAtividade = document.getElementById('chartAtividade').getContext('2d');
+new Chart(ctxAtividade, {
+    type: 'line',
+    data: {
+        labels: {{ dias_labels | tojson }},
+        datasets: [
+            {
+                label: 'Mensagens Enviadas',
+                data: {{ msgs_enviadas_data | tojson }},
+                borderColor: '#0dcaf0',
+                backgroundColor: 'rgba(13, 202, 240, 0.1)',
+                fill: true,
+                tension: 0.3
+            },
+            {
+                label: 'Mensagens Recebidas',
+                data: {{ msgs_recebidas_data | tojson }},
+                borderColor: '#6c757d',
+                backgroundColor: 'rgba(108, 117, 125, 0.1)',
+                fill: true,
+                tension: 0.3
+            },
+            {
+                label: 'Confirmacoes',
+                data: {{ confirmacoes_data | tojson }},
+                borderColor: '#198754',
+                backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                fill: true,
+                tension: 0.3
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'top'
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+
+// Grafico de Distribuicao de Notas
+const ctxNotas = document.getElementById('chartNotas').getContext('2d');
+new Chart(ctxNotas, {
+    type: 'bar',
+    data: {
+        labels: {{ notas_labels | tojson }},
+        datasets: [{
+            label: 'Quantidade',
+            data: {{ notas_data | tojson }},
+            backgroundColor: [
+                '#dc3545', '#dc3545', '#dc3545', '#dc3545',  // 1-4 vermelho
+                '#ffc107', '#ffc107', '#ffc107',              // 5-7 amarelo
+                '#198754', '#198754', '#198754'               // 8-10 verde
+            ],
+            borderRadius: 5
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                display: false
+            },
+            title: {
+                display: true,
+                text: 'Notas de 1 a 10'
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+</script>
+{% endblock %}

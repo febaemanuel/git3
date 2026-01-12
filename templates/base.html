@@ -242,6 +242,13 @@
                             <i class="bi bi-book"></i> Tutorial
                         </a>
                     </li>
+                    {% if current_user.is_admin %}
+                    <li class="nav-item">
+                        <a class="nav-link text-warning" href="{{ url_for('admin_dashboard') }}">
+                            <i class="bi bi-shield-lock"></i> Admin
+                        </a>
+                    </li>
+                    {% endif %}
                 </ul>
 
                 <ul class="navbar-nav">
@@ -250,6 +257,12 @@
                             <i class="bi bi-person-circle"></i> {{ current_user.nome }}
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
+                            {% if current_user.is_admin %}
+                            <li><a class="dropdown-item" href="{{ url_for('admin_dashboard') }}">
+                                <i class="bi bi-shield-lock"></i> Painel Admin
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            {% endif %}
                             <li><a class="dropdown-item" href="{{ url_for('logout') }}">
                                 <i class="bi bi-box-arrow-right"></i> Sair
                             </a></li>

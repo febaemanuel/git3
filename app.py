@@ -5350,6 +5350,53 @@ def admin_dashboard():
     ).limit(10).all()
 
     # =====================================================================
+    # NOTAS MÉDIAS POR ESPECIALIDADE (Pesquisa de Satisfação)
+    # =====================================================================
+    notas_por_especialidade = db.session.query(
+        PesquisaSatisfacao.especialidade,
+        func.avg(PesquisaSatisfacao.nota_satisfacao).label('media_nota'),
+        func.count(PesquisaSatisfacao.id).label('total_respostas'),
+        func.sum(case((PesquisaSatisfacao.equipe_atenciosa == True, 1), else_=0)).label('atenciosa_sim'),
+        func.count(case((PesquisaSatisfacao.equipe_atenciosa.isnot(None), 1))).label('total_atenciosa')
+    ).filter(
+        PesquisaSatisfacao.especialidade.isnot(None),
+        PesquisaSatisfacao.nota_satisfacao.isnot(None)
+    ).group_by(PesquisaSatisfacao.especialidade
+    ).order_by(func.count(PesquisaSatisfacao.id).desc()
+    ).limit(20).all()
+
+    # =====================================================================
+    # ESTATÍSTICAS DETALHADAS POR USUÁRIO
+    # =====================================================================
+    # Performance por usuário com mais detalhes
+    stats_detalhadas_usuario = db.session.query(
+        Usuario.id,
+        Usuario.nome,
+        # Campanhas criadas
+        func.count(func.distinct(CampanhaConsulta.id)).label('campanhas_criadas'),
+        # Agendamentos
+        func.count(AgendamentoConsulta.id).label('total_agendamentos'),
+        func.sum(case((AgendamentoConsulta.status == 'CONFIRMADO', 1), else_=0)).label('confirmados'),
+        func.sum(case((AgendamentoConsulta.status == 'REJEITADO', 1), else_=0)).label('rejeitados'),
+        func.sum(case((AgendamentoConsulta.mensagem_enviada == True, 1), else_=0)).label('enviados'),
+        # Pesquisas de satisfação
+        func.count(PesquisaSatisfacao.id).label('total_pesquisas'),
+        func.avg(PesquisaSatisfacao.nota_satisfacao).label('media_nota_usuario')
+    ).outerjoin(CampanhaConsulta, CampanhaConsulta.criador_id == Usuario.id
+    ).outerjoin(AgendamentoConsulta, AgendamentoConsulta.campanha_id == CampanhaConsulta.id
+    ).outerjoin(PesquisaSatisfacao, PesquisaSatisfacao.consulta_id == AgendamentoConsulta.id
+    ).group_by(Usuario.id, Usuario.nome
+    ).having(func.count(AgendamentoConsulta.id) > 0
+    ).order_by(func.count(AgendamentoConsulta.id).desc()
+    ).limit(20).all()
+
+    # Total de comentários disponíveis
+    total_comentarios = db.session.query(func.count(PesquisaSatisfacao.id)).filter(
+        PesquisaSatisfacao.comentario.isnot(None),
+        PesquisaSatisfacao.comentario != ''
+    ).scalar() or 0
+
+    # =====================================================================
     # TOTAIS GERAIS DO SISTEMA
     # =====================================================================
     total_msgs_consulta = LogMsgConsulta.query.count()
@@ -5393,6 +5440,7 @@ def admin_dashboard():
         msgs_por_usuario_consulta=msgs_por_usuario_consulta,
         msgs_por_usuario_fila=msgs_por_usuario_fila,
         confirmacao_por_usuario=confirmacao_por_usuario,
+        stats_detalhadas_usuario=stats_detalhadas_usuario,
 
         # Pesquisas de satisfação
         total_pesquisas=total_pesquisas,
@@ -5403,6 +5451,7 @@ def admin_dashboard():
         notas_labels=notas_labels,
         notas_data=notas_data,
         comentarios_recentes=comentarios_recentes,
+        total_comentarios=total_comentarios,
 
         # Dados para gráficos
         dias_labels=dias_labels,
@@ -5412,6 +5461,7 @@ def admin_dashboard():
 
         # Especialidades
         especialidades_top=especialidades_top,
+        notas_por_especialidade=notas_por_especialidade,
 
         # Totais gerais
         total_msgs_sistema=total_msgs_sistema,
@@ -5419,6 +5469,110 @@ def admin_dashboard():
         total_enviados=total_enviados,
         total_confirmados=total_confirmados,
         taxa_confirmacao_geral=taxa_confirmacao_geral
+    )
+
+
+@app.route('/admin/comentarios')
+@login_required
+@admin_required
+def admin_comentarios():
+    """Página para visualizar todos os comentários da pesquisa de satisfação"""
+    from sqlalchemy import func, case
+
+    # Parâmetros de filtro da query string
+    especialidade_filtro = request.args.get('especialidade')
+    nota_min = request.args.get('nota_min', type=int)
+    nota_max = request.args.get('nota_max', type=int)
+    usuario_filtro = request.args.get('usuario')
+    data_inicio = request.args.get('data_inicio')
+    data_fim = request.args.get('data_fim')
+    busca = request.args.get('busca', '').strip()
+    pagina = request.args.get('pagina', 1, type=int)
+    por_pagina = 50
+
+    # Query base
+    query = db.session.query(
+        PesquisaSatisfacao,
+        AgendamentoConsulta.paciente,
+        Usuario.nome.label('usuario_nome')
+    ).join(AgendamentoConsulta, AgendamentoConsulta.id == PesquisaSatisfacao.consulta_id
+    ).join(CampanhaConsulta, CampanhaConsulta.id == AgendamentoConsulta.campanha_id
+    ).join(Usuario, Usuario.id == CampanhaConsulta.criador_id
+    ).filter(
+        PesquisaSatisfacao.comentario.isnot(None),
+        PesquisaSatisfacao.comentario != ''
+    )
+
+    # Aplicar filtros
+    if especialidade_filtro:
+        query = query.filter(PesquisaSatisfacao.especialidade == especialidade_filtro)
+
+    if nota_min is not None:
+        query = query.filter(PesquisaSatisfacao.nota_satisfacao >= nota_min)
+
+    if nota_max is not None:
+        query = query.filter(PesquisaSatisfacao.nota_satisfacao <= nota_max)
+
+    if usuario_filtro:
+        query = query.filter(Usuario.nome.ilike(f'%{usuario_filtro}%'))
+
+    if data_inicio:
+        try:
+            from datetime import datetime as dt
+            data_inicio_dt = dt.strptime(data_inicio, '%Y-%m-%d')
+            query = query.filter(PesquisaSatisfacao.data_resposta >= data_inicio_dt)
+        except:
+            pass
+
+    if data_fim:
+        try:
+            from datetime import datetime as dt, timedelta
+            data_fim_dt = dt.strptime(data_fim, '%Y-%m-%d') + timedelta(days=1)
+            query = query.filter(PesquisaSatisfacao.data_resposta < data_fim_dt)
+        except:
+            pass
+
+    if busca:
+        query = query.filter(
+            db.or_(
+                PesquisaSatisfacao.comentario.ilike(f'%{busca}%'),
+                AgendamentoConsulta.paciente.ilike(f'%{busca}%')
+            )
+        )
+
+    # Ordenar por data mais recente
+    query = query.order_by(PesquisaSatisfacao.data_resposta.desc())
+
+    # Paginação
+    total_registros = query.count()
+    total_paginas = (total_registros + por_pagina - 1) // por_pagina
+    comentarios = query.limit(por_pagina).offset((pagina - 1) * por_pagina).all()
+
+    # Listas para filtros
+    especialidades_disponiveis = db.session.query(
+        PesquisaSatisfacao.especialidade
+    ).filter(
+        PesquisaSatisfacao.especialidade.isnot(None),
+        PesquisaSatisfacao.comentario.isnot(None),
+        PesquisaSatisfacao.comentario != ''
+    ).distinct().order_by(PesquisaSatisfacao.especialidade).all()
+    especialidades_disponiveis = [e[0] for e in especialidades_disponiveis]
+
+    return render_template('admin_comentarios.html',
+        comentarios=comentarios,
+        total_registros=total_registros,
+        pagina=pagina,
+        total_paginas=total_paginas,
+        por_pagina=por_pagina,
+        especialidades_disponiveis=especialidades_disponiveis,
+        # Filtros aplicados (para manter no form)
+        especialidade_filtro=especialidade_filtro,
+        nota_min=nota_min,
+        nota_max=nota_max,
+        usuario_filtro=usuario_filtro,
+        data_inicio=data_inicio,
+        data_fim=data_fim,
+        busca=busca
     )
 
 

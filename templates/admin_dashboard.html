@@ -422,7 +422,12 @@
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
                     <h5 class="mb-0"><i class="bi bi-chat-quote me-2"></i>Comentarios Recentes</h5>
-                    <span class="badge bg-primary">{{ comentarios_recentes|length }} comentarios</span>
+                    <div>
+                        <span class="badge bg-secondary me-2">{{ total_comentarios }} no total</span>
+                        <a href="{{ url_for('admin_comentarios') }}" class="btn btn-sm btn-primary">
+                            <i class="bi bi-list-ul me-1"></i> Ver Todos
+                        </a>
+                    </div>
                 </div>
                 <div class="card-body" style="max-height: 400px; overflow-y: auto;">
                     {% if comentarios_recentes %}
@@ -497,6 +502,178 @@
         </div>
     </div>
     {% endif %}
+
+    <!-- Notas Medias por Especialidade -->
+    {% if notas_por_especialidade %}
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-star-half me-2"></i>Notas Medias por Especialidade
+                        <small class="text-muted ms-2">(Pesquisa de Satisfacao)</small>
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Especialidade</th>
+                                    <th class="text-center">Nota Media</th>
+                                    <th class="text-center">Total Respostas</th>
+                                    <th class="text-center">Equipe Atenciosa</th>
+                                    <th class="text-center">Visualizacao</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for esp in notas_por_especialidade %}
+                                {% set pct_atenciosa = ((esp.atenciosa_sim or 0) / esp.total_atenciosa * 100)|round(1) if esp.total_atenciosa > 0 else 0 %}
+                                <tr>
+                                    <td><strong>{{ esp.especialidade or '-' }}</strong></td>
+                                    <td class="text-center">
+                                        <div class="d-flex align-items-center justify-content-center">
+                                            <span class="badge bg-warning text-dark fs-6 me-2">{{ esp.media_nota|round(1) }}</span>
+                                            <div>
+                                                {% for i in range(esp.media_nota|int) %}
+                                                <i class="bi bi-star-fill text-warning"></i>
+                                                {% endfor %}
+                                                {% if esp.media_nota|int < 10 %}
+                                                <i class="bi bi-star text-muted"></i>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-info">{{ esp.total_respostas }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge {% if pct_atenciosa >= 80 %}bg-success{% elif pct_atenciosa >= 60 %}bg-warning{% else %}bg-danger{% endif %}">
+                                            {{ pct_atenciosa }}%
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="progress" style="width: 100px; height: 20px;">
+                                            <div class="progress-bar"
+                                                 style="width: {{ (esp.media_nota / 10 * 100)|round(0) }}%;
+                                                        background: linear-gradient(90deg,
+                                                            {% if esp.media_nota < 5 %}#dc3545{% elif esp.media_nota < 7 %}#ffc107{% else %}#198754{% endif %} 0%,
+                                                            {% if esp.media_nota < 5 %}#ff6b6b{% elif esp.media_nota < 7 %}#ffd54f{% else %}#2ecc71{% endif %} 100%);">
+                                                {{ (esp.media_nota / 10 * 100)|round(0) }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Estatisticas Detalhadas por Usuario -->
+    {% if stats_detalhadas_usuario %}
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-people me-2"></i>Estatisticas Detalhadas por Usuario
+                        <small class="text-muted ms-2">(Modo Consulta)</small>
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Usuario</th>
+                                    <th class="text-center" data-bs-toggle="tooltip" title="Total de campanhas criadas">Campanhas</th>
+                                    <th class="text-center" data-bs-toggle="tooltip" title="Total de agendamentos processados">Agendamentos</th>
+                                    <th class="text-center" data-bs-toggle="tooltip" title="Mensagens enviadas com sucesso">Enviados</th>
+                                    <th class="text-center" data-bs-toggle="tooltip" title="Consultas confirmadas">Confirmados</th>
+                                    <th class="text-center" data-bs-toggle="tooltip" title="Consultas rejeitadas">Rejeitados</th>
+                                    <th class="text-center" data-bs-toggle="tooltip" title="Taxa de confirmacao (Confirmados/Enviados). Pode ser >100% se houver confirmacoes multiplas ou antigas">Taxa</th>
+                                    <th class="text-center" data-bs-toggle="tooltip" title="Pesquisas respondidas">Pesquisas</th>
+                                    <th class="text-center" data-bs-toggle="tooltip" title="Nota media nas pesquisas de satisfacao">Nota Media</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for u in stats_detalhadas_usuario %}
+                                {% set taxa = ((u.confirmados or 0) / u.enviados * 100)|round(1) if u.enviados > 0 else 0 %}
+                                <tr>
+                                    <td><strong>{{ u.nome }}</strong></td>
+                                    <td class="text-center">
+                                        <span class="badge bg-primary">{{ u.campanhas_criadas or 0 }}</span>
+                                    </td>
+                                    <td class="text-center">{{ u.total_agendamentos or 0 }}</td>
+                                    <td class="text-center">
+                                        <span class="badge bg-info">{{ u.enviados or 0 }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-success">{{ u.confirmados or 0 }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-warning">{{ u.rejeitados or 0 }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge {% if taxa >= 70 %}bg-success{% elif taxa >= 40 %}bg-warning text-dark{% else %}bg-danger{% endif %} fs-6">
+                                            {{ taxa }}%
+                                        </span>
+                                        {% if taxa > 100 %}
+                                        <i class="bi bi-info-circle text-primary ms-1" data-bs-toggle="tooltip"
+                                           title="Taxa acima de 100% indica que existem mais confirmacoes do que mensagens enviadas. Isso pode ocorrer por: confirmacoes multiplas, confirmacoes antigas sem registro de envio, ou confirmacoes manuais."></i>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-secondary">{{ u.total_pesquisas or 0 }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        {% if u.media_nota_usuario %}
+                                        <span class="badge bg-warning text-dark">{{ u.media_nota_usuario|round(1) }}</span>
+                                        <div class="small">
+                                            {% for i in range(u.media_nota_usuario|int) %}
+                                            <i class="bi bi-star-fill text-warning"></i>
+                                            {% endfor %}
+                                        </div>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Explicacao sobre Taxa de Confirmacao -->
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="alert alert-info border-0 shadow-sm">
+                <h5 class="alert-heading">
+                    <i class="bi bi-info-circle me-2"></i>Entendendo a Taxa de Confirmacao
+                </h5>
+                <hr>
+                <p class="mb-2"><strong>Por que a taxa pode ser maior que 100%?</strong></p>
+                <ul class="mb-0">
+                    <li><strong>Confirmacoes multiplas:</strong> Um paciente pode confirmar a consulta mais de uma vez</li>
+                    <li><strong>Confirmacoes antigas:</strong> Consultas confirmadas antes do sistema registrar o envio da mensagem</li>
+                    <li><strong>Confirmacoes manuais:</strong> Confirmacoes feitas por outros canais (telefone, presencial) que foram registradas no sistema</li>
+                    <li><strong>Dados historicos:</strong> Registros importados de sistemas anteriores sem log de envio completo</li>
+                </ul>
+                <hr>
+                <p class="mb-0 small"><strong>Como interpretar:</strong> Uma taxa de 100% indica que todos os contatos confirmaram. Uma taxa acima de 100% ainda e positiva, indicando alto engajamento, mas reflete as situacoes acima.</p>
+            </div>
+        </div>
+    </div>
 
 </div>
 {% endblock %}
@@ -586,6 +763,12 @@ new Chart(ctxNotas, {
             }
         }
     }
+});
+
+// Inicializar tooltips do Bootstrap
+var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+    return new bootstrap.Tooltip(tooltipTriggerEl);
 });
 </script>
 {% endblock %}

@@ -5147,6 +5147,9 @@ def admin_dashboard():
     """Dashboard administrativo com métricas globais do sistema"""
     from sqlalchemy import func, case
 
+    # Parâmetro para escolher qual modo visualizar em detalhes
+    modo_selecionado = request.args.get('modo', 'consulta')  # 'consulta' ou 'fila'
+
     # =====================================================================
     # ESTATÍSTICAS DE USUÁRIOS
     # =====================================================================
@@ -5410,6 +5413,9 @@ def admin_dashboard():
     taxa_confirmacao_geral = round((total_confirmados / total_enviados * 100), 1) if total_enviados > 0 else 0
 
     return render_template('admin_dashboard.html',
+        # Controle de modo
+        modo_selecionado=modo_selecionado,
+
         # Usuários
         total_usuarios=total_usuarios,
         usuarios_ativos=usuarios_ativos,

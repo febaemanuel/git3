@@ -12,6 +12,8 @@ from werkzeug.utils import secure_filename
 from datetime import datetime, date
 import pandas as pd
 import os
+import time
+import threading
 import logging
 
 logger = logging.getLogger(__name__)
@@ -42,6 +44,36 @@ def init_consultas_routes(app, db):
         AsyncResult = None
         enviar_campanha_consultas_task = None
         logger.warning("Celery não disponível para modo consulta")
+
+
+    # =========================================================================
+    # FUNÇÃO AUXILIAR - Reenvio de comprovante em background
+    # =========================================================================
+    def reenviar_comprovante_bg(usuario_id, telefone, filepath, consulta_id):
+        """
+        Reenvia o comprovante após 3 horas para garantir entrega.
+        Envia INDEPENDENTE do horário (pode ser fora do horário comercial).
+        Executado em thread separada para não bloquear a requisição HTTP.
+        """
+        try:
+            # 3 horas = 10800 segundos
+            logger.info(f"[BG] Aguardando 3 horas para reenvio de segurança - consulta {consulta_id}")
+            time.sleep(10800)
+
+            # Criar nova conexão WhatsApp (necessário em thread separada)
+            ws = WhatsApp(usuario_id)
+
+            # Reenviar arquivo com legenda (tudo em uma mensagem)
+            msg_reenvio = "📄 *REENVIANDO COMPROVANTE*\n\n_Enviando novamente para garantir que você recebeu todas as informações._"
+            ok_reenvio, _ = ws.enviar_arquivo(telefone, filepath, caption=msg_reenvio)
+
+            if ok_reenvio:
+                logger.info(f"[BG] Comprovante reenviado com sucesso - consulta {consulta_id}")
+            else:
+                logger.warning(f"[BG] Falha ao reenviar comprovante - consulta {consulta_id}")
+
+        except Exception as e:
+            logger.error(f"[BG] Erro ao reenviar comprovante - consulta {consulta_id}: {e}")
 
 
     # =========================================================================
@@ -559,6 +591,9 @@ def init_consultas_routes(app, db):
             if not ok_msg:
                 return jsonify({'erro': f'Erro ao enviar mensagem: {result_msg}'}), 500
 
+            # Aguardar 7 segundos antes de enviar o arquivo (evita fila na API)
+            time.sleep(7)
+
             # Enviar arquivo
             ok_file, result_file = ws.enviar_arquivo(telefone, filepath)
 
@@ -653,12 +688,15 @@ def init_consultas_routes(app, db):
             # INICIAR PESQUISA DE SATISFAÇÃO
             # =====================================================
             try:
+                # Aguardar 7 segundos antes de enviar pesquisa (evita fila na API)
+                time.sleep(7)
+
                 msg_pesquisa = """📊 *Pesquisa de Satisfação* (opcional)
 
 De *1 a 10*, qual sua satisfação com a marcação de consulta por WhatsApp?
 
 _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
-                
+
                 ok_pesq, _ = ws.enviar(telefone, msg_pesquisa)
                 if ok_pesq:
                     consulta.etapa_pesquisa = 'NOTA'
@@ -666,6 +704,21 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
                     logger.info(f"Pesquisa iniciada para consulta {consulta.id}")
             except Exception as e:
                 logger.warning(f"Erro ao iniciar pesquisa: {e}")
+
+            # =====================================================
+            # REENVIO DE SEGURANÇA DO COMPROVANTE (em background)
+            # =====================================================
+            # Inicia thread que aguardará 3 horas e reenviará o comprovante
+            try:
+                t = threading.Thread(
+                    target=reenviar_comprovante_bg,
+                    args=(current_user.id, telefone, filepath, consulta.id)
+                )
+                t.daemon = True
+                t.start()
+                logger.info(f"Thread de reenvio iniciada para consulta {consulta.id}")
+            except Exception as e:
+                logger.warning(f"Erro ao iniciar thread de reenvio: {e}")
 
             return jsonify({'sucesso': True, 'mensagem': 'Comprovante enviado com sucesso!'})
 

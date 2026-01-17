@@ -2529,13 +2529,14 @@ class WhatsApp:
                 return True, ''
         return False, r.text[:100] if ok else r
 
-    def enviar_arquivo(self, numero, caminho_arquivo):
+    def enviar_arquivo(self, numero, caminho_arquivo, caption=None):
         """
         Envia arquivo (PDF, imagem, etc) via WhatsApp
 
         Args:
             numero: Número do destinatário
             caminho_arquivo: Caminho completo do arquivo no servidor
+            caption: Texto opcional para acompanhar o arquivo (legenda)
 
         Returns:
             (sucesso: bool, mensagem_id ou erro: str)
@@ -2581,6 +2582,8 @@ class WhatsApp:
                     'media': arquivo_base64,
                     'fileName': nome_arquivo
                 }
+                if caption:
+                    payload['caption'] = caption
             elif ext == '.pdf':
                 endpoint = f"/message/sendMedia/{self.instance}"
                 payload = {
@@ -2590,6 +2593,8 @@ class WhatsApp:
                     'media': arquivo_base64,
                     'fileName': nome_arquivo
                 }
+                if caption:
+                    payload['caption'] = caption
             else:
                 endpoint = f"/message/sendMedia/{self.instance}"
                 payload = {
@@ -2599,6 +2604,8 @@ class WhatsApp:
                     'media': arquivo_base64,
                     'fileName': nome_arquivo
                 }
+                if caption:
+                    payload['caption'] = caption
 
             ok, r = self._req('POST', endpoint, payload)
 

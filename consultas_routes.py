@@ -62,15 +62,10 @@ def init_consultas_routes(app, db):
             # Criar nova conexão WhatsApp (necessário em thread separada)
             ws = WhatsApp(usuario_id)
 
-            # Enviar mensagem de contexto
+            # Reenviar arquivo com legenda (tudo em uma mensagem)
             msg_reenvio = "📄 *REENVIANDO COMPROVANTE*\n\n_Enviando novamente para garantir que você recebeu todas as informações._"
-            ws.enviar(telefone, msg_reenvio)
+            ok_reenvio, _ = ws.enviar_arquivo(telefone, filepath, caption=msg_reenvio)
 
-            # Aguardar 3 segundos
-            time.sleep(3)
-
-            # Reenviar arquivo
-            ok_reenvio, _ = ws.enviar_arquivo(telefone, filepath)
             if ok_reenvio:
                 logger.info(f"[BG] Comprovante reenviado com sucesso - consulta {consulta_id}")
             else:

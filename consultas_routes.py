@@ -560,8 +560,8 @@ def init_consultas_routes(app, db):
             if not ok_msg:
                 return jsonify({'erro': f'Erro ao enviar mensagem: {result_msg}'}), 500
 
-            # Aguardar 2 segundos antes de enviar o arquivo (evita fila na API)
-            time.sleep(2)
+            # Aguardar 7 segundos antes de enviar o arquivo (evita fila na API)
+            time.sleep(7)
 
             # Enviar arquivo
             ok_file, result_file = ws.enviar_arquivo(telefone, filepath)
@@ -657,8 +657,8 @@ def init_consultas_routes(app, db):
             # INICIAR PESQUISA DE SATISFAÇÃO
             # =====================================================
             try:
-                # Aguardar 2 segundos antes de enviar pesquisa (evita fila na API)
-                time.sleep(2)
+                # Aguardar 7 segundos antes de enviar pesquisa (evita fila na API)
+                time.sleep(7)
 
                 msg_pesquisa = """📊 *Pesquisa de Satisfação* (opcional)
 

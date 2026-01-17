@@ -12,6 +12,7 @@ from werkzeug.utils import secure_filename
 from datetime import datetime, date
 import pandas as pd
 import os
+import time
 import logging
 
 logger = logging.getLogger(__name__)
@@ -559,6 +560,9 @@ def init_consultas_routes(app, db):
             if not ok_msg:
                 return jsonify({'erro': f'Erro ao enviar mensagem: {result_msg}'}), 500
 
+            # Aguardar 2 segundos antes de enviar o arquivo (evita fila na API)
+            time.sleep(2)
+
             # Enviar arquivo
             ok_file, result_file = ws.enviar_arquivo(telefone, filepath)
 
@@ -653,12 +657,15 @@ def init_consultas_routes(app, db):
             # INICIAR PESQUISA DE SATISFAÇÃO
             # =====================================================
             try:
+                # Aguardar 2 segundos antes de enviar pesquisa (evita fila na API)
+                time.sleep(2)
+
                 msg_pesquisa = """📊 *Pesquisa de Satisfação* (opcional)
 
 De *1 a 10*, qual sua satisfação com a marcação de consulta por WhatsApp?
 
 _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
-                
+
                 ok_pesq, _ = ws.enviar(telefone, msg_pesquisa)
                 if ok_pesq:
                     consulta.etapa_pesquisa = 'NOTA'

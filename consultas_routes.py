@@ -52,6 +52,7 @@ def init_consultas_routes(app, db):
     def reenviar_comprovante_bg(usuario_id, telefone, filepath, consulta_id):
         """
         Reenvia o comprovante após 3 horas para garantir entrega.
+        Envia INDEPENDENTE do horário (pode ser fora do horário comercial).
         Executado em thread separada para não bloquear a requisição HTTP.
         """
         try:

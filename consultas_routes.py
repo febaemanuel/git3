@@ -51,12 +51,13 @@ def init_consultas_routes(app, db):
     # =========================================================================
     def reenviar_comprovante_bg(usuario_id, telefone, filepath, consulta_id):
         """
-        Reenvia o comprovante após 30 segundos para garantir entrega.
+        Reenvia o comprovante após 3 horas para garantir entrega.
         Executado em thread separada para não bloquear a requisição HTTP.
         """
         try:
-            logger.info(f"[BG] Aguardando 30s para reenvio de segurança - consulta {consulta_id}")
-            time.sleep(30)
+            # 3 horas = 10800 segundos
+            logger.info(f"[BG] Aguardando 3 horas para reenvio de segurança - consulta {consulta_id}")
+            time.sleep(10800)
 
             # Criar nova conexão WhatsApp (necessário em thread separada)
             ws = WhatsApp(usuario_id)
@@ -711,7 +712,7 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
             # =====================================================
             # REENVIO DE SEGURANÇA DO COMPROVANTE (em background)
             # =====================================================
-            # Inicia thread que aguardará 30s e reenviará o comprovante
+            # Inicia thread que aguardará 3 horas e reenviará o comprovante
             try:
                 t = threading.Thread(
                     target=reenviar_comprovante_bg,

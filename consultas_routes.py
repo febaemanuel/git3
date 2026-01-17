@@ -537,16 +537,19 @@ def init_consultas_routes(app, db):
                 return jsonify({'erro': 'WhatsApp não configurado'}), 500
 
             # Buscar telefone - PRIORITIZAR o que confirmou (telefone_confirmacao)
+            # IMPORTANTE: Sempre envia para apenas UM telefone (o que confirmou)
             telefone = None
-            
+
             # Primeiro: usar o telefone que respondeu SIM (confirmou)
             if consulta.telefone_confirmacao:
                 telefone = consulta.telefone_confirmacao
+                logger.info(f"Enviando comprovante para telefone que confirmou: {telefone}")
             else:
                 # Fallback: usar primeiro telefone enviado
                 for tel in consulta.telefones:
                     if tel.enviado:
                         telefone = tel.numero
+                        logger.warning(f"telefone_confirmacao não definido. Usando primeiro telefone enviado: {telefone}")
                         break
 
             if not telefone:
@@ -563,8 +566,15 @@ def init_consultas_routes(app, db):
             ok_file, result_file = ws.enviar_arquivo(telefone, filepath)
 
             if not ok_file:
-                logger.warning(f"Erro ao enviar arquivo: {result_file}")
-                # Continua mesmo se arquivo falhar
+                logger.error(f"ERRO ao enviar arquivo do comprovante: {result_file}")
+                # Se o arquivo falhou, retornar erro ao frontend
+                # Não deve marcar como CONFIRMADO se o comprovante não foi enviado
+                return jsonify({
+                    'erro': f'Falha ao enviar arquivo do comprovante: {result_file}',
+                    'detalhes': 'A mensagem foi enviada, mas o arquivo PDF/imagem falhou. Tente novamente.'
+                }), 500
+
+            logger.info(f"Comprovante enviado com sucesso para {telefone}. Message ID: {result_file}")
 
             # Atualizar consulta
             consulta.comprovante_path = filepath

@@ -2173,13 +2173,22 @@ class WhatsApp:
     def _headers(self):
         return {'apikey': self.key, 'Content-Type': 'application/json'}
 
-    def _req(self, method, endpoint, data=None):
+    def _req(self, method, endpoint, data=None, timeout=30):
+        """
+        Requisição HTTP para a API do WhatsApp
+
+        Args:
+            method: GET ou POST
+            endpoint: Endpoint da API
+            data: Dados para enviar (POST)
+            timeout: Timeout em segundos (padrão 30, aumentado para 90 em envio de mídia)
+        """
         try:
             url = f"{self.url}{endpoint}"
             if method == 'GET':
-                r = requests.get(url, headers=self._headers(), timeout=30)
+                r = requests.get(url, headers=self._headers(), timeout=timeout)
             else:
-                r = requests.post(url, headers=self._headers(), json=data, timeout=30)
+                r = requests.post(url, headers=self._headers(), json=data, timeout=timeout)
             return True, r
         except Exception as e:
             return False, str(e)
@@ -2600,7 +2609,8 @@ class WhatsApp:
                     'fileName': nome_arquivo
                 }
 
-            ok, r = self._req('POST', endpoint, payload)
+            # Usar timeout maior (90s) para envio de mídia (arquivos podem ser grandes)
+            ok, r = self._req('POST', endpoint, payload, timeout=90)
 
             if ok and r.status_code in [200, 201]:
                 try:
@@ -6176,6 +6186,23 @@ def webhook():
                 if consulta.status == 'AGUARDANDO_CONFIRMACAO':
                     # Verificar se é SIM, NÃO ou DESCONHEÇO
                     if verificar_resposta_em_lista(texto_up, RESPOSTAS_SIM):
+                        # PROTEÇÃO ADICIONAL: Lock de banco de dados para evitar race condition
+                        # Se múltiplos telefones responderem SIM ao mesmo tempo
+                        try:
+                            consulta_locked = AgendamentoConsulta.query.with_for_update().get(consulta.id)
+
+                            # Verificar novamente o status APÓS o lock
+                            if consulta_locked.status != 'AGUARDANDO_CONFIRMACAO':
+                                # Outro worker já processou esta confirmação
+                                logger.info(f"Consulta {consulta.id} já foi confirmada por outro worker. Status atual: {consulta_locked.status}")
+                                return jsonify({'status': 'ok', 'info': 'Consulta já confirmada'}), 200
+
+                            # Status ainda é AGUARDANDO_CONFIRMACAO, podemos processar
+                            consulta = consulta_locked
+                        except Exception as lock_err:
+                            logger.error(f"Erro ao obter lock da consulta {consulta.id}: {lock_err}")
+                            # Continua sem lock (comportamento antigo)
+
                         # Paciente confirmou!
                         consulta.data_confirmacao = datetime.utcnow()
                         
@@ -6209,13 +6236,20 @@ def webhook():
 
                         # Notificar OUTROS telefones que a consulta já foi confirmada
                         # (exceto os que responderam DESCONHEÇO)
-                        for tel in consulta.telefones:
-                            if tel.numero != numero_resposta and tel.enviado and not tel.invalido and not tel.nao_pertence:
-                                try:
-                                    ws.enviar(tel.numero, f"ℹ️ A consulta de *{consulta.paciente}* já foi confirmada em outro telefone.\n\nNão é necessário responder por este número.")
-                                    logger.info(f"Notificação enviada para {tel.numero} sobre confirmação em {numero_resposta}")
-                                except Exception as e:
-                                    logger.warning(f"Erro ao notificar {tel.numero}: {e}")
+                        # IMPORTANTE: Apenas notifica, NÃO envia comprovante
+                        outros_telefones = [tel for tel in consulta.telefones
+                                          if tel.numero != numero_resposta and tel.enviado
+                                          and not tel.invalido and not tel.nao_pertence]
+
+                        if outros_telefones:
+                            logger.info(f"Notificando {len(outros_telefones)} outros telefones sobre confirmação em {numero_resposta}")
+
+                        for tel in outros_telefones:
+                            try:
+                                ws.enviar(tel.numero, f"ℹ️ A consulta de *{consulta.paciente}* já foi confirmada em outro telefone.\n\nNão é necessário responder por este número.")
+                                logger.info(f"Notificação enviada para {tel.numero} (apenas aviso, sem comprovante)")
+                            except Exception as e:
+                                logger.warning(f"Erro ao notificar {tel.numero}: {e}")
 
                     elif verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO):
                         # Paciente respondeu NÃO (Opção 2)
@@ -6375,13 +6409,20 @@ _Hospital Universitário Walter Cantídio_"""
 
                         # Notificar OUTROS telefones que a consulta já foi confirmada
                         # (exceto os que responderam DESCONHEÇO)
-                        for tel in consulta.telefones:
-                            if tel.numero != numero_resposta and tel.enviado and not tel.invalido and not tel.nao_pertence:
-                                try:
-                                    ws.enviar(tel.numero, f"ℹ️ A consulta de *{consulta.paciente}* já foi confirmada em outro telefone.\n\nNão é necessário responder por este número.")
-                                    logger.info(f"Notificação enviada para {tel.numero} sobre confirmação em {numero_resposta}")
-                                except Exception as e:
-                                    logger.warning(f"Erro ao notificar {tel.numero}: {e}")
+                        # IMPORTANTE: Apenas notifica, NÃO envia comprovante
+                        outros_telefones = [tel for tel in consulta.telefones
+                                          if tel.numero != numero_resposta and tel.enviado
+                                          and not tel.invalido and not tel.nao_pertence]
+
+                        if outros_telefones:
+                            logger.info(f"Notificando {len(outros_telefones)} outros telefones sobre confirmação em {numero_resposta}")
+
+                        for tel in outros_telefones:
+                            try:
+                                ws.enviar(tel.numero, f"ℹ️ A consulta de *{consulta.paciente}* já foi confirmada em outro telefone.\n\nNão é necessário responder por este número.")
+                                logger.info(f"Notificação enviada para {tel.numero} (apenas aviso, sem comprovante)")
+                            except Exception as e:
+                                logger.warning(f"Erro ao notificar {tel.numero}: {e}")
 
                     elif verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO):
                         # Paciente não pode ir na nova data → perguntar o que quer fazer

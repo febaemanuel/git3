@@ -13,6 +13,7 @@ from datetime import datetime, date
 import pandas as pd
 import os
 import time
+import threading
 import logging
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,39 @@ def init_consultas_routes(app, db):
         AsyncResult = None
         enviar_campanha_consultas_task = None
         logger.warning("Celery não disponível para modo consulta")
+
+
+    # =========================================================================
+    # FUNÇÃO AUXILIAR - Reenvio de comprovante em background
+    # =========================================================================
+    def reenviar_comprovante_bg(usuario_id, telefone, filepath, consulta_id):
+        """
+        Reenvia o comprovante após 30 segundos para garantir entrega.
+        Executado em thread separada para não bloquear a requisição HTTP.
+        """
+        try:
+            logger.info(f"[BG] Aguardando 30s para reenvio de segurança - consulta {consulta_id}")
+            time.sleep(30)
+
+            # Criar nova conexão WhatsApp (necessário em thread separada)
+            ws = WhatsApp(usuario_id)
+
+            # Enviar mensagem de contexto
+            msg_reenvio = "📄 *REENVIANDO COMPROVANTE*\n\n_Enviando novamente para garantir que você recebeu todas as informações._"
+            ws.enviar(telefone, msg_reenvio)
+
+            # Aguardar 3 segundos
+            time.sleep(3)
+
+            # Reenviar arquivo
+            ok_reenvio, _ = ws.enviar_arquivo(telefone, filepath)
+            if ok_reenvio:
+                logger.info(f"[BG] Comprovante reenviado com sucesso - consulta {consulta_id}")
+            else:
+                logger.warning(f"[BG] Falha ao reenviar comprovante - consulta {consulta_id}")
+
+        except Exception as e:
+            logger.error(f"[BG] Erro ao reenviar comprovante - consulta {consulta_id}: {e}")
 
 
     # =========================================================================
@@ -673,6 +707,21 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
                     logger.info(f"Pesquisa iniciada para consulta {consulta.id}")
             except Exception as e:
                 logger.warning(f"Erro ao iniciar pesquisa: {e}")
+
+            # =====================================================
+            # REENVIO DE SEGURANÇA DO COMPROVANTE (em background)
+            # =====================================================
+            # Inicia thread que aguardará 30s e reenviará o comprovante
+            try:
+                t = threading.Thread(
+                    target=reenviar_comprovante_bg,
+                    args=(current_user.id, telefone, filepath, consulta.id)
+                )
+                t.daemon = True
+                t.start()
+                logger.info(f"Thread de reenvio iniciada para consulta {consulta.id}")
+            except Exception as e:
+                logger.warning(f"Erro ao iniciar thread de reenvio: {e}")
 
             return jsonify({'sucesso': True, 'mensagem': 'Comprovante enviado com sucesso!'})
 

@@ -1198,8 +1198,38 @@ def enviar_campanha_consultas_task(self, campanha_id):
             telefones = consulta.telefones
             sucesso_envio = False
 
+            # Validar números antes de enviar
+            telefones_nao_enviados = [tel for tel in telefones if not tel.enviado]
+            if telefones_nao_enviados:
+                numeros_validar = [tel.numero for tel in telefones_nao_enviados]
+                logger.info(f"Validando {len(numeros_validar)} números antes do envio")
+                numeros_validos = ws.verificar_numeros(numeros_validar)
+
+                # Marcar números inválidos
+                for telefone in telefones_nao_enviados:
+                    if telefone.numero in numeros_validos:
+                        info = numeros_validos[telefone.numero]
+                        if not info.get('exists', False):
+                            telefone.invalido = True
+                            telefone.erro_envio = "Número não possui WhatsApp ativo"
+                            logger.warning(f"Número {telefone.numero} não possui WhatsApp ativo")
+
+                            # Log de validação falhou
+                            log = LogMsgConsulta(
+                                campanha_id=camp.id,
+                                consulta_id=consulta.id,
+                                direcao='enviada',
+                                telefone=telefone.numero,
+                                mensagem=msg[:500],
+                                status='erro',
+                                erro='Número não possui WhatsApp ativo'
+                            )
+                            db.session.add(log)
+
+                db.session.commit()
+
             for telefone in telefones:
-                if telefone.enviado:
+                if telefone.enviado or telefone.invalido:
                     continue
 
                 ok, result = ws.enviar(telefone.numero, msg)
@@ -1226,9 +1256,19 @@ def enviar_campanha_consultas_task(self, campanha_id):
                     logger.info(f"Mensagem enviada para {telefone.numero}")
                     # NÃO usar break - continua enviando para TODOS os telefones
                 else:
-                    # Marcar telefone como inválido/com erro
-                    telefone.invalido = True
-                    telefone.erro_envio = str(result)[:200]
+                    # Distinguir entre erro temporário e permanente
+                    erro_str = str(result)
+                    erro_permanente = any(x in erro_str.lower() for x in ['número inválido', 'invalid number', 'not found', '404', '400'])
+
+                    if erro_permanente:
+                        # Marcar telefone como inválido
+                        telefone.invalido = True
+                        telefone.erro_envio = erro_str[:200]
+                        logger.warning(f"Número {telefone.numero} inválido: {result}")
+                    else:
+                        # Erro temporário - não marcar como inválido, apenas registrar erro
+                        telefone.erro_envio = erro_str[:200]
+                        logger.error(f"Erro temporário ao enviar para {telefone.numero}: {result}")
 
                     # Log de erro
                     log = LogMsgConsulta(
@@ -1238,10 +1278,9 @@ def enviar_campanha_consultas_task(self, campanha_id):
                         telefone=telefone.numero,
                         mensagem=msg[:500],
                         status='erro',
-                        erro=str(result)[:200]
+                        erro=erro_str[:200]
                     )
                     db.session.add(log)
-                    logger.warning(f"Erro ao enviar para {telefone.numero}: {result}")
 
             # Atualizar status da consulta
             if sucesso_envio:

@@ -2177,9 +2177,9 @@ class WhatsApp:
         try:
             url = f"{self.url}{endpoint}"
             if method == 'GET':
-                r = requests.get(url, headers=self._headers(), timeout=30)
+                r = requests.get(url, headers=self._headers(), timeout=90)
             else:
-                r = requests.post(url, headers=self._headers(), json=data, timeout=30)
+                r = requests.post(url, headers=self._headers(), json=data, timeout=90)
             return True, r
         except Exception as e:
             return False, str(e)
@@ -2510,24 +2510,86 @@ class WhatsApp:
                 pass
         return result
 
-    def enviar(self, numero, texto):
+    def enviar(self, numero, texto, max_tentativas=3):
+        """
+        Envia mensagem de texto via WhatsApp com retry automático
+
+        Args:
+            numero: Número do destinatário
+            texto: Texto da mensagem
+            max_tentativas: Número máximo de tentativas (padrão: 3)
+
+        Returns:
+            (sucesso: bool, mensagem_id ou erro: str)
+        """
         if not self.ok():
+            logger.warning(f"WhatsApp não configurado ao tentar enviar para {numero}")
             return False, "Nao configurado"
 
         num = ''.join(filter(str.isdigit, str(numero)))
-        ok, r = self._req('POST', f"/message/sendText/{self.instance}", {
-            'number': num, 
-            'text': texto,
-            'linkPreview': False  # Desabilita preview de links
-        })
+        logger.debug(f"Iniciando envio para {num} (tentativas: {max_tentativas})")
 
-        if ok and r.status_code in [200, 201]:
+        # Retry com exponential backoff
+        for tentativa in range(max_tentativas):
+            logger.debug(f"Tentativa {tentativa + 1}/{max_tentativas} para {num}")
+
+            ok, r = self._req('POST', f"/message/sendText/{self.instance}", {
+                'number': num,
+                'text': texto,
+                'linkPreview': False  # Desabilita preview de links
+            })
+
+            if ok and r.status_code in [200, 201]:
+                try:
+                    mid = r.json().get('key', {}).get('id', '')
+                    logger.info(f"Mensagem enviada com sucesso para {num} (msg_id: {mid})")
+                    return True, mid
+                except:
+                    logger.info(f"Mensagem enviada com sucesso para {num} (sem msg_id)")
+                    return True, ''
+
+            # Log do erro
+            if ok:
+                logger.warning(f"Falha no envio para {num} - Status: {r.status_code}, Tentativa: {tentativa + 1}/{max_tentativas}")
+            else:
+                logger.warning(f"Erro de conexão ao enviar para {num} - Erro: {r}, Tentativa: {tentativa + 1}/{max_tentativas}")
+
+            # Se não for a última tentativa, aguarda antes de tentar novamente
+            if tentativa < max_tentativas - 1:
+                # Verifica se é erro temporário (timeout, rate limit, etc)
+                erro_temporario = False
+                if not ok:
+                    # Erro de conexão/timeout
+                    erro_temporario = True
+                    logger.debug(f"Erro de conexão detectado para {num}")
+                elif r.status_code in [429, 500, 502, 503, 504]:
+                    # Rate limit ou erro de servidor
+                    erro_temporario = True
+                    logger.debug(f"Erro temporário de servidor detectado para {num} (status: {r.status_code})")
+
+                if erro_temporario:
+                    import time
+                    # Exponential backoff: 2s, 4s, 8s
+                    delay = 2 ** (tentativa + 1)
+                    logger.info(f"Aguardando {delay}s antes de tentar novamente para {num}")
+                    time.sleep(delay)
+                else:
+                    # Erro permanente (número inválido, etc), não adianta tentar novamente
+                    logger.warning(f"Erro permanente detectado para {num}, cancelando retentativas")
+                    break
+
+        # Retorna erro detalhado
+        if ok:
             try:
-                mid = r.json().get('key', {}).get('id', '')
-                return True, mid
+                erro_msg = r.json().get('message', r.text[:100])
+                logger.error(f"Falha permanente ao enviar para {num} - [{r.status_code}] {erro_msg}")
+                return False, f"[{r.status_code}] {erro_msg}"
             except:
-                return True, ''
-        return False, r.text[:100] if ok else r
+                logger.error(f"Falha permanente ao enviar para {num} - [{r.status_code}] {r.text[:100]}")
+                return False, f"[{r.status_code}] {r.text[:100]}"
+        else:
+            logger.error(f"Falha permanente de conexão ao enviar para {num}: {r}")
+            return False, f"Erro de conexão: {r}"
 
     def enviar_arquivo(self, numero, caminho_arquivo):
         """

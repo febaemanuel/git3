@@ -1379,16 +1379,32 @@ Pode confirmar sua presença na nova data?
 2️⃣ *NÃO* - Não posso comparecer
 3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
     
-    # TIPO INTERCONSULTA: Verifica se precisa voltar ao posto
-    if consulta.tipo == 'INTERCONSULTA' and consulta.paciente_voltar_posto_sms == 'S':
-        # Mensagem para INTERCONSULTA - Precisa voltar ao posto/UBS
+    # TIPO INTERCONSULTA: Mensagem baseada em PACIENTE_VOLTAR_POSTO_SMS
+    if consulta.tipo == 'INTERCONSULTA':
+        voltar_posto = (consulta.paciente_voltar_posto_sms or '').upper()
+
+        if voltar_posto in ['S', 'SIM']:
+            # NÃO APROVADA - Precisa procurar UBS
+            return f"""{saudacao}
+
+*HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*
+
+Solicitação de interconsulta avaliada e *não aprovada* para marcação no HUWC, procure sua UBS para solicitar encaminhamento para outra instituição de saúde."""
+
+        elif voltar_posto in ['N', 'NAO', 'NÃO']:
+            # APROVADA - Aguardar contato
+            return f"""{saudacao}
+
+*HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*
+
+Solicitação de interconsulta avaliada e *aprovada* para marcação no HUWC, em breve entraremos em contato informando a data da consulta."""
+
+        # Fallback se não tiver o campo preenchido
         return f"""{saudacao}
 
-Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
+*HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*
 
-Sua consulta de *{consulta.especialidade}* não foi possível agendar.
-
-Você precisa *VOLTAR AO POSTO DE SAÚDE* para realizar o agendamento."""
+Sua solicitação de interconsulta para *{consulta.especialidade}* está em análise."""
 
     # TIPOS RETORNO e INTERCONSULTA: Verifica se é EXAME ou CONSULTA
     elif consulta.exames:
@@ -1427,15 +1443,9 @@ def formatar_mensagem_consulta_retry1(consulta):
     """
     saudacao = obter_saudacao_dinamica()
 
-    # INTERCONSULTA: Mensagem específica
-    if consulta.tipo == 'INTERCONSULTA' and consulta.paciente_voltar_posto_sms == 'S':
-        return f"""{saudacao}
-
-*HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*
-
-Sua consulta de *{consulta.especialidade}* não foi possível agendar.
-
-Você precisa *VOLTAR AO POSTO DE SAÚDE* para realizar o agendamento."""
+    # INTERCONSULTA: NÃO ENVIA RETRY (apenas MSG 1)
+    if consulta.tipo == 'INTERCONSULTA':
+        return None
 
     # Mensagem padrão para RETORNO e REMARCACAO
     return f"""{saudacao}
@@ -1464,15 +1474,9 @@ def formatar_mensagem_consulta_retry2(consulta):
     """
     saudacao = obter_saudacao_dinamica()
 
-    # INTERCONSULTA: Mensagem específica
-    if consulta.tipo == 'INTERCONSULTA' and consulta.paciente_voltar_posto_sms == 'S':
-        return f"""{saudacao}
-
-*HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*
-
-Sua consulta de *{consulta.especialidade}* não foi possível agendar.
-
-Você precisa *VOLTAR AO POSTO DE SAÚDE* para realizar o agendamento."""
+    # INTERCONSULTA: NÃO ENVIA RETRY (apenas MSG 1)
+    if consulta.tipo == 'INTERCONSULTA':
+        return None
 
     # Mensagem padrão para RETORNO e REMARCACAO
     return f"""{saudacao}

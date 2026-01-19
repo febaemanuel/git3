@@ -1376,12 +1376,21 @@ def retry_consultas_sem_resposta():
                 
                 # Enviar retry 1
                 msg = formatar_mensagem_consulta_retry1(consulta)
+
+                # Se msg for None (ex: INTERCONSULTA), não enviar retry
+                if msg is None:
+                    logger.info(f"Retry 1 não aplicável para consulta {consulta.id} (tipo: {consulta.tipo})")
+                    consulta.tentativas_contato = 1
+                    consulta.data_ultima_tentativa = agora
+                    db.session.commit()
+                    continue
+
                 enviar_e_registrar_consulta(ws, telefone_envio, msg, consulta)
-                
+
                 consulta.tentativas_contato = 1
                 consulta.data_ultima_tentativa = agora
                 db.session.commit()
-                
+
                 logger.info(f"Retry 1 (16h) enviado para consulta {consulta.id} - {consulta.paciente}")
                 processadas += 1
             
@@ -1406,12 +1415,21 @@ def retry_consultas_sem_resposta():
                 
                 # Enviar retry 2 (ÚLTIMA TENTATIVA)
                 msg = formatar_mensagem_consulta_retry2(consulta)
+
+                # Se msg for None (ex: INTERCONSULTA), não enviar retry
+                if msg is None:
+                    logger.info(f"Retry 2 não aplicável para consulta {consulta.id} (tipo: {consulta.tipo})")
+                    consulta.tentativas_contato = 2
+                    consulta.data_ultima_tentativa = agora
+                    db.session.commit()
+                    continue
+
                 enviar_e_registrar_consulta(ws, telefone_envio, msg, consulta)
-                
+
                 consulta.tentativas_contato = 2
                 consulta.data_ultima_tentativa = agora
                 db.session.commit()
-                
+
                 logger.info(f"Retry 2 (32h) enviado para consulta {consulta.id} - {consulta.paciente}")
                 processadas += 1
             

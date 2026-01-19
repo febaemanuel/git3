@@ -1379,8 +1379,39 @@ Pode confirmar sua presença na nova data?
 2️⃣ *NÃO* - Não posso comparecer
 3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
     
+    # TIPO INTERCONSULTA: Mensagem baseada em PACIENTE_VOLTAR_POSTO_SMS
+    if consulta.tipo == 'INTERCONSULTA':
+        voltar_posto = (consulta.paciente_voltar_posto_sms or '').upper()
+
+        if voltar_posto in ['S', 'SIM']:
+            # NÃO APROVADA - Precisa procurar UBS
+            return f"""{saudacao}
+
+Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
+
+Solicitação de interconsulta do paciente *{consulta.paciente}* para a especialidade de *{consulta.especialidade}* foi avaliada e *não aprovada* para marcação no HUWC.
+
+Procure sua UBS para solicitar encaminhamento para outra instituição de saúde."""
+
+        elif voltar_posto in ['N', 'NAO', 'NÃO']:
+            # APROVADA - Aguardar contato
+            return f"""{saudacao}
+
+Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
+
+Solicitação de interconsulta do paciente *{consulta.paciente}* para a especialidade de *{consulta.especialidade}* foi avaliada e *aprovada* para marcação no HUWC.
+
+Em breve entraremos em contato informando a data da consulta."""
+
+        # Fallback se não tiver o campo preenchido
+        return f"""{saudacao}
+
+Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
+
+Sua solicitação de interconsulta do paciente *{consulta.paciente}* para *{consulta.especialidade}* está em análise."""
+
     # TIPOS RETORNO e INTERCONSULTA: Verifica se é EXAME ou CONSULTA
-    if consulta.exames:
+    elif consulta.exames:
         # Mensagem para EXAME
         return f"""{saudacao}
 
@@ -1415,6 +1446,12 @@ def formatar_mensagem_consulta_retry1(consulta):
     MSG 1 RETRY: Primeira tentativa de recontato (16h após envio inicial)
     """
     saudacao = obter_saudacao_dinamica()
+
+    # INTERCONSULTA: NÃO ENVIA RETRY (apenas MSG 1)
+    if consulta.tipo == 'INTERCONSULTA':
+        return None
+
+    # Mensagem padrão para RETORNO e REMARCACAO
     return f"""{saudacao}
 
 📋 *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*
@@ -1440,6 +1477,12 @@ def formatar_mensagem_consulta_retry2(consulta):
     MSG 1 RETRY FINAL: Segunda e última tentativa de recontato (32h após envio inicial)
     """
     saudacao = obter_saudacao_dinamica()
+
+    # INTERCONSULTA: NÃO ENVIA RETRY (apenas MSG 1)
+    if consulta.tipo == 'INTERCONSULTA':
+        return None
+
+    # Mensagem padrão para RETORNO e REMARCACAO
     return f"""{saudacao}
 
 🚨 *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*

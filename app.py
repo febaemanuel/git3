@@ -1381,22 +1381,20 @@ Pode confirmar sua presença na nova data?
     
     # TIPO INTERCONSULTA: Verifica se precisa voltar ao posto
     if consulta.tipo == 'INTERCONSULTA' and consulta.paciente_voltar_posto_sms == 'S':
-        # Mensagem para INTERCONSULTA - Precisa voltar ao posto/UBS
+        # Mensagem para INTERCONSULTA - Precisa voltar ao posto/UBS (INFORMATIVA)
         return f"""{saudacao}
 
 Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
 
-Informamos que o paciente *{consulta.paciente}* está na fila de *INTERCONSULTA* para a especialidade de *{consulta.especialidade}*.
+Informamos que *NÃO FOI POSSÍVEL* agendar a consulta de *INTERCONSULTA* do paciente *{consulta.paciente}* para a especialidade de *{consulta.especialidade}*.
 
-⚠️ *IMPORTANTE:* Para agendar sua consulta, você precisa *VOLTAR AO POSTO DE SAÚDE/UBS* onde foi atendido inicialmente.
+⚠️ *IMPORTANTE:* Para realizar o agendamento, você precisa *VOLTAR AO POSTO DE SAÚDE/UBS* onde foi atendido inicialmente.
 
 📍 *Procedência:* {consulta.procedencia or 'Não informada'}
 
-Você tem interesse em comparecer ao posto para realizar o agendamento?
+Procure o posto de saúde para agendar sua consulta.
 
-1️⃣ *SIM* - Tenho interesse
-2️⃣ *NÃO* - Não consigo ir / Não quero mais
-3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
+_Esta é uma mensagem informativa._"""
 
     # TIPOS RETORNO e INTERCONSULTA: Verifica se é EXAME ou CONSULTA
     elif consulta.exames:
@@ -1434,6 +1432,26 @@ def formatar_mensagem_consulta_retry1(consulta):
     MSG 1 RETRY: Primeira tentativa de recontato (16h após envio inicial)
     """
     saudacao = obter_saudacao_dinamica()
+
+    # INTERCONSULTA: Mensagem específica
+    if consulta.tipo == 'INTERCONSULTA' and consulta.paciente_voltar_posto_sms == 'S':
+        return f"""{saudacao}
+
+📋 *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*
+
+Ainda não recebemos sua confirmação sobre a *INTERCONSULTA* de *{consulta.paciente}*.
+
+⚠️ *LEMBRE-SE:* Você precisa *VOLTAR AO POSTO DE SAÚDE/UBS* para agendar sua consulta de *{consulta.especialidade}*.
+
+📍 *Procedência:* {consulta.procedencia or 'Não informada'}
+
+Você tem interesse em comparecer ao posto para realizar o agendamento?
+
+1️⃣ *SIM* - Tenho interesse
+2️⃣ *NÃO* - Não consigo ir / Não quero mais
+3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
+
+    # Mensagem padrão para RETORNO e REMARCACAO
     return f"""{saudacao}
 
 📋 *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*
@@ -1459,6 +1477,27 @@ def formatar_mensagem_consulta_retry2(consulta):
     MSG 1 RETRY FINAL: Segunda e última tentativa de recontato (32h após envio inicial)
     """
     saudacao = obter_saudacao_dinamica()
+
+    # INTERCONSULTA: Mensagem específica
+    if consulta.tipo == 'INTERCONSULTA' and consulta.paciente_voltar_posto_sms == 'S':
+        return f"""{saudacao}
+
+🚨 *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*
+⚠️ *ÚLTIMA TENTATIVA DE CONTATO*
+
+Esta é nossa *ÚLTIMA TENTATIVA* de contato sobre a *INTERCONSULTA* de *{consulta.paciente}* para *{consulta.especialidade}*.
+
+⚠️ *LEMBRE-SE:* Você precisa *VOLTAR AO POSTO DE SAÚDE/UBS* para agendar sua consulta.
+
+📍 *Procedência:* {consulta.procedencia or 'Não informada'}
+
+Caso tenha interesse, compareça ao posto de saúde.
+
+1️⃣ *SIM* - Tenho interesse
+2️⃣ *NÃO* - Não consigo ir / Não quero mais
+3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
+
+    # Mensagem padrão para RETORNO e REMARCACAO
     return f"""{saudacao}
 
 🚨 *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*

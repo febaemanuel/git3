@@ -60,17 +60,19 @@ def init_consultas_routes(app, db):
             logger.info(f"[BG] Aguardando 3 horas para reenvio de segurança - consulta {consulta_id}")
             time.sleep(10800)
 
-            # Criar nova conexão WhatsApp (necessário em thread separada)
-            ws = WhatsApp(usuario_id)
+            # IMPORTANTE: Thread precisa de contexto do Flask para acessar DB/WhatsApp
+            with app.app_context():
+                # Criar nova conexão WhatsApp (necessário em thread separada)
+                ws = WhatsApp(usuario_id)
 
-            # Reenviar arquivo com legenda (tudo em uma mensagem)
-            msg_reenvio = "📄 *REENVIANDO COMPROVANTE*\n\n_Enviando novamente para garantir que você recebeu todas as informações._"
-            ok_reenvio, _ = ws.enviar_arquivo(telefone, filepath, caption=msg_reenvio)
+                # Reenviar arquivo com legenda (tudo em uma mensagem)
+                msg_reenvio = "📄 *REENVIANDO COMPROVANTE*\n\n_Enviando novamente para garantir que você recebeu todas as informações._"
+                ok_reenvio, _ = ws.enviar_arquivo(telefone, filepath, caption=msg_reenvio)
 
-            if ok_reenvio:
-                logger.info(f"[BG] Comprovante reenviado com sucesso - consulta {consulta_id}")
-            else:
-                logger.warning(f"[BG] Falha ao reenviar comprovante - consulta {consulta_id}")
+                if ok_reenvio:
+                    logger.info(f"[BG] Comprovante reenviado com sucesso - consulta {consulta_id}")
+                else:
+                    logger.warning(f"[BG] Falha ao reenviar comprovante - consulta {consulta_id}")
 
         except Exception as e:
             logger.error(f"[BG] Erro ao reenviar comprovante - consulta {consulta_id}: {e}")

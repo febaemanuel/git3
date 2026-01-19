@@ -283,6 +283,14 @@ _Hospital Universitário Walter Cantídio_"""
                             logger.warning(f"Linha {idx+2}: Paciente vazio, pulando")
                             continue
 
+                        # Normalizar tipo INTERCONSULTA (aceitar variações)
+                        if 'INTERCONSULTA' in consulta.tipo:
+                            consulta.tipo = 'INTERCONSULTA'
+                            # Para INTERCONSULTA, ignorar campo EXAMES (pode conter data de registro)
+                            consulta.exames = ''
+                            logger.info(f"Linha {idx+2}: Tipo normalizado para INTERCONSULTA, campo exames ignorado")
+
+                        # Validar tipo
                         if consulta.tipo not in ['RETORNO', 'INTERCONSULTA', 'REMARCACAO']:
                             logger.warning(f"Linha {idx+2}: Tipo inválido '{consulta.tipo}', ajustando para RETORNO")
                             consulta.tipo = 'RETORNO'

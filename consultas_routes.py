@@ -47,35 +47,72 @@ def init_consultas_routes(app, db):
 
 
     # =========================================================================
-    # FUNÇÃO AUXILIAR - Reenvio de comprovante em background
+    # FUNÇÕES AUXILIARES - Reenvio de comprovante em background
     # =========================================================================
-    def reenviar_comprovante_bg(usuario_id, telefone, filepath, consulta_id):
+    def reenviar_comprovante_1h(usuario_id, telefone, filepath, consulta_id):
         """
-        Reenvia o comprovante após 3 horas para garantir entrega.
-        Envia INDEPENDENTE do horário (pode ser fora do horário comercial).
+        REENVIO 1: Reenvia o comprovante (arquivo) após 1 hora.
         Executado em thread separada para não bloquear a requisição HTTP.
         """
         try:
-            # 3 horas = 10800 segundos
-            logger.info(f"[BG] Aguardando 3 horas para reenvio de segurança - consulta {consulta_id}")
-            time.sleep(10800)
+            # 1 hora = 3600 segundos
+            logger.info(f"[BG] Aguardando 1 hora para primeiro reenvio - consulta {consulta_id}")
+            time.sleep(3600)
 
             # IMPORTANTE: Thread precisa de contexto do Flask para acessar DB/WhatsApp
             with app.app_context():
-                # Criar nova conexão WhatsApp (necessário em thread separada)
                 ws = WhatsApp(usuario_id)
 
-                # Reenviar arquivo com legenda (tudo em uma mensagem)
+                # Reenviar arquivo com legenda
                 msg_reenvio = "📄 *REENVIANDO COMPROVANTE*\n\n_Enviando novamente para garantir que você recebeu todas as informações._"
                 ok_reenvio, _ = ws.enviar_arquivo(telefone, filepath, caption=msg_reenvio)
 
                 if ok_reenvio:
-                    logger.info(f"[BG] Comprovante reenviado com sucesso - consulta {consulta_id}")
+                    logger.info(f"[BG] Comprovante reenviado (1h) com sucesso - consulta {consulta_id}")
                 else:
-                    logger.warning(f"[BG] Falha ao reenviar comprovante - consulta {consulta_id}")
+                    logger.warning(f"[BG] Falha ao reenviar comprovante (1h) - consulta {consulta_id}")
 
         except Exception as e:
-            logger.error(f"[BG] Erro ao reenviar comprovante - consulta {consulta_id}: {e}")
+            logger.error(f"[BG] Erro ao reenviar comprovante (1h) - consulta {consulta_id}: {e}")
+
+
+    def enviar_link_comprovante_3h(usuario_id, telefone, consulta_id, base_url):
+        """
+        REENVIO 2: Envia link para acesso ao comprovante após 3 horas.
+        Executado em thread separada para não bloquear a requisição HTTP.
+        """
+        try:
+            # 3 horas = 10800 segundos
+            logger.info(f"[BG] Aguardando 3 horas para envio de link - consulta {consulta_id}")
+            time.sleep(10800)
+
+            # IMPORTANTE: Thread precisa de contexto do Flask para acessar DB/WhatsApp
+            with app.app_context():
+                ws = WhatsApp(usuario_id)
+
+                # Gerar link público temporário
+                link_comprovante = f"{base_url}/consulta/comprovante/{consulta_id}"
+
+                # Enviar mensagem com link
+                msg_link = f"""🔗 *LINK DO COMPROVANTE*
+
+Caso não tenha conseguido acessar seu comprovante, você pode baixá-lo pelo link abaixo:
+
+{link_comprovante}
+
+_⏰ Este link ficará disponível por 7 dias._
+
+_Hospital Universitário Walter Cantídio_"""
+
+                ok_link, _ = ws.enviar(telefone, msg_link)
+
+                if ok_link:
+                    logger.info(f"[BG] Link do comprovante enviado (3h) com sucesso - consulta {consulta_id}")
+                else:
+                    logger.warning(f"[BG] Falha ao enviar link do comprovante (3h) - consulta {consulta_id}")
+
+        except Exception as e:
+            logger.error(f"[BG] Erro ao enviar link do comprovante (3h) - consulta {consulta_id}: {e}")
 
 
     # =========================================================================
@@ -509,6 +546,43 @@ def init_consultas_routes(app, db):
 
 
     # =========================================================================
+    # DOWNLOAD PÚBLICO DE COMPROVANTE (via link)
+    # =========================================================================
+
+    @app.route('/consulta/comprovante/<int:consulta_id>')
+    def download_comprovante_publico(consulta_id):
+        """
+        Endpoint PÚBLICO para download de comprovante via link.
+        Válido por 7 dias após envio.
+        """
+        from datetime import timedelta
+
+        consulta = AgendamentoConsulta.query.get_or_404(consulta_id)
+
+        # Verificar se comprovante existe
+        if not consulta.comprovante_path or not os.path.exists(consulta.comprovante_path):
+            return "Comprovante não encontrado", 404
+
+        # Verificar se ainda está dentro do prazo (7 dias)
+        if consulta.data_confirmacao:
+            sete_dias_atras = datetime.utcnow() - timedelta(days=7)
+            if consulta.data_confirmacao < sete_dias_atras:
+                return "Link expirado. O comprovante ficou disponível por 7 dias.", 410
+
+        # Servir arquivo
+        try:
+            return send_file(
+                consulta.comprovante_path,
+                as_attachment=True,
+                download_name=consulta.comprovante_nome or 'comprovante.pdf',
+                mimetype='application/pdf'
+            )
+        except Exception as e:
+            logger.error(f"Erro ao enviar comprovante público: {e}")
+            return "Erro ao baixar comprovante", 500
+
+
+    # =========================================================================
     # ENVIAR COMPROVANTE (MSG 2)
     # =========================================================================
 
@@ -708,19 +782,30 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
                 logger.warning(f"Erro ao iniciar pesquisa: {e}")
 
             # =====================================================
-            # REENVIO DE SEGURANÇA DO COMPROVANTE (em background)
+            # REENVIOS AUTOMÁTICOS DO COMPROVANTE (em background)
             # =====================================================
-            # Inicia thread que aguardará 3 horas e reenviará o comprovante
             try:
-                t = threading.Thread(
-                    target=reenviar_comprovante_bg,
+                # REENVIO 1: Arquivo após 1 hora
+                t1 = threading.Thread(
+                    target=reenviar_comprovante_1h,
                     args=(current_user.id, telefone, filepath, consulta.id)
                 )
-                t.daemon = True
-                t.start()
-                logger.info(f"Thread de reenvio iniciada para consulta {consulta.id}")
+                t1.daemon = True
+                t1.start()
+                logger.info(f"Thread de reenvio 1h iniciada para consulta {consulta.id}")
+
+                # REENVIO 2: Link após 3 horas
+                base_url = request.url_root.rstrip('/')
+                t2 = threading.Thread(
+                    target=enviar_link_comprovante_3h,
+                    args=(current_user.id, telefone, consulta.id, base_url)
+                )
+                t2.daemon = True
+                t2.start()
+                logger.info(f"Thread de envio de link 3h iniciada para consulta {consulta.id}")
+
             except Exception as e:
-                logger.warning(f"Erro ao iniciar thread de reenvio: {e}")
+                logger.warning(f"Erro ao iniciar threads de reenvio: {e}")
 
             return jsonify({'sucesso': True, 'mensagem': 'Comprovante enviado com sucesso!'})
 

@@ -1,0 +1,51 @@
+=============================================================================
+COMANDO PARA ALTERAR MODO ADMIN DE FILA PARA CONSULTA
+=============================================================================
+
+Execute este comando no servidor de produção dentro do container Docker:
+
+docker exec -it busca-ativa-web python3 -c "
+from app import app, db, Usuario
+
+with app.app_context():
+    # Buscar e atualizar todos os admins
+    admins = Usuario.query.filter_by(is_admin=True).all()
+
+    for u in admins:
+        print(f'Alterando {u.nome} ({u.email}): {u.tipo_sistema} → AGENDAMENTO_CONSULTA')
+        u.tipo_sistema = 'AGENDAMENTO_CONSULTA'
+
+    db.session.commit()
+    print('✅ CONCLUÍDO!')
+"
+
+=============================================================================
+
+OU SE PREFERIR, EXECUTE LINHA POR LINHA NO FLASK SHELL:
+
+docker exec -it busca-ativa-web flask shell
+
+>>> from app import db, Usuario
+>>> admins = Usuario.query.filter_by(is_admin=True).all()
+>>> for u in admins:
+...     print(f'Alterando {u.nome}: {u.tipo_sistema} → AGENDAMENTO_CONSULTA')
+...     u.tipo_sistema = 'AGENDAMENTO_CONSULTA'
+...
+>>> db.session.commit()
+>>> print('✅ CONCLUÍDO!')
+>>> exit()
+
+=============================================================================
+
+PARA VERIFICAR SE FOI ALTERADO:
+
+docker exec -it busca-ativa-web python3 -c "
+from app import app, Usuario
+
+with app.app_context():
+    admins = Usuario.query.filter_by(is_admin=True).all()
+    for u in admins:
+        print(f'{u.nome} ({u.email}): {u.tipo_sistema}')
+"
+
+=============================================================================

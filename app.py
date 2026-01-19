@@ -1379,8 +1379,27 @@ Pode confirmar sua presença na nova data?
 2️⃣ *NÃO* - Não posso comparecer
 3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
     
+    # TIPO INTERCONSULTA: Verifica se precisa voltar ao posto
+    if consulta.tipo == 'INTERCONSULTA' and consulta.paciente_voltar_posto_sms == 'S':
+        # Mensagem para INTERCONSULTA - Precisa voltar ao posto/UBS
+        return f"""{saudacao}
+
+Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
+
+Informamos que o paciente *{consulta.paciente}* está na fila de *INTERCONSULTA* para a especialidade de *{consulta.especialidade}*.
+
+⚠️ *IMPORTANTE:* Para agendar sua consulta, você precisa *VOLTAR AO POSTO DE SAÚDE/UBS* onde foi atendido inicialmente.
+
+📍 *Procedência:* {consulta.procedencia or 'Não informada'}
+
+Você tem interesse em comparecer ao posto para realizar o agendamento?
+
+1️⃣ *SIM* - Tenho interesse
+2️⃣ *NÃO* - Não consigo ir / Não quero mais
+3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
+
     # TIPOS RETORNO e INTERCONSULTA: Verifica se é EXAME ou CONSULTA
-    if consulta.exames:
+    elif consulta.exames:
         # Mensagem para EXAME
         return f"""{saudacao}
 

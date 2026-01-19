@@ -1245,7 +1245,12 @@ def enviar_campanha_consultas_task(self, campanha_id):
 
             # Atualizar status da consulta
             if sucesso_envio:
-                consulta.status = 'AGUARDANDO_CONFIRMACAO'
+                # INTERCONSULTA: Fluxo termina após MSG 1 (apenas informativa)
+                if consulta.tipo == 'INTERCONSULTA':
+                    consulta.status = 'INFORMADO'  # Status final
+                else:
+                    consulta.status = 'AGUARDANDO_CONFIRMACAO'
+
                 consulta.mensagem_enviada = True
                 consulta.data_envio_mensagem = datetime.utcnow()
                 enviados += 1

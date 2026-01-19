@@ -571,11 +571,14 @@ _Hospital Universitário Walter Cantídio_"""
         if not consulta.comprovante_path or not os.path.exists(consulta.comprovante_path):
             return "Comprovante não encontrado", 404
 
+        # Verificar se tem data de confirmação (obrigatório para link funcionar)
+        if not consulta.data_confirmacao:
+            return "Comprovante ainda não foi enviado oficialmente", 400
+
         # Verificar se ainda está dentro do prazo (7 dias)
-        if consulta.data_confirmacao:
-            sete_dias_atras = datetime.utcnow() - timedelta(days=7)
-            if consulta.data_confirmacao < sete_dias_atras:
-                return "Link expirado. O comprovante ficou disponível por 7 dias.", 410
+        sete_dias_atras = datetime.utcnow() - timedelta(days=7)
+        if consulta.data_confirmacao < sete_dias_atras:
+            return "Link expirado. O comprovante ficou disponível por 7 dias.", 410
 
         # Servir arquivo
         try:

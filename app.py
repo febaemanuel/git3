@@ -1387,24 +1387,28 @@ Pode confirmar sua presença na nova data?
             # NÃO APROVADA - Precisa procurar UBS
             return f"""{saudacao}
 
-*HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*
+Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
 
-Solicitação de interconsulta avaliada e *não aprovada* para marcação no HUWC, procure sua UBS para solicitar encaminhamento para outra instituição de saúde."""
+Solicitação de interconsulta do paciente *{consulta.paciente}* para a especialidade de *{consulta.especialidade}* foi avaliada e *não aprovada* para marcação no HUWC.
+
+Procure sua UBS para solicitar encaminhamento para outra instituição de saúde."""
 
         elif voltar_posto in ['N', 'NAO', 'NÃO']:
             # APROVADA - Aguardar contato
             return f"""{saudacao}
 
-*HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*
+Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
 
-Solicitação de interconsulta avaliada e *aprovada* para marcação no HUWC, em breve entraremos em contato informando a data da consulta."""
+Solicitação de interconsulta do paciente *{consulta.paciente}* para a especialidade de *{consulta.especialidade}* foi avaliada e *aprovada* para marcação no HUWC.
+
+Em breve entraremos em contato informando a data da consulta."""
 
         # Fallback se não tiver o campo preenchido
         return f"""{saudacao}
 
-*HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*
+Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
 
-Sua solicitação de interconsulta para *{consulta.especialidade}* está em análise."""
+Sua solicitação de interconsulta do paciente *{consulta.paciente}* para *{consulta.especialidade}* está em análise."""
 
     # TIPOS RETORNO e INTERCONSULTA: Verifica se é EXAME ou CONSULTA
     elif consulta.exames:

@@ -6218,6 +6218,23 @@ def webhook():
                     logger.info(f"Mensagem duplicada detectada (já processada há {(datetime.utcnow() - log_recente.data).total_seconds():.1f}s). Ignorando.")
                     return jsonify({'status': 'ok'}), 200
 
+                # =====================================================
+                # VALIDAÇÃO: Bloquear respostas fora do prazo ou já finalizadas
+                # =====================================================
+                STATUS_FINAIS = ['CANCELADO', 'CONFIRMADO', 'REJEITADO', 'INFORMADO']
+
+                # 1. Verificar se consulta já está em status final
+                if consulta.status in STATUS_FINAIS:
+                    logger.info(f"Consulta {consulta.id} já finalizada (status: {consulta.status}). Resposta ignorada: {texto[:50]}")
+                    return jsonify({'status': 'ok'}), 200
+
+                # 2. Verificar se passou mais de 48h desde o envio da mensagem
+                if consulta.data_envio_mensagem:
+                    quarenta_oito_horas_atras = datetime.utcnow() - timedelta(hours=48)
+                    if consulta.data_envio_mensagem < quarenta_oito_horas_atras:
+                        logger.info(f"Consulta {consulta.id} expirada (enviada há mais de 48h em {consulta.data_envio_mensagem}). Resposta ignorada: {texto[:50]}")
+                        return jsonify({'status': 'ok'}), 200
+
                 # IMPORTANTE: Usar o número cadastrado na consulta para garantir que respondemos no formato correto
                 numero_resposta = consulta_telefone.numero
 

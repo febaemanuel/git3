@@ -671,22 +671,25 @@ _Hospital Universitário Walter Cantídio_"""
             if not telefone:
                 return jsonify({'erro': 'Nenhum telefone válido encontrado'}), 400
 
-            # Enviar mensagem de texto (personalizada com dados do OCR)
-            msg = formatar_mensagem_comprovante(consulta=consulta, dados_ocr=dados_ocr)
+            # Gerar link público do comprovante
+            base_url = request.url_root.rstrip('/')
+            link_comprovante = f"{base_url}/consulta/comprovante/{consulta.id}"
+
+            # Enviar APENAS mensagem com link do comprovante
+            msg = f"""🔗 *LINK DO COMPROVANTE*
+
+Caso não tenha conseguido acessar seu comprovante, você pode baixá-lo pelo link abaixo:
+
+{link_comprovante}
+
+_⏰ Este link ficará disponível por 7 dias._
+
+_Hospital Universitário Walter Cantídio_"""
+
             ok_msg, result_msg = ws.enviar(telefone, msg)
 
             if not ok_msg:
                 return jsonify({'erro': f'Erro ao enviar mensagem: {result_msg}'}), 500
-
-            # Aguardar 7 segundos antes de enviar o arquivo (evita fila na API)
-            time.sleep(7)
-
-            # Enviar arquivo
-            ok_file, result_file = ws.enviar_arquivo(telefone, filepath)
-
-            if not ok_file:
-                logger.warning(f"Erro ao enviar arquivo: {result_file}")
-                # Continua mesmo se arquivo falhar
 
             # Atualizar consulta
             consulta.comprovante_path = filepath
@@ -700,7 +703,7 @@ _Hospital Universitário Walter Cantídio_"""
                 consulta_id=consulta.id,
                 direcao='enviada',
                 telefone=telefone,
-                mensagem=f'{msg[:200]}... [COMPROVANTE ANEXO]',
+                mensagem=f'{msg[:200]}... [LINK COMPROVANTE]',
                 status='sucesso',
                 msg_id=result_msg
             )
@@ -791,32 +794,6 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
                     logger.info(f"Pesquisa iniciada para consulta {consulta.id}")
             except Exception as e:
                 logger.warning(f"Erro ao iniciar pesquisa: {e}")
-
-            # =====================================================
-            # REENVIOS AUTOMÁTICOS DO COMPROVANTE (em background)
-            # =====================================================
-            try:
-                # REENVIO 1: Arquivo após 1 hora
-                t1 = threading.Thread(
-                    target=reenviar_comprovante_1h,
-                    args=(current_user.id, telefone, filepath, consulta.id)
-                )
-                t1.daemon = True
-                t1.start()
-                logger.info(f"Thread de reenvio 1h iniciada para consulta {consulta.id}")
-
-                # REENVIO 2: Link após 3 horas
-                base_url = request.url_root.rstrip('/')
-                t2 = threading.Thread(
-                    target=enviar_link_comprovante_3h,
-                    args=(current_user.id, telefone, consulta.id, base_url)
-                )
-                t2.daemon = True
-                t2.start()
-                logger.info(f"Thread de envio de link 3h iniciada para consulta {consulta.id}")
-
-            except Exception as e:
-                logger.warning(f"Erro ao iniciar threads de reenvio: {e}")
 
             return jsonify({'sucesso': True, 'mensagem': 'Comprovante enviado com sucesso!'})
 

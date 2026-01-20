@@ -1562,7 +1562,7 @@ def formatar_mensagem_comprovante(consulta=None, dados_ocr=None, link_comprovant
         link_bloco = f"""
 
 🔗 *LINK DO COMPROVANTE*
-Caso não consiga visualizar o comprovante acima, baixe pelo link:
+Caso não consiga abrir o comprovante em PDF, baixe pelo link:
 {link_comprovante}
 _Este link ficará disponível por 7 dias._"""
 

@@ -678,7 +678,7 @@ _Hospital Universitário Walter Cantídio_"""
             # Enviar APENAS mensagem com link do comprovante
             msg = f"""🔗 *LINK DO COMPROVANTE*
 
-Caso não tenha conseguido acessar seu comprovante, você pode baixá-lo pelo link abaixo:
+Acesse aqui seu comprovante:
 
 {link_comprovante}
 

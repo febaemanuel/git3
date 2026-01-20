@@ -1505,7 +1505,7 @@ Posso confirmar o agendamento?
 
 
 
-def formatar_mensagem_comprovante(consulta=None, dados_ocr=None):
+def formatar_mensagem_comprovante(consulta=None, dados_ocr=None, link_comprovante=None):
     """
     MSG 2: Mensagem de comprovante (enviada manualmente com arquivo anexo)
     Enviada para: Consultas com status AGUARDANDO_COMPROVANTE
@@ -1515,6 +1515,7 @@ def formatar_mensagem_comprovante(consulta=None, dados_ocr=None):
         consulta: Objeto AgendamentoConsulta (opcional, para fallback)
         dados_ocr: Dict com dados extraídos do comprovante via OCR (opcional)
                    Keys: paciente, data, hora, medico, especialidade
+        link_comprovante: URL do link público para baixar o comprovante (opcional)
     """
     # OCR para tudo, EXCETO especialidade que vem da planilha
     paciente = None
@@ -1550,12 +1551,25 @@ def formatar_mensagem_comprovante(consulta=None, dados_ocr=None):
     medico_str = medico if medico else '-'
     especialidade_str = especialidade if especialidade else '-'
 
-    # Verifica se é EXAME (coluna EXAMES preenchida na planilha)
+    # Verifica se é EXAME (coluna EXAMES preenchida E especialidade OFTALMOLOGIA)
     exames = None
     if consulta and consulta.exames:
         exames = consulta.exames
 
-    if exames:
+    # Bloco do link (só adiciona se link_comprovante foi fornecido)
+    link_bloco = ""
+    if link_comprovante:
+        link_bloco = f"""
+
+🔗 *LINK DO COMPROVANTE*
+Caso não consiga visualizar o comprovante acima, baixe pelo link:
+{link_comprovante}
+_Este link ficará disponível por 7 dias._"""
+
+    # Mensagem de EXAME só para OFTALMOLOGIA
+    eh_oftalmologia = especialidade_str and 'OFTALMOLOGIA' in especialidade_str.upper()
+
+    if exames and eh_oftalmologia:
         # Mensagem para EXAME
         return f"""O Hospital Walter Cantídio agradece seu contato. *EXAME CONFIRMADO!*
 
@@ -1573,7 +1587,7 @@ Caso falte, procurar o ambulatório para ser colocado novamente no pré-agendame
 
 Você sabia que pode verificar sua consulta no app HU Digital? https://play.google.com/store/apps/details?id=br.gov.ebserh.hudigital&pcampaignid=web_share . Após 5 horas dessa mensagem, verifique sua consulta agendada no app.
 
-Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital."""
+Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital.{link_bloco}"""
     else:
         # Mensagem para CONSULTA
         return f"""O Hospital Walter Cantídio agradece seu contato. *CONSULTA CONFIRMADA!*
@@ -1594,7 +1608,7 @@ Caso falte, procurar o ambulatório para ser colocado novamente no pré-agendame
 
 Você sabia que pode verificar sua consulta no app HU Digital? https://play.google.com/store/apps/details?id=br.gov.ebserh.hudigital&pcampaignid=web_share . Após 5 horas dessa mensagem, verifique sua consulta agendada no app.
 
-Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital."""
+Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital.{link_bloco}"""
 
 
 def formatar_mensagem_perguntar_motivo():
@@ -6203,6 +6217,23 @@ def webhook():
                 if log_recente:
                     logger.info(f"Mensagem duplicada detectada (já processada há {(datetime.utcnow() - log_recente.data).total_seconds():.1f}s). Ignorando.")
                     return jsonify({'status': 'ok'}), 200
+
+                # =====================================================
+                # VALIDAÇÃO: Bloquear respostas fora do prazo ou já finalizadas
+                # =====================================================
+                STATUS_FINAIS = ['CANCELADO', 'CONFIRMADO', 'REJEITADO', 'INFORMADO']
+
+                # 1. Verificar se consulta já está em status final
+                if consulta.status in STATUS_FINAIS:
+                    logger.info(f"Consulta {consulta.id} já finalizada (status: {consulta.status}). Resposta ignorada: {texto[:50]}")
+                    return jsonify({'status': 'ok'}), 200
+
+                # 2. Verificar se passou mais de 48h desde o envio da mensagem
+                if consulta.data_envio_mensagem:
+                    quarenta_oito_horas_atras = datetime.utcnow() - timedelta(hours=48)
+                    if consulta.data_envio_mensagem < quarenta_oito_horas_atras:
+                        logger.info(f"Consulta {consulta.id} expirada (enviada há mais de 48h em {consulta.data_envio_mensagem}). Resposta ignorada: {texto[:50]}")
+                        return jsonify({'status': 'ok'}), 200
 
                 # IMPORTANTE: Usar o número cadastrado na consulta para garantir que respondemos no formato correto
                 numero_resposta = consulta_telefone.numero

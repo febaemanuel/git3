@@ -1551,7 +1551,7 @@ def formatar_mensagem_comprovante(consulta=None, dados_ocr=None, link_comprovant
     medico_str = medico if medico else '-'
     especialidade_str = especialidade if especialidade else '-'
 
-    # Verifica se é EXAME (coluna EXAMES preenchida na planilha)
+    # Verifica se é EXAME (coluna EXAMES preenchida E especialidade OFTALMOLOGIA)
     exames = None
     if consulta and consulta.exames:
         exames = consulta.exames
@@ -1566,7 +1566,10 @@ Caso não consiga visualizar o comprovante acima, baixe pelo link:
 {link_comprovante}
 _Este link ficará disponível por 7 dias._"""
 
-    if exames:
+    # Mensagem de EXAME só para OFTALMOLOGIA
+    eh_oftalmologia = especialidade_str and 'OFTALMOLOGIA' in especialidade_str.upper()
+
+    if exames and eh_oftalmologia:
         # Mensagem para EXAME
         return f"""O Hospital Walter Cantídio agradece seu contato. *EXAME CONFIRMADO!*
 

@@ -1411,7 +1411,8 @@ Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
 Sua solicitação de interconsulta do paciente *{consulta.paciente}* para *{consulta.especialidade}* está em análise."""
 
     # TIPOS RETORNO e INTERCONSULTA: Verifica se é EXAME ou CONSULTA
-    elif consulta.exames:
+    # EXAME só é enviado se a especialidade for OFTALMOLOGIA
+    elif consulta.exames and 'OFTALMOLOGIA' in (consulta.especialidade or '').upper():
         # Mensagem para EXAME
         return f"""{saudacao}
 
@@ -1551,11 +1552,12 @@ def formatar_mensagem_comprovante(consulta=None, dados_ocr=None):
     especialidade_str = especialidade if especialidade else '-'
 
     # Verifica se é EXAME (coluna EXAMES preenchida na planilha)
+    # EXAME só é enviado se a especialidade for OFTALMOLOGIA
     exames = None
     if consulta and consulta.exames:
         exames = consulta.exames
 
-    if exames:
+    if exames and 'OFTALMOLOGIA' in (especialidade or '').upper():
         # Mensagem para EXAME
         return f"""O Hospital Walter Cantídio agradece seu contato. *EXAME CONFIRMADO!*
 

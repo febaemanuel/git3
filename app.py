@@ -1578,6 +1578,7 @@ _Este link ficará disponível por 7 dias._"""
 *Horário:* *{hora_str}*
 *Exame:* *{exames}*
 *Especialidade:* *{especialidade_str}*
+{link_bloco}
 
 O hospital entra em contato através do: (85) 992081534 / (85)996700783 / (85)991565903 / (85) 992614237 / (85) 992726080. É importante que atenda as ligações e responda as mensagens desses números. Por tanto, salve-os!
 
@@ -1587,7 +1588,7 @@ Caso falte, procurar o ambulatório para ser colocado novamente no pré-agendame
 
 Você sabia que pode verificar sua consulta no app HU Digital? https://play.google.com/store/apps/details?id=br.gov.ebserh.hudigital&pcampaignid=web_share . Após 5 horas dessa mensagem, verifique sua consulta agendada no app.
 
-Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital.{link_bloco}"""
+Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital."""
     else:
         # Mensagem para CONSULTA
         return f"""O Hospital Walter Cantídio agradece seu contato. *CONSULTA CONFIRMADA!*
@@ -1597,6 +1598,7 @@ Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU D
 *Horário:* *{hora_str}*
 *Médico(a):* *{medico_str}*
 *Especialidade:* *{especialidade_str}*
+{link_bloco}
 
 O hospital entra em contato através do: (85) 992081534 / (85)996700783 / (85)991565903 / (85) 992614237 / (85) 992726080. É importante que atenda as ligações e responda as mensagens desses números. Por tanto, salve-os!
 
@@ -1608,7 +1610,7 @@ Caso falte, procurar o ambulatório para ser colocado novamente no pré-agendame
 
 Você sabia que pode verificar sua consulta no app HU Digital? https://play.google.com/store/apps/details?id=br.gov.ebserh.hudigital&pcampaignid=web_share . Após 5 horas dessa mensagem, verifique sua consulta agendada no app.
 
-Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital.{link_bloco}"""
+Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital."""
 
 
 def formatar_mensagem_perguntar_motivo():

@@ -675,17 +675,8 @@ _Hospital Universitário Walter Cantídio_"""
             base_url = request.url_root.rstrip('/')
             link_comprovante = f"{base_url}/consulta/comprovante/{consulta.id}"
 
-            # Enviar APENAS mensagem com link do comprovante
-            msg = f"""🔗 *LINK DO COMPROVANTE*
-
-Acesse aqui seu comprovante:
-
-{link_comprovante}
-
-_⏰ Este link ficará disponível por 7 dias._
-
-_Hospital Universitário Walter Cantídio_"""
-
+            # Enviar mensagem personalizada com link (SEM arquivo anexo)
+            msg = formatar_mensagem_comprovante(consulta=consulta, dados_ocr=dados_ocr, link_comprovante=link_comprovante)
             ok_msg, result_msg = ws.enviar(telefone, msg)
 
             if not ok_msg:
@@ -703,7 +694,7 @@ _Hospital Universitário Walter Cantídio_"""
                 consulta_id=consulta.id,
                 direcao='enviada',
                 telefone=telefone,
-                mensagem=f'{msg[:200]}... [LINK COMPROVANTE]',
+                mensagem=f'{msg[:200]}... [COMPROVANTE COM LINK]',
                 status='sucesso',
                 msg_id=result_msg
             )

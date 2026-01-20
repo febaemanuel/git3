@@ -13,6 +13,7 @@ from datetime import datetime, date
 import pandas as pd
 import os
 import time
+import threading
 import logging
 
 logger = logging.getLogger(__name__)
@@ -43,6 +44,156 @@ def init_consultas_routes(app, db):
         AsyncResult = None
         enviar_campanha_consultas_task = None
         logger.warning("Celery não disponível para modo consulta")
+
+
+    # =========================================================================
+    # FUNÇÃO AUXILIAR - Envio de comprovante em background
+    # =========================================================================
+    def enviar_comprovante_background(usuario_id, consulta_id, filepath, telefone, base_url):
+        """
+        Envia comprovante em background (OCR + mensagem + arquivo + pesquisa).
+        Executado em thread separada para não bloquear a interface do usuário.
+        """
+        try:
+            logger.info(f"[BG] Iniciando envio de comprovante para consulta {consulta_id}")
+
+            with app.app_context():
+                consulta = AgendamentoConsulta.query.get(consulta_id)
+                if not consulta:
+                    logger.error(f"[BG] Consulta {consulta_id} não encontrada")
+                    return
+
+                # Extrair dados do comprovante via OCR
+                dados_ocr = None
+                try:
+                    dados_ocr = extrair_dados_comprovante(filepath)
+                    if dados_ocr:
+                        logger.info(f"[BG] Dados extraídos do comprovante via OCR: {dados_ocr}")
+                except Exception as ocr_err:
+                    logger.warning(f"[BG] Erro ao extrair dados via OCR (continuando sem): {ocr_err}")
+                    dados_ocr = {}
+
+                if not dados_ocr:
+                    dados_ocr = {}
+
+                # Configurar WhatsApp
+                ws = WhatsApp(usuario_id)
+                if not ws.ok():
+                    logger.error(f"[BG] WhatsApp não configurado para usuário {usuario_id}")
+                    return
+
+                # Gerar link público do comprovante
+                link_comprovante = f"{base_url}/consulta/comprovante/{consulta_id}"
+
+                # Enviar mensagem de texto (personalizada com dados do OCR + link)
+                msg = formatar_mensagem_comprovante(consulta=consulta, dados_ocr=dados_ocr, link_comprovante=link_comprovante)
+                ok_msg, result_msg = ws.enviar(telefone, msg)
+
+                if not ok_msg:
+                    logger.error(f"[BG] Erro ao enviar mensagem: {result_msg}")
+                    return
+
+                # Log da mensagem
+                log = LogMsgConsulta(
+                    campanha_id=consulta.campanha_id,
+                    consulta_id=consulta.id,
+                    direcao='enviada',
+                    telefone=telefone,
+                    mensagem=f'{msg[:200]}... [COMPROVANTE ANEXO]',
+                    status='sucesso',
+                    msg_id=result_msg
+                )
+                db.session.add(log)
+                db.session.commit()
+
+                # Aguardar antes de enviar o arquivo
+                time.sleep(7)
+
+                # Enviar arquivo
+                ok_file, result_file = ws.enviar_arquivo(telefone, filepath)
+                if not ok_file:
+                    logger.warning(f"[BG] Erro ao enviar arquivo: {result_file}")
+
+                # =====================================================
+                # HISTÓRICO DO PACIENTE
+                # =====================================================
+                try:
+                    paciente_db = Paciente.query.filter_by(usuario_id=usuario_id, telefone=telefone).first()
+                    if not paciente_db:
+                        paciente_db = Paciente.query.filter_by(usuario_id=usuario_id, nome=dados_ocr.get('paciente', consulta.paciente)).first()
+
+                    if not paciente_db:
+                        paciente_db = Paciente(
+                            usuario_id=usuario_id,
+                            nome=dados_ocr.get('paciente', consulta.paciente),
+                            telefone=telefone,
+                            data_nascimento=dados_ocr.get('data_nascimento'),
+                            prontuario=dados_ocr.get('prontuario'),
+                            codigo=dados_ocr.get('codigo')
+                        )
+                        db.session.add(paciente_db)
+                        db.session.commit()
+                    else:
+                        if dados_ocr.get('data_nascimento'): paciente_db.data_nascimento = dados_ocr.get('data_nascimento')
+                        if dados_ocr.get('prontuario'): paciente_db.prontuario = dados_ocr.get('prontuario')
+                        if dados_ocr.get('codigo'): paciente_db.codigo = dados_ocr.get('codigo')
+                        db.session.commit()
+
+                    historico = HistoricoConsulta(
+                        paciente_id=paciente_db.id,
+                        consulta_id=consulta.id,
+                        usuario_id=usuario_id,
+                        nro_consulta=dados_ocr.get('nro_consulta'),
+                        data_consulta=dados_ocr.get('data'),
+                        hora_consulta=dados_ocr.get('hora'),
+                        dia_semana=dados_ocr.get('dia'),
+                        grade=dados_ocr.get('grade'),
+                        unidade_funcional=dados_ocr.get('unidade_funcional'),
+                        andar=dados_ocr.get('andar'),
+                        ala_bloco=dados_ocr.get('ala_bloco'),
+                        setor=dados_ocr.get('setor'),
+                        sala=dados_ocr.get('sala'),
+                        tipo_consulta=dados_ocr.get('consulta'),
+                        tipo_demanda=dados_ocr.get('tipo'),
+                        equipe=dados_ocr.get('equipe'),
+                        profissional=dados_ocr.get('profissional'),
+                        especialidade=consulta.especialidade,
+                        exames=consulta.exames,
+                        marcado_por=dados_ocr.get('marcado_por'),
+                        observacao=dados_ocr.get('observacao'),
+                        nro_autorizacao=dados_ocr.get('nro_autorizacao'),
+                        status='CONFIRMADA',
+                        comprovante_path=filepath
+                    )
+                    db.session.add(historico)
+                    db.session.commit()
+                    logger.info(f"[BG] Histórico salvo para paciente {paciente_db.nome}")
+                except Exception as e:
+                    logger.error(f"[BG] Erro ao salvar histórico: {e}")
+
+                # =====================================================
+                # PESQUISA DE SATISFAÇÃO
+                # =====================================================
+                try:
+                    time.sleep(7)
+                    msg_pesquisa = """📊 *Pesquisa de Satisfação* (opcional)
+
+De *1 a 10*, qual sua satisfação com a marcação de consulta por WhatsApp?
+
+_(Digite um número de 1 a 10, ou "pular" para não responder)_"""
+
+                    ok_pesq, _ = ws.enviar(telefone, msg_pesquisa)
+                    if ok_pesq:
+                        consulta.etapa_pesquisa = 'NOTA'
+                        db.session.commit()
+                        logger.info(f"[BG] Pesquisa iniciada para consulta {consulta.id}")
+                except Exception as e:
+                    logger.warning(f"[BG] Erro ao iniciar pesquisa: {e}")
+
+                logger.info(f"[BG] Envio de comprovante concluído para consulta {consulta_id}")
+
+        except Exception as e:
+            logger.error(f"[BG] Erro ao enviar comprovante para consulta {consulta_id}: {e}")
 
 
     # =========================================================================
@@ -530,7 +681,7 @@ def init_consultas_routes(app, db):
     @app.route('/api/consulta/<int:id>/enviar_comprovante', methods=['POST'])
     @login_required
     def consulta_enviar_comprovante(id):
-        """Envia comprovante (PDF/JPG) para o paciente (MSG 2)"""
+        """Envia comprovante (PDF/JPG) para o paciente (MSG 2) - ASSÍNCRONO"""
         consulta = AgendamentoConsulta.query.get_or_404(id)
 
         if consulta.usuario_id != current_user.id and not current_user.is_admin:
@@ -571,28 +722,16 @@ def init_consultas_routes(app, db):
             filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
             arquivo.save(filepath)
 
-            # Extrair dados do comprovante via OCR
-            dados_ocr = None
-            try:
-                dados_ocr = extrair_dados_comprovante(filepath)
-                if dados_ocr:
-                    logger.info(f"Dados extraídos do comprovante via OCR: {dados_ocr}")
-            except Exception as ocr_err:
-                logger.warning(f"Erro ao extrair dados via OCR (continuando sem): {ocr_err}")
-
-            # Enviar MSG 2 com comprovante
+            # Verificar WhatsApp antes de continuar
             ws = WhatsApp(consulta.usuario_id)
             if not ws.ok():
                 return jsonify({'erro': 'WhatsApp não configurado'}), 500
 
             # Buscar telefone - PRIORITIZAR o que confirmou (telefone_confirmacao)
             telefone = None
-            
-            # Primeiro: usar o telefone que respondeu SIM (confirmou)
             if consulta.telefone_confirmacao:
                 telefone = consulta.telefone_confirmacao
             else:
-                # Fallback: usar primeiro telefone enviado
                 for tel in consulta.telefones:
                     if tel.enviado:
                         telefone = tel.numero
@@ -601,135 +740,30 @@ def init_consultas_routes(app, db):
             if not telefone:
                 return jsonify({'erro': 'Nenhum telefone válido encontrado'}), 400
 
-            # Gerar link público do comprovante
+            # Capturar base_url antes de sair do contexto da requisição
             base_url = request.url_root.rstrip('/')
-            link_comprovante = f"{base_url}/consulta/comprovante/{consulta.id}"
 
-            # Enviar mensagem de texto (personalizada com dados do OCR + link)
-            msg = formatar_mensagem_comprovante(consulta=consulta, dados_ocr=dados_ocr, link_comprovante=link_comprovante)
-            ok_msg, result_msg = ws.enviar(telefone, msg)
-
-            if not ok_msg:
-                return jsonify({'erro': f'Erro ao enviar mensagem: {result_msg}'}), 500
-
-            # Aguardar 7 segundos antes de enviar o arquivo (evita fila na API)
-            time.sleep(7)
-
-            # Enviar arquivo
-            ok_file, result_file = ws.enviar_arquivo(telefone, filepath)
-
-            if not ok_file:
-                logger.warning(f"Erro ao enviar arquivo: {result_file}")
-                # Continua mesmo se arquivo falhar
-
-            # Atualizar consulta
+            # Atualizar consulta IMEDIATAMENTE (resposta rápida pro usuário)
             consulta.comprovante_path = filepath
             consulta.comprovante_nome = filename
             consulta.status = 'CONFIRMADO'
             consulta.data_confirmacao = datetime.utcnow()
-
-            # Log
-            log = LogMsgConsulta(
-                campanha_id=consulta.campanha_id,
-                consulta_id=consulta.id,
-                direcao='enviada',
-                telefone=telefone,
-                mensagem=f'{msg[:200]}... [COMPROVANTE ANEXO]',
-                status='sucesso',
-                msg_id=result_msg
-            )
-            db.session.add(log)
             db.session.commit()
 
             # Atualizar stats da campanha
             consulta.campanha.atualizar_stats()
             db.session.commit()
 
-            # =====================================================
-            # HISTÓRICO DO PACIENTE (Novo)
-            # =====================================================
-            try:
-                # 1. Buscar ou criar paciente
-                paciente_db = Paciente.query.filter_by(usuario_id=current_user.id, telefone=telefone).first()
-                if not paciente_db:
-                    paciente_db = Paciente.query.filter_by(usuario_id=current_user.id, nome=dados_ocr.get('paciente', consulta.paciente)).first()
-                
-                if not paciente_db:
-                    paciente_db = Paciente(
-                        usuario_id=current_user.id,
-                        nome=dados_ocr.get('paciente', consulta.paciente),
-                        telefone=telefone,
-                        data_nascimento=dados_ocr.get('data_nascimento'),
-                        prontuario=dados_ocr.get('prontuario'),
-                        codigo=dados_ocr.get('codigo')
-                    )
-                    db.session.add(paciente_db)
-                    db.session.commit()
-                else:
-                    if dados_ocr.get('data_nascimento'): paciente_db.data_nascimento = dados_ocr.get('data_nascimento')
-                    if dados_ocr.get('prontuario'): paciente_db.prontuario = dados_ocr.get('prontuario')
-                    if dados_ocr.get('codigo'): paciente_db.codigo = dados_ocr.get('codigo')
-                    db.session.commit()
+            # Iniciar envio em background (OCR + mensagens + arquivo + pesquisa)
+            t = threading.Thread(
+                target=enviar_comprovante_background,
+                args=(current_user.id, consulta.id, filepath, telefone, base_url)
+            )
+            t.daemon = True
+            t.start()
+            logger.info(f"Thread de envio de comprovante iniciada para consulta {consulta.id}")
 
-                # 2. Criar registro no histórico
-                historico = HistoricoConsulta(
-                    paciente_id=paciente_db.id,
-                    consulta_id=consulta.id,
-                    usuario_id=current_user.id,
-                    nro_consulta=dados_ocr.get('nro_consulta'),
-                    data_consulta=dados_ocr.get('data'),
-                    hora_consulta=dados_ocr.get('hora'),
-                    dia_semana=dados_ocr.get('dia'),
-                    grade=dados_ocr.get('grade'),
-                    unidade_funcional=dados_ocr.get('unidade_funcional'),
-                    andar=dados_ocr.get('andar'),
-                    ala_bloco=dados_ocr.get('ala_bloco'),
-                    setor=dados_ocr.get('setor'),
-                    sala=dados_ocr.get('sala'),
-                    tipo_consulta=dados_ocr.get('consulta'),
-                    tipo_demanda=dados_ocr.get('tipo'),
-                    equipe=dados_ocr.get('equipe'),
-                    profissional=dados_ocr.get('profissional'),
-                    especialidade=consulta.especialidade,
-                    exames=consulta.exames,
-                    marcado_por=dados_ocr.get('marcado_por'),
-                    observacao=dados_ocr.get('observacao'),
-                    nro_autorizacao=dados_ocr.get('nro_autorizacao'),
-                    status='CONFIRMADA',
-                    comprovante_path=filepath
-                )
-                db.session.add(historico)
-                db.session.commit()
-                logger.info(f"Histórico salvo para paciente {paciente_db.nome}")
-
-            except Exception as e:
-                logger.error(f"Erro ao salvar histórico: {e}")
-
-            # =====================================================
-            # INICIAR PESQUISA DE SATISFAÇÃO
-            # =====================================================
-            try:
-                # Aguardar 7 segundos antes de enviar pesquisa (evita fila na API)
-                time.sleep(7)
-
-                msg_pesquisa = """📊 *Pesquisa de Satisfação* (opcional)
-
-De *1 a 10*, qual sua satisfação com a marcação de consulta por WhatsApp?
-
-_(Digite um número de 1 a 10, ou "pular" para não responder)_"""
-
-                ok_pesq, _ = ws.enviar(telefone, msg_pesquisa)
-                if ok_pesq:
-                    consulta.etapa_pesquisa = 'NOTA'
-                    db.session.commit()
-                    logger.info(f"Pesquisa iniciada para consulta {consulta.id}")
-            except Exception as e:
-                logger.warning(f"Erro ao iniciar pesquisa: {e}")
-
-            # REENVIOS AUTOMÁTICOS REMOVIDOS
-            # O link do comprovante agora é enviado junto com a mensagem inicial
-
-            return jsonify({'sucesso': True, 'mensagem': 'Comprovante enviado com sucesso!'})
+            return jsonify({'sucesso': True, 'mensagem': 'Comprovante salvo! Enviando para o paciente em segundo plano...'})
 
         except Exception as e:
             db.session.rollback()

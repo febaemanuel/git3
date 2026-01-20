@@ -1505,7 +1505,7 @@ Posso confirmar o agendamento?
 
 
 
-def formatar_mensagem_comprovante(consulta=None, dados_ocr=None):
+def formatar_mensagem_comprovante(consulta=None, dados_ocr=None, link_comprovante=None):
     """
     MSG 2: Mensagem de comprovante (enviada manualmente com arquivo anexo)
     Enviada para: Consultas com status AGUARDANDO_COMPROVANTE
@@ -1515,6 +1515,7 @@ def formatar_mensagem_comprovante(consulta=None, dados_ocr=None):
         consulta: Objeto AgendamentoConsulta (opcional, para fallback)
         dados_ocr: Dict com dados extraídos do comprovante via OCR (opcional)
                    Keys: paciente, data, hora, medico, especialidade
+        link_comprovante: URL do link público para baixar o comprovante (opcional)
     """
     # OCR para tudo, EXCETO especialidade que vem da planilha
     paciente = None
@@ -1555,6 +1556,16 @@ def formatar_mensagem_comprovante(consulta=None, dados_ocr=None):
     if consulta and consulta.exames:
         exames = consulta.exames
 
+    # Bloco do link (só adiciona se link_comprovante foi fornecido)
+    link_bloco = ""
+    if link_comprovante:
+        link_bloco = f"""
+
+🔗 *LINK DO COMPROVANTE*
+Caso não consiga visualizar o comprovante acima, baixe pelo link:
+{link_comprovante}
+_Este link ficará disponível por 7 dias._"""
+
     if exames:
         # Mensagem para EXAME
         return f"""O Hospital Walter Cantídio agradece seu contato. *EXAME CONFIRMADO!*
@@ -1573,7 +1584,7 @@ Caso falte, procurar o ambulatório para ser colocado novamente no pré-agendame
 
 Você sabia que pode verificar sua consulta no app HU Digital? https://play.google.com/store/apps/details?id=br.gov.ebserh.hudigital&pcampaignid=web_share . Após 5 horas dessa mensagem, verifique sua consulta agendada no app.
 
-Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital."""
+Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital.{link_bloco}"""
     else:
         # Mensagem para CONSULTA
         return f"""O Hospital Walter Cantídio agradece seu contato. *CONSULTA CONFIRMADA!*
@@ -1594,7 +1605,7 @@ Caso falte, procurar o ambulatório para ser colocado novamente no pré-agendame
 
 Você sabia que pode verificar sua consulta no app HU Digital? https://play.google.com/store/apps/details?id=br.gov.ebserh.hudigital&pcampaignid=web_share . Após 5 horas dessa mensagem, verifique sua consulta agendada no app.
 
-Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital."""
+Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital.{link_bloco}"""
 
 
 def formatar_mensagem_perguntar_motivo():

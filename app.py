@@ -1411,7 +1411,10 @@ Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
 Sua solicitação de interconsulta do paciente *{consulta.paciente}* para *{consulta.especialidade}* está em análise."""
 
     # TIPOS RETORNO e INTERCONSULTA: Verifica se é EXAME ou CONSULTA
-    elif consulta.exames:
+    # Mensagem de EXAME só para OFTALMOLOGIA
+    eh_oftalmologia = consulta.especialidade and 'OFTALMOLOGIA' in consulta.especialidade.upper()
+
+    if consulta.exames and eh_oftalmologia:
         # Mensagem para EXAME
         return f"""{saudacao}
 

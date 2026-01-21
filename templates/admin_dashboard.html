@@ -43,10 +43,10 @@
         <div class="col-md-2">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body text-center">
-                    <div class="display-6 fw-bold text-success">{{ "{:,}".format(total_msgs_sistema).replace(",", ".") }}</div>
-                    <div class="text-muted small">Mensagens</div>
+                    <div class="display-6 fw-bold text-info">{{ "{:,}".format(total_disparos_msg1).replace(",", ".") }}</div>
+                    <div class="text-muted small">Disparos MSG 1</div>
                     <div class="mt-1">
-                        <span class="badge bg-light text-dark">total enviadas</span>
+                        <span class="badge bg-info text-white">agendamentos</span>
                     </div>
                 </div>
             </div>
@@ -54,10 +54,10 @@
         <div class="col-md-2">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body text-center">
-                    <div class="display-6 fw-bold text-warning">{{ "{:,}".format(total_enviados).replace(",", ".") }}</div>
-                    <div class="text-muted small">Contatos</div>
+                    <div class="display-6 fw-bold text-success">{{ "{:,}".format(total_comprovantes_enviados).replace(",", ".") }}</div>
+                    <div class="text-muted small">Comprovantes</div>
                     <div class="mt-1">
-                        <span class="badge bg-light text-dark">contactados</span>
+                        <span class="badge bg-success">enviados</span>
                     </div>
                 </div>
             </div>
@@ -65,10 +65,10 @@
         <div class="col-md-2">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body text-center">
-                    <div class="display-6 fw-bold text-success">{{ "{:,}".format(total_confirmados).replace(",", ".") }}</div>
-                    <div class="text-muted small">Confirmados</div>
+                    <div class="display-6 fw-bold text-warning">{{ "{:,}".format(total_aguardando_comprovante).replace(",", ".") }}</div>
+                    <div class="text-muted small">Aguardando</div>
                     <div class="mt-1">
-                        <span class="badge bg-success">{{ taxa_confirmacao_geral }}%</span>
+                        <span class="badge bg-warning text-dark">comprovante</span>
                     </div>
                 </div>
             </div>
@@ -227,71 +227,37 @@
         </div>
     </div>
 
-    <!-- Tabelas de Performance -->
+    <!-- Tabela de Desempenho por Usuario -->
     <div class="row g-4 mb-4">
-        <!-- Performance por Usuario - Modo Consulta -->
-        <div class="col-lg-6">
+        <div class="col-12">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="bi bi-person-badge me-2"></i>Mensagens por Usuario (Consulta)</h5>
+                    <h5 class="mb-0"><i class="bi bi-person-badge me-2"></i>Desempenho por Usuario (Agendamento de Consultas)</h5>
                 </div>
                 <div class="card-body p-0">
-                    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                    <div class="table-responsive">
                         <table class="table table-hover mb-0">
-                            <thead class="table-light sticky-top">
+                            <thead class="table-light">
                                 <tr>
                                     <th>Usuario</th>
-                                    <th class="text-center">Enviadas</th>
-                                    <th class="text-center">Recebidas</th>
-                                    <th class="text-center">Total</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for u in msgs_por_usuario_consulta %}
-                                <tr>
-                                    <td>{{ u.nome }}</td>
-                                    <td class="text-center"><span class="badge bg-info">{{ u.enviadas or 0 }}</span></td>
-                                    <td class="text-center"><span class="badge bg-secondary">{{ u.recebidas or 0 }}</span></td>
-                                    <td class="text-center"><strong>{{ u.total_msgs }}</strong></td>
-                                </tr>
-                                {% else %}
-                                <tr>
-                                    <td colspan="4" class="text-center text-muted">Nenhum dado disponivel</td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Taxa de Confirmacao por Usuario -->
-        <div class="col-lg-6">
-            <div class="card border-0 shadow-sm">
-                <div class="card-header bg-white">
-                    <h5 class="mb-0"><i class="bi bi-check2-circle me-2"></i>Taxa de Confirmacao por Usuario</h5>
-                </div>
-                <div class="card-body p-0">
-                    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
-                        <table class="table table-hover mb-0">
-                            <thead class="table-light sticky-top">
-                                <tr>
-                                    <th>Usuario</th>
-                                    <th class="text-center">Enviados</th>
-                                    <th class="text-center">Confirmados</th>
+                                    <th class="text-center">Disparos MSG 1</th>
+                                    <th class="text-center">Comprovantes Enviados</th>
+                                    <th class="text-center">Aguardando</th>
                                     <th class="text-center">Rejeitados</th>
-                                    <th class="text-center">Taxa</th>
+                                    <th class="text-center">Cancelados</th>
+                                    <th class="text-center">Taxa Sucesso</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {% for u in confirmacao_por_usuario %}
-                                {% set taxa = ((u.confirmados or 0) / u.enviados * 100)|round(1) if u.enviados > 0 else 0 %}
+                                {% for u in desempenho_usuarios %}
+                                {% set taxa = ((u.comprovantes_enviados or 0) / u.disparos_msg1 * 100)|round(1) if u.disparos_msg1 > 0 else 0 %}
                                 <tr>
-                                    <td>{{ u.nome }}</td>
-                                    <td class="text-center">{{ u.enviados or 0 }}</td>
-                                    <td class="text-center"><span class="badge bg-success">{{ u.confirmados or 0 }}</span></td>
-                                    <td class="text-center"><span class="badge bg-warning">{{ u.rejeitados or 0 }}</span></td>
+                                    <td><strong>{{ u.nome }}</strong></td>
+                                    <td class="text-center"><span class="badge bg-info">{{ u.disparos_msg1 or 0 }}</span></td>
+                                    <td class="text-center"><span class="badge bg-success">{{ u.comprovantes_enviados or 0 }}</span></td>
+                                    <td class="text-center"><span class="badge bg-warning text-dark">{{ u.aguardando_comprovante or 0 }}</span></td>
+                                    <td class="text-center"><span class="badge bg-secondary">{{ u.rejeitados or 0 }}</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">{{ u.cancelados or 0 }}</span></td>
                                     <td class="text-center">
                                         <span class="badge {% if taxa >= 70 %}bg-success{% elif taxa >= 40 %}bg-warning{% else %}bg-danger{% endif %}">
                                             {{ taxa }}%
@@ -300,7 +266,7 @@
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="5" class="text-center text-muted">Nenhum dado disponivel</td>
+                                    <td colspan="7" class="text-center text-muted">Nenhum dado disponivel</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>

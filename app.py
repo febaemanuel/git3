@@ -5274,6 +5274,46 @@ def admin_dashboard():
     consulta_taxa_confirmacao = round((consulta_confirmados / consulta_enviados * 100), 1) if consulta_enviados > 0 else 0
 
     # =====================================================================
+    # ESTATÍSTICAS DETALHADAS - AGENDAMENTO DE CONSULTAS
+    # =====================================================================
+    # Disparos de MSG 1 (agendamentos enviados)
+    total_disparos_msg1 = AgendamentoConsulta.query.filter_by(mensagem_enviada=True).count()
+
+    # Comprovantes enviados (status CONFIRMADO = comprovante foi enviado)
+    total_comprovantes_enviados = AgendamentoConsulta.query.filter_by(status='CONFIRMADO').count()
+
+    # Aguardando comprovante
+    total_aguardando_comprovante = AgendamentoConsulta.query.filter_by(status='AGUARDANDO_COMPROVANTE').count()
+
+    # Cancelados (sem resposta)
+    total_cancelados = AgendamentoConsulta.query.filter_by(status='CANCELADO').count()
+
+    # =====================================================================
+    # DESEMPENHO POR USUÁRIO (MODO CONSULTA)
+    # =====================================================================
+    desempenho_usuarios = db.session.query(
+        Usuario.id,
+        Usuario.nome,
+        # MSG 1 enviadas (disparos)
+        func.sum(case((AgendamentoConsulta.mensagem_enviada == True, 1), else_=0)).label('disparos_msg1'),
+        # Comprovantes enviados
+        func.sum(case((AgendamentoConsulta.status == 'CONFIRMADO', 1), else_=0)).label('comprovantes_enviados'),
+        # Aguardando comprovante
+        func.sum(case((AgendamentoConsulta.status == 'AGUARDANDO_COMPROVANTE', 1), else_=0)).label('aguardando_comprovante'),
+        # Rejeitados
+        func.sum(case((AgendamentoConsulta.status == 'REJEITADO', 1), else_=0)).label('rejeitados'),
+        # Cancelados
+        func.sum(case((AgendamentoConsulta.status == 'CANCELADO', 1), else_=0)).label('cancelados'),
+        # Total de agendamentos
+        func.count(AgendamentoConsulta.id).label('total_agendamentos')
+    ).join(CampanhaConsulta, CampanhaConsulta.criador_id == Usuario.id
+    ).join(AgendamentoConsulta, AgendamentoConsulta.campanha_id == CampanhaConsulta.id
+    ).group_by(Usuario.id, Usuario.nome
+    ).having(func.count(AgendamentoConsulta.id) > 0
+    ).order_by(func.sum(case((AgendamentoConsulta.mensagem_enviada == True, 1), else_=0)).desc()
+    ).all()
+
+    # =====================================================================
     # MENSAGENS POR USUÁRIO
     # =====================================================================
     # Modo Consulta - mensagens enviadas por usuário (via criador da campanha)
@@ -5504,6 +5544,13 @@ def admin_dashboard():
         consulta_confirmados=consulta_confirmados,
         consulta_rejeitados=consulta_rejeitados,
         consulta_taxa_confirmacao=consulta_taxa_confirmacao,
+
+        # Estatísticas detalhadas de agendamento
+        total_disparos_msg1=total_disparos_msg1,
+        total_comprovantes_enviados=total_comprovantes_enviados,
+        total_aguardando_comprovante=total_aguardando_comprovante,
+        total_cancelados=total_cancelados,
+        desempenho_usuarios=desempenho_usuarios,
 
         # Mensagens por usuário
         msgs_por_usuario_consulta=msgs_por_usuario_consulta,

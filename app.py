@@ -5406,23 +5406,35 @@ def admin_dashboard():
     from datetime import timedelta
     data_inicio = datetime.utcnow() - timedelta(days=30)
 
-    # Mensagens por dia (Modo Consulta)
-    msgs_por_dia_consulta = db.session.query(
-        func.date(LogMsgConsulta.data).label('dia'),
-        func.sum(case((LogMsgConsulta.direcao == 'enviada', 1), else_=0)).label('enviadas'),
-        func.sum(case((LogMsgConsulta.direcao == 'recebida', 1), else_=0)).label('recebidas')
-    ).filter(LogMsgConsulta.data >= data_inicio
-    ).group_by(func.date(LogMsgConsulta.data)
-    ).order_by(func.date(LogMsgConsulta.data)
+    # MSG 1 (Disparos de agendamento) por dia
+    msg1_por_dia = db.session.query(
+        func.date(AgendamentoConsulta.data_envio_mensagem).label('dia'),
+        func.count(AgendamentoConsulta.id).label('total')
+    ).filter(
+        AgendamentoConsulta.data_envio_mensagem >= data_inicio,
+        AgendamentoConsulta.mensagem_enviada == True
+    ).group_by(func.date(AgendamentoConsulta.data_envio_mensagem)
+    ).order_by(func.date(AgendamentoConsulta.data_envio_mensagem)
     ).all()
 
-    # Confirmações por dia (Modo Consulta)
-    confirmacoes_por_dia = db.session.query(
+    # Comprovantes enviados por dia (status CONFIRMADO)
+    comprovantes_por_dia = db.session.query(
         func.date(AgendamentoConsulta.data_confirmacao).label('dia'),
-        func.count(AgendamentoConsulta.id).label('confirmados')
+        func.count(AgendamentoConsulta.id).label('total')
     ).filter(
         AgendamentoConsulta.data_confirmacao >= data_inicio,
         AgendamentoConsulta.status == 'CONFIRMADO'
+    ).group_by(func.date(AgendamentoConsulta.data_confirmacao)
+    ).order_by(func.date(AgendamentoConsulta.data_confirmacao)
+    ).all()
+
+    # Rejeitados por dia
+    rejeitados_por_dia = db.session.query(
+        func.date(AgendamentoConsulta.data_confirmacao).label('dia'),
+        func.count(AgendamentoConsulta.id).label('total')
+    ).filter(
+        AgendamentoConsulta.data_confirmacao >= data_inicio,
+        AgendamentoConsulta.status == 'REJEITADO'
     ).group_by(func.date(AgendamentoConsulta.data_confirmacao)
     ).order_by(func.date(AgendamentoConsulta.data_confirmacao)
     ).all()
@@ -5431,19 +5443,19 @@ def admin_dashboard():
     dias_labels = [(data_inicio + timedelta(days=i)).strftime('%d/%m') for i in range(31)]
 
     # Mapear dados
-    msgs_enviadas_dict = {str(m.dia): m.enviadas for m in msgs_por_dia_consulta}
-    msgs_recebidas_dict = {str(m.dia): m.recebidas for m in msgs_por_dia_consulta}
-    confirmacoes_dict = {str(c.dia): c.confirmados for c in confirmacoes_por_dia}
+    msg1_dict = {str(m.dia): m.total for m in msg1_por_dia}
+    comprovantes_dict = {str(c.dia): c.total for c in comprovantes_por_dia}
+    rejeitados_dict = {str(r.dia): r.total for r in rejeitados_por_dia}
 
-    msgs_enviadas_data = []
-    msgs_recebidas_data = []
-    confirmacoes_data = []
+    msg1_data = []
+    comprovantes_data = []
+    rejeitados_data = []
 
     for i in range(31):
         dia = (data_inicio + timedelta(days=i)).strftime('%Y-%m-%d')
-        msgs_enviadas_data.append(msgs_enviadas_dict.get(dia, 0))
-        msgs_recebidas_data.append(msgs_recebidas_dict.get(dia, 0))
-        confirmacoes_data.append(confirmacoes_dict.get(dia, 0))
+        msg1_data.append(msg1_dict.get(dia, 0))
+        comprovantes_data.append(comprovantes_dict.get(dia, 0))
+        rejeitados_data.append(rejeitados_dict.get(dia, 0))
 
     # =====================================================================
     # ESPECIALIDADES MAIS FREQUENTES
@@ -5571,9 +5583,9 @@ def admin_dashboard():
 
         # Dados para gráficos
         dias_labels=dias_labels,
-        msgs_enviadas_data=msgs_enviadas_data,
-        msgs_recebidas_data=msgs_recebidas_data,
-        confirmacoes_data=confirmacoes_data,
+        msg1_data=msg1_data,
+        comprovantes_data=comprovantes_data,
+        rejeitados_data=rejeitados_data,
 
         # Especialidades
         especialidades_top=especialidades_top,

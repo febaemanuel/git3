@@ -5877,6 +5877,62 @@ def admin_usuario_detalhes(usuario_id):
     )
 
 
+@app.route('/admin/usuario/<int:usuario_id>/deletar', methods=['POST'])
+@login_required
+@admin_required
+def admin_deletar_usuario(usuario_id):
+    """Deletar um usuário do sistema"""
+    usuario = Usuario.query.get_or_404(usuario_id)
+
+    # Não permitir deletar o próprio usuário logado
+    if usuario.id == current_user.id:
+        flash('Voce nao pode deletar sua propria conta!', 'danger')
+        return redirect(url_for('admin_usuario_detalhes', usuario_id=usuario_id))
+
+    # Não permitir deletar outros admins (segurança)
+    if usuario.is_admin and not current_user.is_admin:
+        flash('Apenas administradores podem deletar outros administradores!', 'danger')
+        return redirect(url_for('admin_usuario_detalhes', usuario_id=usuario_id))
+
+    nome_usuario = usuario.nome
+
+    try:
+        # Deletar campanhas de consulta do usuário e seus agendamentos
+        campanhas_consulta = CampanhaConsulta.query.filter_by(criador_id=usuario_id).all()
+        for campanha in campanhas_consulta:
+            # Deletar pesquisas de satisfação dos agendamentos
+            for agendamento in campanha.agendamentos:
+                PesquisaSatisfacao.query.filter_by(consulta_id=agendamento.id).delete()
+            # Deletar agendamentos
+            AgendamentoConsulta.query.filter_by(campanha_id=campanha.id).delete()
+            # Deletar logs de mensagens
+            LogMsgConsulta.query.filter_by(campanha_id=campanha.id).delete()
+        # Deletar campanhas de consulta
+        CampanhaConsulta.query.filter_by(criador_id=usuario_id).delete()
+
+        # Deletar campanhas de fila do usuário
+        campanhas_fila = Campanha.query.filter_by(criador_id=usuario_id).all()
+        for campanha in campanhas_fila:
+            # Deletar contatos
+            Contato.query.filter_by(campanha_id=campanha.id).delete()
+            # Deletar logs de mensagens
+            LogMsg.query.filter_by(campanha_id=campanha.id).delete()
+        # Deletar campanhas de fila
+        Campanha.query.filter_by(criador_id=usuario_id).delete()
+
+        # Deletar o usuário
+        db.session.delete(usuario)
+        db.session.commit()
+
+        flash(f'Usuario "{nome_usuario}" deletado com sucesso!', 'success')
+        return redirect(url_for('admin_dashboard'))
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao deletar usuario: {str(e)}', 'danger')
+        return redirect(url_for('admin_usuario_detalhes', usuario_id=usuario_id))
+
+
 @app.route('/admin/comentarios')
 @login_required
 @admin_required

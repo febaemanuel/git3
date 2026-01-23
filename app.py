@@ -5956,6 +5956,9 @@ def admin_deletar_usuario(usuario_id):
         # Deletar campanhas de fila
         Campanha.query.filter_by(criador_id=usuario_id).delete()
 
+        # Deletar configurações do WhatsApp do usuário
+        ConfigWhatsApp.query.filter_by(usuario_id=usuario_id).delete()
+
         # Deletar o usuário
         db.session.delete(usuario)
         db.session.commit()

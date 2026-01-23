@@ -1,0 +1,537 @@
+{% extends "base.html" %}
+{% block title %}Detalhes - {{ usuario.nome }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb mb-1">
+                    <li class="breadcrumb-item"><a href="{{ url_for('admin_dashboard') }}">Admin Dashboard</a></li>
+                    <li class="breadcrumb-item active">{{ usuario.nome }}</li>
+                </ol>
+            </nav>
+            <h2 class="mb-1">
+                <i class="bi bi-person-circle me-2"></i>{{ usuario.nome }}
+                {% if usuario.is_admin %}
+                <span class="badge bg-danger ms-2">Admin</span>
+                {% endif %}
+            </h2>
+            <p class="text-muted mb-0">
+                <i class="bi bi-envelope me-1"></i>{{ usuario.email }}
+                <span class="mx-2">|</span>
+                <i class="bi bi-calendar me-1"></i>Desde {{ usuario.data_criacao.strftime('%d/%m/%Y') if usuario.data_criacao else 'N/A' }}
+                <span class="mx-2">|</span>
+                <span class="badge {% if usuario.tipo_sistema == 'AGENDAMENTO_CONSULTA' %}bg-success{% else %}bg-dark{% endif %}">
+                    {{ 'Modo Consulta' if usuario.tipo_sistema == 'AGENDAMENTO_CONSULTA' else 'Modo Fila' }}
+                </span>
+            </p>
+        </div>
+        <div>
+            <a href="{{ url_for('admin_dashboard') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <!-- Cards de Resumo -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100 bg-primary text-white">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold">{{ total_campanhas }}</div>
+                    <div class="small">Campanhas</div>
+                    <div class="mt-1">
+                        <span class="badge bg-light text-primary">{{ campanhas_ativas }} ativas</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100 bg-info text-white">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold">{{ "{:,}".format(msg1_enviadas).replace(",", ".") }}</div>
+                    <div class="small">MSG 1 Enviadas</div>
+                    <div class="mt-1">
+                        <span class="badge bg-light text-info">disparos</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100 bg-success text-white">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold">{{ "{:,}".format(confirmados).replace(",", ".") }}</div>
+                    <div class="small">Comprovantes</div>
+                    <div class="mt-1">
+                        <span class="badge bg-light text-success">enviados</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100 bg-warning text-dark">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold">{{ "{:,}".format(aguardando).replace(",", ".") }}</div>
+                    <div class="small">Aguardando</div>
+                    <div class="mt-1">
+                        <span class="badge bg-dark">comprovante</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100 bg-danger text-white">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold">{{ "{:,}".format(rejeitados).replace(",", ".") }}</div>
+                    <div class="small">Rejeitados</div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold {% if taxa_sucesso >= 70 %}text-success{% elif taxa_sucesso >= 40 %}text-warning{% else %}text-danger{% endif %}">
+                        {{ taxa_sucesso }}%
+                    </div>
+                    <div class="text-muted small">Taxa de Sucesso</div>
+                    <div class="progress mt-2" style="height: 8px;">
+                        <div class="progress-bar {% if taxa_sucesso >= 70 %}bg-success{% elif taxa_sucesso >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                             style="width: {{ taxa_sucesso if taxa_sucesso <= 100 else 100 }}%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Metricas Adicionais -->
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small">Total Agendamentos</div>
+                            <div class="h4 mb-0">{{ "{:,}".format(total_agendamentos).replace(",", ".") }}</div>
+                        </div>
+                        <div class="bg-light rounded-circle p-3">
+                            <i class="bi bi-calendar-check text-primary fs-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small">Cancelados (Sem Resposta)</div>
+                            <div class="h4 mb-0 text-secondary">{{ "{:,}".format(cancelados).replace(",", ".") }}</div>
+                        </div>
+                        <div class="bg-light rounded-circle p-3">
+                            <i class="bi bi-x-circle text-secondary fs-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small">Tempo Medio Confirmacao</div>
+                            <div class="h4 mb-0 text-info">{{ tempo_medio_str }}</div>
+                        </div>
+                        <div class="bg-light rounded-circle p-3">
+                            <i class="bi bi-clock text-info fs-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="text-muted small">Nota Media</div>
+                            <div class="h4 mb-0 text-warning">
+                                {{ media_nota }}
+                                <small class="text-muted">/10</small>
+                            </div>
+                        </div>
+                        <div class="bg-light rounded-circle p-3">
+                            <i class="bi bi-star-fill text-warning fs-4"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Graficos Principais -->
+    <div class="row g-4 mb-4">
+        <!-- Atividade dos Ultimos 30 Dias -->
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Atividade dos Ultimos 30 Dias</h5>
+                </div>
+                <div class="card-body">
+                    {% if dias_labels %}
+                    <canvas id="chartAtividade" height="120"></canvas>
+                    {% else %}
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-bar-chart" style="font-size: 48px;"></i>
+                        <p class="mt-2">Nenhuma atividade registrada</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Atividade por Hora -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-clock me-2"></i>Padrao de Trabalho (por Hora)</h5>
+                </div>
+                <div class="card-body">
+                    {% if horas_data and sum(horas_data) > 0 %}
+                    <canvas id="chartHoras" height="200"></canvas>
+                    {% else %}
+                    <div class="text-center text-muted py-5">
+                        <i class="bi bi-clock-history" style="font-size: 48px;"></i>
+                        <p class="mt-2">Sem dados de horario</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Especialidades e Pesquisa de Satisfacao -->
+    <div class="row g-4 mb-4">
+        <!-- Especialidades -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-hospital me-2"></i>Especialidades Atendidas</h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if especialidades_usuario %}
+                    <div class="table-responsive" style="max-height: 350px; overflow-y: auto;">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Especialidade</th>
+                                    <th class="text-center">Total</th>
+                                    <th class="text-center">Confirmados</th>
+                                    <th class="text-center">Rejeitados</th>
+                                    <th class="text-center">Taxa</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for e in especialidades_usuario %}
+                                {% set taxa = ((e.confirmados or 0) / e.total * 100)|round(1) if e.total > 0 else 0 %}
+                                <tr>
+                                    <td>{{ e.especialidade }}</td>
+                                    <td class="text-center">{{ e.total }}</td>
+                                    <td class="text-center"><span class="badge bg-success">{{ e.confirmados or 0 }}</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">{{ e.rejeitados or 0 }}</span></td>
+                                    <td class="text-center">
+                                        <div class="progress" style="height: 20px; min-width: 60px;">
+                                            <div class="progress-bar {% if taxa >= 70 %}bg-success{% elif taxa >= 40 %}bg-warning{% else %}bg-danger{% endif %}"
+                                                 style="width: {{ taxa }}%">{{ taxa }}%</div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-hospital" style="font-size: 48px;"></i>
+                        <p class="mt-2">Nenhuma especialidade registrada</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Pesquisa de Satisfacao -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-star me-2"></i>Pesquisa de Satisfacao</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-4">
+                            <div class="text-center p-3 bg-primary bg-opacity-10 rounded">
+                                <div class="h3 mb-0 text-primary">{{ total_pesquisas }}</div>
+                                <small class="text-muted">Total</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-center p-3 bg-success bg-opacity-10 rounded">
+                                <div class="h3 mb-0 text-success">{{ pesquisas_respondidas }}</div>
+                                <small class="text-muted">Respondidas</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-center p-3 bg-warning bg-opacity-10 rounded">
+                                <div class="h3 mb-0 text-warning">{{ pct_atenciosa }}%</div>
+                                <small class="text-muted">Atenciosa</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    {% if notas_data %}
+                    <canvas id="chartNotas" height="150"></canvas>
+                    {% else %}
+                    <div class="text-center text-muted py-3">
+                        <p class="mb-0">Sem dados de pesquisa</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Campanhas Recentes -->
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-collection me-2"></i>Campanhas Recentes</h5>
+                </div>
+                <div class="card-body p-0">
+                    {% if campanhas_recentes %}
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Campanha</th>
+                                    <th class="text-center">Status</th>
+                                    <th class="text-center">Data Criacao</th>
+                                    <th class="text-center">Agendamentos</th>
+                                    <th class="text-center">MSG 1</th>
+                                    <th class="text-center">Confirmados</th>
+                                    <th class="text-center">Taxa</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for c, total, msg1, conf in campanhas_recentes %}
+                                {% set taxa = ((conf or 0) / msg1 * 100)|round(1) if msg1 > 0 else 0 %}
+                                <tr>
+                                    <td>
+                                        <strong>{{ c.nome }}</strong>
+                                        {% if c.especialidade %}
+                                        <br><small class="text-muted">{{ c.especialidade }}</small>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge
+                                            {% if c.status == 'concluida' %}bg-success
+                                            {% elif c.status == 'enviando' %}bg-info
+                                            {% elif c.status == 'pronta' %}bg-warning
+                                            {% else %}bg-secondary{% endif %}">
+                                            {{ c.status }}
+                                        </span>
+                                    </td>
+                                    <td class="text-center">{{ c.data_criacao.strftime('%d/%m/%Y') if c.data_criacao else '-' }}</td>
+                                    <td class="text-center">{{ total or 0 }}</td>
+                                    <td class="text-center"><span class="badge bg-info">{{ msg1 or 0 }}</span></td>
+                                    <td class="text-center"><span class="badge bg-success">{{ conf or 0 }}</span></td>
+                                    <td class="text-center">
+                                        <span class="badge {% if taxa >= 70 %}bg-success{% elif taxa >= 40 %}bg-warning{% else %}bg-danger{% endif %}">
+                                            {{ taxa }}%
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-collection" style="font-size: 48px;"></i>
+                        <p class="mt-2">Nenhuma campanha criada</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Comentarios Recentes -->
+    {% if comentarios_usuario %}
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-chat-quote me-2"></i>Comentarios Recentes dos Pacientes</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        {% for pesquisa, paciente in comentarios_usuario %}
+                        <div class="col-md-6">
+                            <div class="p-3 border rounded h-100">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div>
+                                        {% for i in range(pesquisa.nota_satisfacao or 0) %}
+                                        <i class="bi bi-star-fill text-warning"></i>
+                                        {% endfor %}
+                                        {% for i in range(10 - (pesquisa.nota_satisfacao or 0)) %}
+                                        <i class="bi bi-star text-muted"></i>
+                                        {% endfor %}
+                                    </div>
+                                    <span class="badge bg-light text-dark">{{ pesquisa.especialidade or '-' }}</span>
+                                </div>
+                                <p class="mb-2 fst-italic">"{{ pesquisa.comentario }}"</p>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small class="text-muted">{{ paciente }}</small>
+                                    <small class="text-muted">{{ pesquisa.data_resposta.strftime('%d/%m/%Y %H:%M') if pesquisa.data_resposta else '-' }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+{% if dias_labels %}
+// Grafico de Atividade dos Ultimos 30 Dias
+const ctxAtividade = document.getElementById('chartAtividade').getContext('2d');
+new Chart(ctxAtividade, {
+    type: 'line',
+    data: {
+        labels: {{ dias_labels | tojson }},
+        datasets: [
+            {
+                label: 'MSG 1 (Disparos)',
+                data: {{ msg1_data | tojson }},
+                borderColor: '#0dcaf0',
+                backgroundColor: 'rgba(13, 202, 240, 0.1)',
+                fill: true,
+                tension: 0.3
+            },
+            {
+                label: 'Comprovantes Enviados',
+                data: {{ comprovantes_data | tojson }},
+                borderColor: '#198754',
+                backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                fill: true,
+                tension: 0.3
+            },
+            {
+                label: 'Rejeitados',
+                data: {{ rejeitados_data | tojson }},
+                borderColor: '#dc3545',
+                backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                fill: true,
+                tension: 0.3
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'top'
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+{% endif %}
+
+{% if horas_data and sum(horas_data) > 0 %}
+// Grafico de Atividade por Hora
+const ctxHoras = document.getElementById('chartHoras').getContext('2d');
+new Chart(ctxHoras, {
+    type: 'bar',
+    data: {
+        labels: {{ horas_labels | tojson }},
+        datasets: [{
+            label: 'Envios',
+            data: {{ horas_data | tojson }},
+            backgroundColor: 'rgba(13, 202, 240, 0.7)',
+            borderRadius: 3
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                display: false
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true
+            },
+            x: {
+                ticks: {
+                    maxRotation: 90,
+                    minRotation: 45
+                }
+            }
+        }
+    }
+});
+{% endif %}
+
+{% if notas_data %}
+// Grafico de Distribuicao de Notas
+const ctxNotas = document.getElementById('chartNotas').getContext('2d');
+new Chart(ctxNotas, {
+    type: 'bar',
+    data: {
+        labels: {{ notas_labels | tojson }},
+        datasets: [{
+            label: 'Quantidade',
+            data: {{ notas_data | tojson }},
+            backgroundColor: [
+                '#dc3545', '#dc3545', '#dc3545', '#dc3545',
+                '#ffc107', '#ffc107', '#ffc107',
+                '#198754', '#198754', '#198754'
+            ],
+            borderRadius: 5
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                display: false
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+{% endif %}
+</script>
+{% endblock %}

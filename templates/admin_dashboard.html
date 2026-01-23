@@ -252,7 +252,12 @@
                                 {% for u in desempenho_usuarios %}
                                 {% set taxa = ((u.comprovantes_enviados or 0) / u.disparos_msg1 * 100)|round(1) if u.disparos_msg1 > 0 else 0 %}
                                 <tr>
-                                    <td><strong>{{ u.nome }}</strong></td>
+                                    <td>
+                                        <a href="{{ url_for('admin_usuario_detalhes', usuario_id=u.id) }}" class="text-decoration-none">
+                                            <strong>{{ u.nome }}</strong>
+                                            <i class="bi bi-box-arrow-up-right ms-1 small"></i>
+                                        </a>
+                                    </td>
                                     <td class="text-center"><span class="badge bg-info">{{ u.disparos_msg1 or 0 }}</span></td>
                                     <td class="text-center"><span class="badge bg-success">{{ u.comprovantes_enviados or 0 }}</span></td>
                                     <td class="text-center"><span class="badge bg-warning text-dark">{{ u.aguardando_comprovante or 0 }}</span></td>
@@ -571,7 +576,12 @@
                                 {% for u in stats_detalhadas_usuario %}
                                 {% set taxa = ((u.confirmados or 0) / u.enviados * 100)|round(1) if u.enviados > 0 else 0 %}
                                 <tr>
-                                    <td><strong>{{ u.nome }}</strong></td>
+                                    <td>
+                                        <a href="{{ url_for('admin_usuario_detalhes', usuario_id=u.id) }}" class="text-decoration-none">
+                                            <strong>{{ u.nome }}</strong>
+                                            <i class="bi bi-box-arrow-up-right ms-1 small"></i>
+                                        </a>
+                                    </td>
                                     <td class="text-center">
                                         <span class="badge bg-primary">{{ u.campanhas_criadas or 0 }}</span>
                                     </td>

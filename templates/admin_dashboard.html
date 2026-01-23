@@ -46,6 +46,7 @@
 
     <!-- Cards de Resumo Geral -->
     <div class="row g-3 mb-4">
+        <!-- Card Usuários - Sempre visível -->
         <div class="col-md-2">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body text-center">
@@ -57,13 +58,74 @@
                 </div>
             </div>
         </div>
+
+        {% if modo_selecionado == 'fila' %}
+        <!-- ========== CARDS MODO FILA ========== -->
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100 border-dark">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-dark">{{ total_campanhas_fila }}</div>
+                    <div class="text-muted small">Campanhas Fila</div>
+                    <div class="mt-1">
+                        <span class="badge bg-dark">{{ campanhas_fila_ativas }} ativas</span>
+                    </div>
+                </div>
+            </div>
+        </div>
         <div class="col-md-2">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body text-center">
-                    <div class="display-6 fw-bold text-info">{{ total_campanhas }}</div>
-                    <div class="text-muted small">Campanhas</div>
+                    <div class="display-6 fw-bold text-info">{{ "{:,}".format(fila_total_contatos).replace(",", ".") }}</div>
+                    <div class="text-muted small">Contatos</div>
                     <div class="mt-1">
-                        <span class="badge bg-secondary">{{ campanhas_fila_ativas + campanhas_consulta_ativas }} ativas</span>
+                        <span class="badge bg-dark">fila</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-info">{{ "{:,}".format(fila_total_enviados).replace(",", ".") }}</div>
+                    <div class="text-muted small">Enviados</div>
+                    <div class="mt-1">
+                        <span class="badge bg-dark">fila</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-success">{{ "{:,}".format(fila_total_confirmados).replace(",", ".") }}</div>
+                    <div class="text-muted small">Confirmados</div>
+                    <div class="mt-1">
+                        <span class="badge bg-success">{{ fila_taxa_confirmacao }}%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-warning">{{ "{:,}".format(fila_total_rejeitados).replace(",", ".") }}</div>
+                    <div class="text-muted small">Rejeitados</div>
+                    <div class="mt-1">
+                        <span class="badge bg-dark">fila</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% elif modo_selecionado == 'consulta' %}
+        <!-- ========== CARDS MODO CONSULTA ========== -->
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100 border-success">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-success">{{ total_campanhas_consulta }}</div>
+                    <div class="text-muted small">Campanhas Consulta</div>
+                    <div class="mt-1">
+                        <span class="badge bg-success">{{ campanhas_consulta_ativas }} ativas</span>
                     </div>
                 </div>
             </div>
@@ -74,7 +136,7 @@
                     <div class="display-6 fw-bold text-info">{{ "{:,}".format(total_disparos_msg1).replace(",", ".") }}</div>
                     <div class="text-muted small">Disparos MSG 1</div>
                     <div class="mt-1">
-                        <span class="badge bg-info text-white">agendamentos</span>
+                        <span class="badge bg-success">consulta</span>
                     </div>
                 </div>
             </div>
@@ -114,6 +176,67 @@
                 </div>
             </div>
         </div>
+
+        {% else %}
+        <!-- ========== CARDS MODO TODOS ========== -->
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-info">{{ total_campanhas }}</div>
+                    <div class="text-muted small">Campanhas</div>
+                    <div class="mt-1">
+                        <span class="badge bg-secondary">{{ campanhas_fila_ativas + campanhas_consulta_ativas }} ativas</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-info">{{ "{:,}".format(total_disparos_msg1).replace(",", ".") }}</div>
+                    <div class="text-muted small">Disparos MSG 1</div>
+                    <div class="mt-1">
+                        <span class="badge bg-success">consulta</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-success">{{ "{:,}".format(total_comprovantes_enviados).replace(",", ".") }}</div>
+                    <div class="text-muted small">Comprovantes</div>
+                    <div class="mt-1">
+                        <span class="badge bg-success">enviados</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-warning">{{ "{:,}".format(total_aguardando_comprovante).replace(",", ".") }}</div>
+                    <div class="text-muted small">Aguardando</div>
+                    <div class="mt-1">
+                        <span class="badge bg-warning text-dark">comprovante</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-warning">{{ media_nota }}</div>
+                    <div class="text-muted small">Nota Média</div>
+                    <div class="mt-1">
+                        {% for i in range(media_nota|int) %}
+                        <i class="bi bi-star-fill text-warning small"></i>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     <!-- Comparativo Fila vs Consulta -->
@@ -232,13 +355,19 @@
         {% endif %}
     </div>
 
-    <!-- Gráficos -->
+    <!-- ==================== SEÇÕES EXCLUSIVAS DO MODO CONSULTA ==================== -->
+    {% if modo_selecionado != 'fila' %}
+
+    <!-- Gráficos - MODO CONSULTA -->
     <div class="row g-4 mb-4">
         <!-- Gráfico de MSG 1 por Dia -->
         <div class="col-lg-8">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white">
-                    <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Atividade dos Últimos 30 Dias (Baseado em MSG 1)</h5>
+                    <h5 class="mb-0">
+                        <i class="bi bi-graph-up me-2"></i>Atividade dos Últimos 30 Dias
+                        <span class="badge bg-success ms-2">Modo Consulta</span>
+                    </h5>
                 </div>
                 <div class="card-body">
                     <canvas id="chartAtividade" height="100"></canvas>
@@ -259,12 +388,15 @@
         </div>
     </div>
 
-    <!-- Tabela de Desempenho por Usuário -->
+    <!-- Tabela de Desempenho por Usuário - MODO CONSULTA -->
     <div class="row g-4 mb-4">
         <div class="col-12">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="bi bi-person-badge me-2"></i>Desempenho por Usuário (Agendamento de Consultas)</h5>
+                    <h5 class="mb-0">
+                        <i class="bi bi-person-badge me-2"></i>Desempenho por Usuário
+                        <span class="badge bg-success ms-2">Modo Consulta</span>
+                    </h5>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
@@ -314,13 +446,16 @@
         </div>
     </div>
 
-    <!-- Especialidades e Pesquisa de Satisfação -->
+    <!-- Especialidades e Pesquisa de Satisfação - MODO CONSULTA -->
     <div class="row g-4 mb-4">
         <!-- Top Especialidades -->
         <div class="col-lg-6">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white">
-                    <h5 class="mb-0"><i class="bi bi-hospital me-2"></i>Top Especialidades</h5>
+                    <h5 class="mb-0">
+                        <i class="bi bi-hospital me-2"></i>Top Especialidades
+                        <span class="badge bg-success ms-2">Modo Consulta</span>
+                    </h5>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
@@ -364,7 +499,10 @@
         <div class="col-lg-6">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white">
-                    <h5 class="mb-0"><i class="bi bi-star me-2"></i>Pesquisa de Satisfação</h5>
+                    <h5 class="mb-0">
+                        <i class="bi bi-star me-2"></i>Pesquisa de Satisfação
+                        <span class="badge bg-success ms-2">Modo Consulta</span>
+                    </h5>
                 </div>
                 <div class="card-body">
                     <div class="row g-3 mb-3">
@@ -419,12 +557,15 @@
         </div>
     </div>
 
-    <!-- Comentários Recentes -->
+    <!-- Comentários Recentes - MODO CONSULTA -->
     <div class="row g-4 mb-4">
         <div class="col-12">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="bi bi-chat-quote me-2"></i>Comentários Recentes</h5>
+                    <h5 class="mb-0">
+                        <i class="bi bi-chat-quote me-2"></i>Comentários Recentes
+                        <span class="badge bg-success ms-2">Modo Consulta</span>
+                    </h5>
                     <div>
                         <span class="badge bg-secondary me-2">{{ total_comentarios }} no total</span>
                         <a href="{{ url_for('admin_comentarios') }}" class="btn btn-sm btn-primary">
@@ -469,8 +610,11 @@
         </div>
     </div>
 
+    {% endif %}
+    <!-- ==================== FIM SEÇÕES EXCLUSIVAS DO MODO CONSULTA ==================== -->
+
     <!-- Mensagens por Usuário - Modo Fila -->
-    {% if msgs_por_usuario_fila %}
+    {% if msgs_por_usuario_fila and modo_selecionado != 'consulta' %}
     <div class="row g-4 mb-4">
         <div class="col-lg-6">
             <div class="card border-0 shadow-sm">
@@ -506,8 +650,8 @@
     </div>
     {% endif %}
 
-    <!-- Notas Médias por Especialidade -->
-    {% if notas_por_especialidade %}
+    <!-- Notas Médias por Especialidade - MODO CONSULTA -->
+    {% if notas_por_especialidade and modo_selecionado != 'fila' %}
     <div class="row g-4 mb-4">
         <div class="col-12">
             <div class="card border-0 shadow-sm">
@@ -577,8 +721,8 @@
     </div>
     {% endif %}
 
-    <!-- Estatísticas Detalhadas por Usuário -->
-    {% if stats_detalhadas_usuario %}
+    <!-- Estatísticas Detalhadas por Usuário - MODO CONSULTA -->
+    {% if stats_detalhadas_usuario and modo_selecionado != 'fila' %}
     <div class="row g-4 mb-4">
         <div class="col-12">
             <div class="card border-0 shadow-sm">
@@ -662,12 +806,14 @@
     </div>
     {% endif %}
 
-    <!-- Explicacao sobre Taxa de Confirmação -->
+    <!-- Explicação sobre Taxa de Confirmação - MODO CONSULTA -->
+    {% if modo_selecionado != 'fila' %}
     <div class="row g-4 mb-4">
         <div class="col-12">
             <div class="alert alert-info border-0 shadow-sm">
                 <h5 class="alert-heading">
                     <i class="bi bi-info-circle me-2"></i>Entendendo a Taxa de Confirmação
+                    <span class="badge bg-success ms-2">Modo Consulta</span>
                 </h5>
                 <hr>
                 <p class="mb-2"><strong>Por que a taxa pode ser maior que 100%?</strong></p>
@@ -682,6 +828,7 @@
             </div>
         </div>
     </div>
+    {% endif %}
 
 </div>
 {% endblock %}
@@ -689,7 +836,8 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// Gráfico de Atividade (Baseado em MSG 1)
+{% if modo_selecionado != 'fila' %}
+// Gráfico de Atividade (Baseado em MSG 1) - MODO CONSULTA
 const ctxAtividade = document.getElementById('chartAtividade').getContext('2d');
 new Chart(ctxAtividade, {
     type: 'line',
@@ -737,7 +885,7 @@ new Chart(ctxAtividade, {
     }
 });
 
-// Gráfico de Distribuição de Notas
+// Gráfico de Distribuição de Notas - MODO CONSULTA
 const ctxNotas = document.getElementById('chartNotas').getContext('2d');
 new Chart(ctxNotas, {
     type: 'bar',
@@ -772,6 +920,7 @@ new Chart(ctxNotas, {
         }
     }
 });
+{% endif %}
 
 // Inicializar tooltips do Bootstrap
 var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));

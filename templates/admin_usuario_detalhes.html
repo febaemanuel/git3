@@ -34,7 +34,7 @@
             </a>
             {% if usuario.id != current_user.id %}
             <button type="button" class="btn btn-danger" data-bs-toggle="modal" data-bs-target="#modalDeletarUsuario">
-                <i class="bi bi-trash me-1"></i> Deletar Usuario
+                <i class="bi bi-trash me-1"></i> Deletar Usuário
             </button>
             {% endif %}
         </div>
@@ -47,21 +47,21 @@
             <div class="modal-content">
                 <div class="modal-header bg-danger text-white">
                     <h5 class="modal-title" id="modalDeletarUsuarioLabel">
-                        <i class="bi bi-exclamation-triangle me-2"></i>Confirmar Exclusao
+                        <i class="bi bi-exclamation-triangle me-2"></i>Confirmar Exclusão
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="alert alert-warning mb-3">
                         <i class="bi bi-exclamation-circle me-2"></i>
-                        <strong>Atencao!</strong> Esta acao nao pode ser desfeita.
+                        <strong>Atenção!</strong> Esta ação não pode ser desfeita.
                     </div>
-                    <p>Voce tem certeza que deseja deletar o usuario <strong>{{ usuario.nome }}</strong>?</p>
-                    <p class="text-muted small mb-0">Isso ira remover permanentemente:</p>
+                    <p>Você tem certeza que deseja deletar o usuário <strong>{{ usuario.nome }}</strong>?</p>
+                    <p class="text-muted small mb-0">Isso irá remover permanentemente:</p>
                     <ul class="text-muted small">
                         <li>Todas as {{ total_campanhas }} campanhas criadas</li>
                         <li>Todos os {{ total_agendamentos }} agendamentos</li>
-                        <li>Todas as pesquisas de satisfacao relacionadas</li>
+                        <li>Todas as pesquisas de satisfação relacionadas</li>
                         <li>Todos os logs de mensagens</li>
                     </ul>
                 </div>
@@ -71,7 +71,7 @@
                     </button>
                     <form action="{{ url_for('admin_deletar_usuario', usuario_id=usuario.id) }}" method="POST" class="d-inline">
                         <button type="submit" class="btn btn-danger">
-                            <i class="bi bi-trash me-1"></i> Sim, Deletar Usuario
+                            <i class="bi bi-trash me-1"></i> Sim, Deletar Usuário
                         </button>
                     </form>
                 </div>
@@ -187,7 +187,7 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <div class="text-muted small">Tempo Medio Confirmacao</div>
+                            <div class="text-muted small">Tempo Médio Confirmação</div>
                             <div class="h4 mb-0 text-info">{{ tempo_medio_str }}</div>
                         </div>
                         <div class="bg-light rounded-circle p-3">
@@ -202,7 +202,7 @@
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-center">
                         <div>
-                            <div class="text-muted small">Nota Media</div>
+                            <div class="text-muted small">Nota Média</div>
                             <div class="h4 mb-0 text-warning">
                                 {{ media_nota }}
                                 <small class="text-muted">/10</small>
@@ -217,13 +217,13 @@
         </div>
     </div>
 
-    <!-- Graficos Principais -->
+    <!-- Gráficos Principais -->
     <div class="row g-4 mb-4">
-        <!-- Atividade dos Ultimos 30 Dias -->
+        <!-- Atividade dos Últimos 30 Dias -->
         <div class="col-lg-8">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-header bg-white">
-                    <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Atividade dos Ultimos 30 Dias</h5>
+                    <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Atividade dos Últimos 30 Dias</h5>
                 </div>
                 <div class="card-body">
                     {% if dias_labels %}
@@ -242,7 +242,7 @@
         <div class="col-lg-4">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-header bg-white">
-                    <h5 class="mb-0"><i class="bi bi-clock me-2"></i>Padrao de Trabalho (por Hora)</h5>
+                    <h5 class="mb-0"><i class="bi bi-clock me-2"></i>Padrão de Trabalho (por Hora)</h5>
                 </div>
                 <div class="card-body">
                     {% if horas_data and sum(horas_data) > 0 %}
@@ -250,7 +250,7 @@
                     {% else %}
                     <div class="text-center text-muted py-5">
                         <i class="bi bi-clock-history" style="font-size: 48px;"></i>
-                        <p class="mt-2">Sem dados de horario</p>
+                        <p class="mt-2">Sem dados de horário</p>
                     </div>
                     {% endif %}
                 </div>
@@ -258,7 +258,7 @@
         </div>
     </div>
 
-    <!-- Especialidades e Pesquisa de Satisfacao -->
+    <!-- Especialidades e Pesquisa de Satisfação -->
     <div class="row g-4 mb-4">
         <!-- Especialidades -->
         <div class="col-lg-6">
@@ -308,11 +308,11 @@
             </div>
         </div>
 
-        <!-- Pesquisa de Satisfacao -->
+        <!-- Pesquisa de Satisfação -->
         <div class="col-lg-6">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white">
-                    <h5 class="mb-0"><i class="bi bi-star me-2"></i>Pesquisa de Satisfacao</h5>
+                    <h5 class="mb-0"><i class="bi bi-star me-2"></i>Pesquisa de Satisfação</h5>
                 </div>
                 <div class="card-body">
                     <div class="row g-3 mb-3">
@@ -363,7 +363,7 @@
                                 <tr>
                                     <th>Campanha</th>
                                     <th class="text-center">Status</th>
-                                    <th class="text-center">Data Criacao</th>
+                                    <th class="text-center">Data Criação</th>
                                     <th class="text-center">Agendamentos</th>
                                     <th class="text-center">MSG 1</th>
                                     <th class="text-center">Confirmados</th>
@@ -414,13 +414,13 @@
         </div>
     </div>
 
-    <!-- Comentarios Recentes -->
+    <!-- Comentários Recentes -->
     {% if comentarios_usuario %}
     <div class="row g-4 mb-4">
         <div class="col-12">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white">
-                    <h5 class="mb-0"><i class="bi bi-chat-quote me-2"></i>Comentarios Recentes dos Pacientes</h5>
+                    <h5 class="mb-0"><i class="bi bi-chat-quote me-2"></i>Comentários Recentes dos Pacientes</h5>
                 </div>
                 <div class="card-body">
                     <div class="row g-3">
@@ -460,7 +460,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
 {% if dias_labels %}
-// Grafico de Atividade dos Ultimos 30 Dias
+// Gráfico de Atividade dos Últimos 30 Dias
 const ctxAtividade = document.getElementById('chartAtividade').getContext('2d');
 new Chart(ctxAtividade, {
     type: 'line',
@@ -510,7 +510,7 @@ new Chart(ctxAtividade, {
 {% endif %}
 
 {% if horas_data and sum(horas_data) > 0 %}
-// Grafico de Atividade por Hora
+// Gráfico de Atividade por Hora
 const ctxHoras = document.getElementById('chartHoras').getContext('2d');
 new Chart(ctxHoras, {
     type: 'bar',
@@ -546,7 +546,7 @@ new Chart(ctxHoras, {
 {% endif %}
 
 {% if notas_data %}
-// Grafico de Distribuicao de Notas
+// Gráfico de Distribuição de Notas
 const ctxNotas = document.getElementById('chartNotas').getContext('2d');
 new Chart(ctxNotas, {
     type: 'bar',

@@ -5216,11 +5216,22 @@ def admin_dashboard():
     """Dashboard administrativo com métricas globais do sistema"""
     from sqlalchemy import func, case
 
+    # Parâmetro de modo selecionado
+    modo_selecionado = request.args.get('modo', 'todos')  # 'consulta', 'fila' ou 'todos'
+
     # =====================================================================
-    # ESTATÍSTICAS DE USUÁRIOS
+    # ESTATÍSTICAS DE USUÁRIOS (filtradas por modo)
     # =====================================================================
-    total_usuarios = Usuario.query.count()
-    usuarios_ativos = Usuario.query.filter_by(ativo=True).count()
+    if modo_selecionado == 'consulta':
+        total_usuarios = Usuario.query.filter_by(tipo_sistema='AGENDAMENTO_CONSULTA').count()
+        usuarios_ativos = Usuario.query.filter_by(ativo=True, tipo_sistema='AGENDAMENTO_CONSULTA').count()
+    elif modo_selecionado == 'fila':
+        total_usuarios = Usuario.query.filter_by(tipo_sistema='BUSCA_ATIVA').count()
+        usuarios_ativos = Usuario.query.filter_by(ativo=True, tipo_sistema='BUSCA_ATIVA').count()
+    else:
+        total_usuarios = Usuario.query.count()
+        usuarios_ativos = Usuario.query.filter_by(ativo=True).count()
+
     usuarios_admin = Usuario.query.filter_by(is_admin=True).count()
 
     # Usuários por tipo de sistema
@@ -5291,9 +5302,11 @@ def admin_dashboard():
     # =====================================================================
     # DESEMPENHO POR USUÁRIO (MODO CONSULTA)
     # =====================================================================
-    desempenho_usuarios = db.session.query(
+    # Filtrar por modo se necessário
+    desempenho_query = db.session.query(
         Usuario.id,
         Usuario.nome,
+        Usuario.tipo_sistema,
         # MSG 1 enviadas (disparos)
         func.sum(case((AgendamentoConsulta.mensagem_enviada == True, 1), else_=0)).label('disparos_msg1'),
         # Comprovantes enviados
@@ -5308,7 +5321,15 @@ def admin_dashboard():
         func.count(AgendamentoConsulta.id).label('total_agendamentos')
     ).join(CampanhaConsulta, CampanhaConsulta.criador_id == Usuario.id
     ).join(AgendamentoConsulta, AgendamentoConsulta.campanha_id == CampanhaConsulta.id
-    ).group_by(Usuario.id, Usuario.nome
+    )
+
+    # Aplicar filtro de modo
+    if modo_selecionado == 'consulta':
+        desempenho_query = desempenho_query.filter(Usuario.tipo_sistema == 'AGENDAMENTO_CONSULTA')
+    elif modo_selecionado == 'fila':
+        desempenho_query = desempenho_query.filter(Usuario.tipo_sistema == 'BUSCA_ATIVA')
+
+    desempenho_usuarios = desempenho_query.group_by(Usuario.id, Usuario.nome, Usuario.tipo_sistema
     ).having(func.count(AgendamentoConsulta.id) > 0
     ).order_by(func.sum(case((AgendamentoConsulta.mensagem_enviada == True, 1), else_=0)).desc()
     ).all()
@@ -5490,9 +5511,10 @@ def admin_dashboard():
     # ESTATÍSTICAS DETALHADAS POR USUÁRIO
     # =====================================================================
     # Performance por usuário com mais detalhes
-    stats_detalhadas_usuario = db.session.query(
+    stats_query = db.session.query(
         Usuario.id,
         Usuario.nome,
+        Usuario.tipo_sistema,
         # Campanhas criadas
         func.count(func.distinct(CampanhaConsulta.id)).label('campanhas_criadas'),
         # Agendamentos
@@ -5506,7 +5528,15 @@ def admin_dashboard():
     ).outerjoin(CampanhaConsulta, CampanhaConsulta.criador_id == Usuario.id
     ).outerjoin(AgendamentoConsulta, AgendamentoConsulta.campanha_id == CampanhaConsulta.id
     ).outerjoin(PesquisaSatisfacao, PesquisaSatisfacao.consulta_id == AgendamentoConsulta.id
-    ).group_by(Usuario.id, Usuario.nome
+    )
+
+    # Aplicar filtro de modo
+    if modo_selecionado == 'consulta':
+        stats_query = stats_query.filter(Usuario.tipo_sistema == 'AGENDAMENTO_CONSULTA')
+    elif modo_selecionado == 'fila':
+        stats_query = stats_query.filter(Usuario.tipo_sistema == 'BUSCA_ATIVA')
+
+    stats_detalhadas_usuario = stats_query.group_by(Usuario.id, Usuario.nome, Usuario.tipo_sistema
     ).having(func.count(AgendamentoConsulta.id) > 0
     ).order_by(func.count(AgendamentoConsulta.id).desc()
     ).limit(20).all()
@@ -5531,6 +5561,9 @@ def admin_dashboard():
     taxa_confirmacao_geral = round((total_confirmados / total_enviados * 100), 1) if total_enviados > 0 else 0
 
     return render_template('admin_dashboard.html',
+        # Modo selecionado
+        modo_selecionado=modo_selecionado,
+
         # Usuários
         total_usuarios=total_usuarios,
         usuarios_ativos=usuarios_ativos,

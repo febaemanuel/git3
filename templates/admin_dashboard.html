@@ -9,12 +9,40 @@
             <h2 class="mb-1"><i class="bi bi-shield-lock me-2"></i>Painel Administrativo</h2>
             <p class="text-muted mb-0">Visao geral da performance do sistema</p>
         </div>
-        <div>
+        <div class="d-flex gap-2 align-items-center">
+            <!-- Seletor de Modo -->
+            <div class="btn-group" role="group" aria-label="Selecionar modo">
+                <a href="{{ url_for('admin_dashboard', modo='consulta') }}"
+                   class="btn {% if modo_selecionado == 'consulta' %}btn-success{% else %}btn-outline-success{% endif %}">
+                    <i class="bi bi-calendar-check me-1"></i> Modo Consulta
+                </a>
+                <a href="{{ url_for('admin_dashboard', modo='fila') }}"
+                   class="btn {% if modo_selecionado == 'fila' %}btn-dark{% else %}btn-outline-dark{% endif %}">
+                    <i class="bi bi-people-fill me-1"></i> Modo Fila
+                </a>
+                <a href="{{ url_for('admin_dashboard') }}"
+                   class="btn {% if modo_selecionado == 'todos' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                    <i class="bi bi-grid me-1"></i> Todos
+                </a>
+            </div>
             <button class="btn btn-outline-secondary" onclick="window.location.reload()">
                 <i class="bi bi-arrow-clockwise me-1"></i> Atualizar
             </button>
         </div>
     </div>
+
+    <!-- Indicador do Modo Selecionado -->
+    {% if modo_selecionado != 'todos' %}
+    <div class="alert {% if modo_selecionado == 'consulta' %}alert-success{% else %}alert-dark{% endif %} mb-4">
+        <i class="bi {% if modo_selecionado == 'consulta' %}bi-calendar-check{% else %}bi-people-fill{% endif %} me-2"></i>
+        <strong>Visualizando:</strong>
+        {% if modo_selecionado == 'consulta' %}
+        Modo Consulta (Agendamentos) - Exibindo apenas usuarios e dados do sistema de agendamento de consultas
+        {% else %}
+        Modo Fila (Busca Ativa) - Exibindo apenas usuarios e dados do sistema de busca ativa
+        {% endif %}
+    </div>
+    {% endif %}
 
     <!-- Cards de Resumo Geral -->
     <div class="row g-3 mb-4">

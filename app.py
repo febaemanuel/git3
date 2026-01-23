@@ -5767,7 +5767,10 @@ def admin_usuario_detalhes(usuario_id):
         # =====================================================================
         # PESQUISAS DE SATISFAÇÃO DO USUÁRIO
         # =====================================================================
-        agendamento_ids = [a.id for c in campanhas_usuario for a in c.agendamentos]
+        # Buscar IDs dos agendamentos via query (não via relação)
+        agendamento_ids = [a.id for a in AgendamentoConsulta.query.filter(
+            AgendamentoConsulta.campanha_id.in_(campanha_ids)
+        ).all()]
 
         if agendamento_ids:
             pesquisas_stats = db.session.query(

@@ -119,7 +119,8 @@
     <!-- Comparativo Fila vs Consulta -->
     <div class="row g-4 mb-4">
         <!-- MODO FILA -->
-        <div class="col-lg-6">
+        {% if modo_selecionado != 'consulta' %}
+        <div class="{% if modo_selecionado == 'fila' %}col-lg-12{% else %}col-lg-6{% endif %}">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-header bg-dark text-white">
                     <h5 class="mb-0"><i class="bi bi-people-fill me-2"></i>Modo Fila (Busca Ativa)</h5>
@@ -174,9 +175,11 @@
                 </div>
             </div>
         </div>
+        {% endif %}
 
         <!-- MODO CONSULTA -->
-        <div class="col-lg-6">
+        {% if modo_selecionado != 'fila' %}
+        <div class="{% if modo_selecionado == 'consulta' %}col-lg-12{% else %}col-lg-6{% endif %}">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-header" style="background: linear-gradient(135deg, #128C7E 0%, #25D366 100%); color: white;">
                     <h5 class="mb-0"><i class="bi bi-calendar-check me-2"></i>Modo Consulta (Agendamentos)</h5>
@@ -226,6 +229,7 @@
                 </div>
             </div>
         </div>
+        {% endif %}
     </div>
 
     <!-- Graficos -->

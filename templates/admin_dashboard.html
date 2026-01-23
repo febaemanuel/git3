@@ -470,7 +470,7 @@
     </div>
 
     <!-- Mensagens por Usuário - Modo Fila -->
-    {% if msgs_por_usuario_fila %}
+    {% if msgs_por_usuario_fila and modo_selecionado != 'consulta' %}
     <div class="row g-4 mb-4">
         <div class="col-lg-6">
             <div class="card border-0 shadow-sm">

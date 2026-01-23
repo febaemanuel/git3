@@ -9,12 +9,40 @@
             <h2 class="mb-1"><i class="bi bi-shield-lock me-2"></i>Painel Administrativo</h2>
             <p class="text-muted mb-0">Visao geral da performance do sistema</p>
         </div>
-        <div>
+        <div class="d-flex gap-2 align-items-center">
+            <!-- Seletor de Modo -->
+            <div class="btn-group" role="group" aria-label="Selecionar modo">
+                <a href="{{ url_for('admin_dashboard', modo='consulta') }}"
+                   class="btn {% if modo_selecionado == 'consulta' %}btn-success{% else %}btn-outline-success{% endif %}">
+                    <i class="bi bi-calendar-check me-1"></i> Modo Consulta
+                </a>
+                <a href="{{ url_for('admin_dashboard', modo='fila') }}"
+                   class="btn {% if modo_selecionado == 'fila' %}btn-dark{% else %}btn-outline-dark{% endif %}">
+                    <i class="bi bi-people-fill me-1"></i> Modo Fila
+                </a>
+                <a href="{{ url_for('admin_dashboard') }}"
+                   class="btn {% if modo_selecionado == 'todos' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                    <i class="bi bi-grid me-1"></i> Todos
+                </a>
+            </div>
             <button class="btn btn-outline-secondary" onclick="window.location.reload()">
                 <i class="bi bi-arrow-clockwise me-1"></i> Atualizar
             </button>
         </div>
     </div>
+
+    <!-- Indicador do Modo Selecionado -->
+    {% if modo_selecionado != 'todos' %}
+    <div class="alert {% if modo_selecionado == 'consulta' %}alert-success{% else %}alert-dark{% endif %} mb-4">
+        <i class="bi {% if modo_selecionado == 'consulta' %}bi-calendar-check{% else %}bi-people-fill{% endif %} me-2"></i>
+        <strong>Visualizando:</strong>
+        {% if modo_selecionado == 'consulta' %}
+        Modo Consulta (Agendamentos) - Exibindo apenas usuarios e dados do sistema de agendamento de consultas
+        {% else %}
+        Modo Fila (Busca Ativa) - Exibindo apenas usuarios e dados do sistema de busca ativa
+        {% endif %}
+    </div>
+    {% endif %}
 
     <!-- Cards de Resumo Geral -->
     <div class="row g-3 mb-4">
@@ -202,11 +230,11 @@
 
     <!-- Graficos -->
     <div class="row g-4 mb-4">
-        <!-- Grafico de Mensagens por Dia -->
+        <!-- Grafico de MSG 1 por Dia -->
         <div class="col-lg-8">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white">
-                    <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Atividade dos Ultimos 30 Dias (Modo Consulta)</h5>
+                    <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Atividade dos Ultimos 30 Dias (Baseado em MSG 1)</h5>
                 </div>
                 <div class="card-body">
                     <canvas id="chartAtividade" height="100"></canvas>
@@ -252,7 +280,12 @@
                                 {% for u in desempenho_usuarios %}
                                 {% set taxa = ((u.comprovantes_enviados or 0) / u.disparos_msg1 * 100)|round(1) if u.disparos_msg1 > 0 else 0 %}
                                 <tr>
-                                    <td><strong>{{ u.nome }}</strong></td>
+                                    <td>
+                                        <a href="{{ url_for('admin_usuario_detalhes', usuario_id=u.id) }}" class="text-decoration-none">
+                                            <strong>{{ u.nome }}</strong>
+                                            <i class="bi bi-box-arrow-up-right ms-1 small"></i>
+                                        </a>
+                                    </td>
                                     <td class="text-center"><span class="badge bg-info">{{ u.disparos_msg1 or 0 }}</span></td>
                                     <td class="text-center"><span class="badge bg-success">{{ u.comprovantes_enviados or 0 }}</span></td>
                                     <td class="text-center"><span class="badge bg-warning text-dark">{{ u.aguardando_comprovante or 0 }}</span></td>
@@ -571,7 +604,12 @@
                                 {% for u in stats_detalhadas_usuario %}
                                 {% set taxa = ((u.confirmados or 0) / u.enviados * 100)|round(1) if u.enviados > 0 else 0 %}
                                 <tr>
-                                    <td><strong>{{ u.nome }}</strong></td>
+                                    <td>
+                                        <a href="{{ url_for('admin_usuario_detalhes', usuario_id=u.id) }}" class="text-decoration-none">
+                                            <strong>{{ u.nome }}</strong>
+                                            <i class="bi bi-box-arrow-up-right ms-1 small"></i>
+                                        </a>
+                                    </td>
                                     <td class="text-center">
                                         <span class="badge bg-primary">{{ u.campanhas_criadas or 0 }}</span>
                                     </td>
@@ -647,7 +685,7 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// Grafico de Atividade (Mensagens por Dia)
+// Grafico de Atividade (Baseado em MSG 1)
 const ctxAtividade = document.getElementById('chartAtividade').getContext('2d');
 new Chart(ctxAtividade, {
     type: 'line',
@@ -655,26 +693,26 @@ new Chart(ctxAtividade, {
         labels: {{ dias_labels | tojson }},
         datasets: [
             {
-                label: 'Mensagens Enviadas',
-                data: {{ msgs_enviadas_data | tojson }},
+                label: 'MSG 1 (Disparos)',
+                data: {{ msg1_data | tojson }},
                 borderColor: '#0dcaf0',
                 backgroundColor: 'rgba(13, 202, 240, 0.1)',
                 fill: true,
                 tension: 0.3
             },
             {
-                label: 'Mensagens Recebidas',
-                data: {{ msgs_recebidas_data | tojson }},
-                borderColor: '#6c757d',
-                backgroundColor: 'rgba(108, 117, 125, 0.1)',
+                label: 'Comprovantes Enviados',
+                data: {{ comprovantes_data | tojson }},
+                borderColor: '#198754',
+                backgroundColor: 'rgba(25, 135, 84, 0.1)',
                 fill: true,
                 tension: 0.3
             },
             {
-                label: 'Confirmacoes',
-                data: {{ confirmacoes_data | tojson }},
-                borderColor: '#198754',
-                backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                label: 'Rejeitados',
+                data: {{ rejeitados_data | tojson }},
+                borderColor: '#dc3545',
+                backgroundColor: 'rgba(220, 53, 69, 0.1)',
                 fill: true,
                 tension: 0.3
             }

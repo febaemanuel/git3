@@ -5216,11 +5216,22 @@ def admin_dashboard():
     """Dashboard administrativo com métricas globais do sistema"""
     from sqlalchemy import func, case
 
+    # Parâmetro de modo selecionado
+    modo_selecionado = request.args.get('modo', 'todos')  # 'consulta', 'fila' ou 'todos'
+
     # =====================================================================
-    # ESTATÍSTICAS DE USUÁRIOS
+    # ESTATÍSTICAS DE USUÁRIOS (filtradas por modo)
     # =====================================================================
-    total_usuarios = Usuario.query.count()
-    usuarios_ativos = Usuario.query.filter_by(ativo=True).count()
+    if modo_selecionado == 'consulta':
+        total_usuarios = Usuario.query.filter_by(tipo_sistema='AGENDAMENTO_CONSULTA').count()
+        usuarios_ativos = Usuario.query.filter_by(ativo=True, tipo_sistema='AGENDAMENTO_CONSULTA').count()
+    elif modo_selecionado == 'fila':
+        total_usuarios = Usuario.query.filter_by(tipo_sistema='BUSCA_ATIVA').count()
+        usuarios_ativos = Usuario.query.filter_by(ativo=True, tipo_sistema='BUSCA_ATIVA').count()
+    else:
+        total_usuarios = Usuario.query.count()
+        usuarios_ativos = Usuario.query.filter_by(ativo=True).count()
+
     usuarios_admin = Usuario.query.filter_by(is_admin=True).count()
 
     # Usuários por tipo de sistema
@@ -5291,9 +5302,11 @@ def admin_dashboard():
     # =====================================================================
     # DESEMPENHO POR USUÁRIO (MODO CONSULTA)
     # =====================================================================
-    desempenho_usuarios = db.session.query(
+    # Filtrar por modo se necessário
+    desempenho_query = db.session.query(
         Usuario.id,
         Usuario.nome,
+        Usuario.tipo_sistema,
         # MSG 1 enviadas (disparos)
         func.sum(case((AgendamentoConsulta.mensagem_enviada == True, 1), else_=0)).label('disparos_msg1'),
         # Comprovantes enviados
@@ -5308,7 +5321,15 @@ def admin_dashboard():
         func.count(AgendamentoConsulta.id).label('total_agendamentos')
     ).join(CampanhaConsulta, CampanhaConsulta.criador_id == Usuario.id
     ).join(AgendamentoConsulta, AgendamentoConsulta.campanha_id == CampanhaConsulta.id
-    ).group_by(Usuario.id, Usuario.nome
+    )
+
+    # Aplicar filtro de modo
+    if modo_selecionado == 'consulta':
+        desempenho_query = desempenho_query.filter(Usuario.tipo_sistema == 'AGENDAMENTO_CONSULTA')
+    elif modo_selecionado == 'fila':
+        desempenho_query = desempenho_query.filter(Usuario.tipo_sistema == 'BUSCA_ATIVA')
+
+    desempenho_usuarios = desempenho_query.group_by(Usuario.id, Usuario.nome, Usuario.tipo_sistema
     ).having(func.count(AgendamentoConsulta.id) > 0
     ).order_by(func.sum(case((AgendamentoConsulta.mensagem_enviada == True, 1), else_=0)).desc()
     ).all()
@@ -5406,23 +5427,35 @@ def admin_dashboard():
     from datetime import timedelta
     data_inicio = datetime.utcnow() - timedelta(days=30)
 
-    # Mensagens por dia (Modo Consulta)
-    msgs_por_dia_consulta = db.session.query(
-        func.date(LogMsgConsulta.data).label('dia'),
-        func.sum(case((LogMsgConsulta.direcao == 'enviada', 1), else_=0)).label('enviadas'),
-        func.sum(case((LogMsgConsulta.direcao == 'recebida', 1), else_=0)).label('recebidas')
-    ).filter(LogMsgConsulta.data >= data_inicio
-    ).group_by(func.date(LogMsgConsulta.data)
-    ).order_by(func.date(LogMsgConsulta.data)
+    # MSG 1 (Disparos de agendamento) por dia
+    msg1_por_dia = db.session.query(
+        func.date(AgendamentoConsulta.data_envio_mensagem).label('dia'),
+        func.count(AgendamentoConsulta.id).label('total')
+    ).filter(
+        AgendamentoConsulta.data_envio_mensagem >= data_inicio,
+        AgendamentoConsulta.mensagem_enviada == True
+    ).group_by(func.date(AgendamentoConsulta.data_envio_mensagem)
+    ).order_by(func.date(AgendamentoConsulta.data_envio_mensagem)
     ).all()
 
-    # Confirmações por dia (Modo Consulta)
-    confirmacoes_por_dia = db.session.query(
+    # Comprovantes enviados por dia (status CONFIRMADO)
+    comprovantes_por_dia = db.session.query(
         func.date(AgendamentoConsulta.data_confirmacao).label('dia'),
-        func.count(AgendamentoConsulta.id).label('confirmados')
+        func.count(AgendamentoConsulta.id).label('total')
     ).filter(
         AgendamentoConsulta.data_confirmacao >= data_inicio,
         AgendamentoConsulta.status == 'CONFIRMADO'
+    ).group_by(func.date(AgendamentoConsulta.data_confirmacao)
+    ).order_by(func.date(AgendamentoConsulta.data_confirmacao)
+    ).all()
+
+    # Rejeitados por dia
+    rejeitados_por_dia = db.session.query(
+        func.date(AgendamentoConsulta.data_confirmacao).label('dia'),
+        func.count(AgendamentoConsulta.id).label('total')
+    ).filter(
+        AgendamentoConsulta.data_confirmacao >= data_inicio,
+        AgendamentoConsulta.status == 'REJEITADO'
     ).group_by(func.date(AgendamentoConsulta.data_confirmacao)
     ).order_by(func.date(AgendamentoConsulta.data_confirmacao)
     ).all()
@@ -5431,19 +5464,19 @@ def admin_dashboard():
     dias_labels = [(data_inicio + timedelta(days=i)).strftime('%d/%m') for i in range(31)]
 
     # Mapear dados
-    msgs_enviadas_dict = {str(m.dia): m.enviadas for m in msgs_por_dia_consulta}
-    msgs_recebidas_dict = {str(m.dia): m.recebidas for m in msgs_por_dia_consulta}
-    confirmacoes_dict = {str(c.dia): c.confirmados for c in confirmacoes_por_dia}
+    msg1_dict = {str(m.dia): m.total for m in msg1_por_dia}
+    comprovantes_dict = {str(c.dia): c.total for c in comprovantes_por_dia}
+    rejeitados_dict = {str(r.dia): r.total for r in rejeitados_por_dia}
 
-    msgs_enviadas_data = []
-    msgs_recebidas_data = []
-    confirmacoes_data = []
+    msg1_data = []
+    comprovantes_data = []
+    rejeitados_data = []
 
     for i in range(31):
         dia = (data_inicio + timedelta(days=i)).strftime('%Y-%m-%d')
-        msgs_enviadas_data.append(msgs_enviadas_dict.get(dia, 0))
-        msgs_recebidas_data.append(msgs_recebidas_dict.get(dia, 0))
-        confirmacoes_data.append(confirmacoes_dict.get(dia, 0))
+        msg1_data.append(msg1_dict.get(dia, 0))
+        comprovantes_data.append(comprovantes_dict.get(dia, 0))
+        rejeitados_data.append(rejeitados_dict.get(dia, 0))
 
     # =====================================================================
     # ESPECIALIDADES MAIS FREQUENTES
@@ -5478,9 +5511,10 @@ def admin_dashboard():
     # ESTATÍSTICAS DETALHADAS POR USUÁRIO
     # =====================================================================
     # Performance por usuário com mais detalhes
-    stats_detalhadas_usuario = db.session.query(
+    stats_query = db.session.query(
         Usuario.id,
         Usuario.nome,
+        Usuario.tipo_sistema,
         # Campanhas criadas
         func.count(func.distinct(CampanhaConsulta.id)).label('campanhas_criadas'),
         # Agendamentos
@@ -5494,7 +5528,15 @@ def admin_dashboard():
     ).outerjoin(CampanhaConsulta, CampanhaConsulta.criador_id == Usuario.id
     ).outerjoin(AgendamentoConsulta, AgendamentoConsulta.campanha_id == CampanhaConsulta.id
     ).outerjoin(PesquisaSatisfacao, PesquisaSatisfacao.consulta_id == AgendamentoConsulta.id
-    ).group_by(Usuario.id, Usuario.nome
+    )
+
+    # Aplicar filtro de modo
+    if modo_selecionado == 'consulta':
+        stats_query = stats_query.filter(Usuario.tipo_sistema == 'AGENDAMENTO_CONSULTA')
+    elif modo_selecionado == 'fila':
+        stats_query = stats_query.filter(Usuario.tipo_sistema == 'BUSCA_ATIVA')
+
+    stats_detalhadas_usuario = stats_query.group_by(Usuario.id, Usuario.nome, Usuario.tipo_sistema
     ).having(func.count(AgendamentoConsulta.id) > 0
     ).order_by(func.count(AgendamentoConsulta.id).desc()
     ).limit(20).all()
@@ -5519,6 +5561,9 @@ def admin_dashboard():
     taxa_confirmacao_geral = round((total_confirmados / total_enviados * 100), 1) if total_enviados > 0 else 0
 
     return render_template('admin_dashboard.html',
+        # Modo selecionado
+        modo_selecionado=modo_selecionado,
+
         # Usuários
         total_usuarios=total_usuarios,
         usuarios_ativos=usuarios_ativos,
@@ -5571,9 +5616,9 @@ def admin_dashboard():
 
         # Dados para gráficos
         dias_labels=dias_labels,
-        msgs_enviadas_data=msgs_enviadas_data,
-        msgs_recebidas_data=msgs_recebidas_data,
-        confirmacoes_data=confirmacoes_data,
+        msg1_data=msg1_data,
+        comprovantes_data=comprovantes_data,
+        rejeitados_data=rejeitados_data,
 
         # Especialidades
         especialidades_top=especialidades_top,
@@ -5586,6 +5631,339 @@ def admin_dashboard():
         total_confirmados=total_confirmados,
         taxa_confirmacao_geral=taxa_confirmacao_geral
     )
+
+
+@app.route('/admin/usuario/<int:usuario_id>')
+@login_required
+@admin_required
+def admin_usuario_detalhes(usuario_id):
+    """Página de detalhes completos de um usuário específico"""
+    from sqlalchemy import func, case
+    from datetime import timedelta
+
+    usuario = Usuario.query.get_or_404(usuario_id)
+
+    # =====================================================================
+    # ESTATÍSTICAS GERAIS DO USUÁRIO (MODO CONSULTA)
+    # =====================================================================
+    # Campanhas criadas pelo usuário
+    campanhas_usuario = CampanhaConsulta.query.filter_by(criador_id=usuario_id).all()
+    total_campanhas = len(campanhas_usuario)
+    campanhas_ativas = sum(1 for c in campanhas_usuario if c.status in ['pronta', 'enviando'])
+
+    # IDs das campanhas do usuário para queries
+    campanha_ids = [c.id for c in campanhas_usuario]
+
+    if campanha_ids:
+        # Estatísticas de agendamentos
+        stats_agendamentos = db.session.query(
+            func.count(AgendamentoConsulta.id).label('total'),
+            func.sum(case((AgendamentoConsulta.mensagem_enviada == True, 1), else_=0)).label('msg1_enviadas'),
+            func.sum(case((AgendamentoConsulta.status == 'CONFIRMADO', 1), else_=0)).label('confirmados'),
+            func.sum(case((AgendamentoConsulta.status == 'REJEITADO', 1), else_=0)).label('rejeitados'),
+            func.sum(case((AgendamentoConsulta.status == 'AGUARDANDO_COMPROVANTE', 1), else_=0)).label('aguardando'),
+            func.sum(case((AgendamentoConsulta.status == 'CANCELADO', 1), else_=0)).label('cancelados')
+        ).filter(AgendamentoConsulta.campanha_id.in_(campanha_ids)).first()
+
+        total_agendamentos = stats_agendamentos.total or 0
+        msg1_enviadas = stats_agendamentos.msg1_enviadas or 0
+        confirmados = stats_agendamentos.confirmados or 0
+        rejeitados = stats_agendamentos.rejeitados or 0
+        aguardando = stats_agendamentos.aguardando or 0
+        cancelados = stats_agendamentos.cancelados or 0
+
+        # Taxa de sucesso (comprovantes enviados / MSG 1 enviadas)
+        taxa_sucesso = round((confirmados / msg1_enviadas * 100), 1) if msg1_enviadas > 0 else 0
+
+        # =====================================================================
+        # ATIVIDADE DOS ÚLTIMOS 30 DIAS
+        # =====================================================================
+        data_inicio = datetime.utcnow() - timedelta(days=30)
+
+        # MSG 1 enviadas por dia
+        msg1_por_dia = db.session.query(
+            func.date(AgendamentoConsulta.data_envio_mensagem).label('dia'),
+            func.count(AgendamentoConsulta.id).label('total')
+        ).filter(
+            AgendamentoConsulta.campanha_id.in_(campanha_ids),
+            AgendamentoConsulta.data_envio_mensagem >= data_inicio,
+            AgendamentoConsulta.mensagem_enviada == True
+        ).group_by(func.date(AgendamentoConsulta.data_envio_mensagem)
+        ).order_by(func.date(AgendamentoConsulta.data_envio_mensagem)
+        ).all()
+
+        # Comprovantes enviados por dia
+        comprovantes_por_dia = db.session.query(
+            func.date(AgendamentoConsulta.data_confirmacao).label('dia'),
+            func.count(AgendamentoConsulta.id).label('total')
+        ).filter(
+            AgendamentoConsulta.campanha_id.in_(campanha_ids),
+            AgendamentoConsulta.data_confirmacao >= data_inicio,
+            AgendamentoConsulta.status == 'CONFIRMADO'
+        ).group_by(func.date(AgendamentoConsulta.data_confirmacao)
+        ).order_by(func.date(AgendamentoConsulta.data_confirmacao)
+        ).all()
+
+        # Rejeitados por dia
+        rejeitados_por_dia = db.session.query(
+            func.date(AgendamentoConsulta.data_confirmacao).label('dia'),
+            func.count(AgendamentoConsulta.id).label('total')
+        ).filter(
+            AgendamentoConsulta.campanha_id.in_(campanha_ids),
+            AgendamentoConsulta.data_confirmacao >= data_inicio,
+            AgendamentoConsulta.status == 'REJEITADO'
+        ).group_by(func.date(AgendamentoConsulta.data_confirmacao)
+        ).order_by(func.date(AgendamentoConsulta.data_confirmacao)
+        ).all()
+
+        # Preparar dados para Chart.js
+        dias_labels = [(data_inicio + timedelta(days=i)).strftime('%d/%m') for i in range(31)]
+        msg1_dict = {str(m.dia): m.total for m in msg1_por_dia}
+        comprovantes_dict = {str(c.dia): c.total for c in comprovantes_por_dia}
+        rejeitados_dict = {str(r.dia): r.total for r in rejeitados_por_dia}
+
+        msg1_data = []
+        comprovantes_data = []
+        rejeitados_data = []
+
+        for i in range(31):
+            dia = (data_inicio + timedelta(days=i)).strftime('%Y-%m-%d')
+            msg1_data.append(msg1_dict.get(dia, 0))
+            comprovantes_data.append(comprovantes_dict.get(dia, 0))
+            rejeitados_data.append(rejeitados_dict.get(dia, 0))
+
+        # =====================================================================
+        # ATIVIDADE POR HORA DO DIA (padrão de trabalho)
+        # =====================================================================
+        atividade_por_hora = db.session.query(
+            func.extract('hour', AgendamentoConsulta.data_envio_mensagem).label('hora'),
+            func.count(AgendamentoConsulta.id).label('total')
+        ).filter(
+            AgendamentoConsulta.campanha_id.in_(campanha_ids),
+            AgendamentoConsulta.mensagem_enviada == True
+        ).group_by(func.extract('hour', AgendamentoConsulta.data_envio_mensagem)
+        ).order_by(func.extract('hour', AgendamentoConsulta.data_envio_mensagem)
+        ).all()
+
+        horas_labels = [f"{h:02d}:00" for h in range(24)]
+        horas_dict = {int(a.hora): a.total for a in atividade_por_hora if a.hora is not None}
+        horas_data = [horas_dict.get(h, 0) for h in range(24)]
+
+        # =====================================================================
+        # ESPECIALIDADES MAIS FREQUENTES DO USUÁRIO
+        # =====================================================================
+        especialidades_usuario = db.session.query(
+            AgendamentoConsulta.especialidade,
+            func.count(AgendamentoConsulta.id).label('total'),
+            func.sum(case((AgendamentoConsulta.status == 'CONFIRMADO', 1), else_=0)).label('confirmados'),
+            func.sum(case((AgendamentoConsulta.status == 'REJEITADO', 1), else_=0)).label('rejeitados')
+        ).filter(
+            AgendamentoConsulta.campanha_id.in_(campanha_ids),
+            AgendamentoConsulta.especialidade.isnot(None)
+        ).group_by(AgendamentoConsulta.especialidade
+        ).order_by(func.count(AgendamentoConsulta.id).desc()
+        ).limit(10).all()
+
+        # =====================================================================
+        # PESQUISAS DE SATISFAÇÃO DO USUÁRIO
+        # =====================================================================
+        agendamento_ids = [a.id for c in campanhas_usuario for a in c.agendamentos]
+
+        if agendamento_ids:
+            pesquisas_stats = db.session.query(
+                func.count(PesquisaSatisfacao.id).label('total'),
+                func.count(case((PesquisaSatisfacao.nota_satisfacao.isnot(None), 1))).label('respondidas'),
+                func.avg(PesquisaSatisfacao.nota_satisfacao).label('media_nota'),
+                func.sum(case((PesquisaSatisfacao.equipe_atenciosa == True, 1), else_=0)).label('atenciosa_sim'),
+                func.count(case((PesquisaSatisfacao.equipe_atenciosa.isnot(None), 1))).label('total_atenciosa')
+            ).filter(PesquisaSatisfacao.consulta_id.in_(agendamento_ids)).first()
+
+            total_pesquisas = pesquisas_stats.total or 0
+            pesquisas_respondidas = pesquisas_stats.respondidas or 0
+            media_nota = round(pesquisas_stats.media_nota or 0, 1)
+            pct_atenciosa = round((pesquisas_stats.atenciosa_sim or 0) / pesquisas_stats.total_atenciosa * 100, 1) if pesquisas_stats.total_atenciosa else 0
+
+            # Distribuição de notas do usuário
+            distribuicao_notas = db.session.query(
+                PesquisaSatisfacao.nota_satisfacao,
+                func.count(PesquisaSatisfacao.id)
+            ).filter(
+                PesquisaSatisfacao.consulta_id.in_(agendamento_ids),
+                PesquisaSatisfacao.nota_satisfacao.isnot(None)
+            ).group_by(PesquisaSatisfacao.nota_satisfacao
+            ).order_by(PesquisaSatisfacao.nota_satisfacao
+            ).all()
+
+            notas_labels = [str(n[0]) for n in distribuicao_notas]
+            notas_data = [n[1] for n in distribuicao_notas]
+
+            # Comentários recentes do usuário
+            comentarios_usuario = db.session.query(
+                PesquisaSatisfacao,
+                AgendamentoConsulta.paciente
+            ).join(AgendamentoConsulta, AgendamentoConsulta.id == PesquisaSatisfacao.consulta_id
+            ).filter(
+                PesquisaSatisfacao.consulta_id.in_(agendamento_ids),
+                PesquisaSatisfacao.comentario.isnot(None),
+                PesquisaSatisfacao.comentario != ''
+            ).order_by(PesquisaSatisfacao.data_resposta.desc()
+            ).limit(10).all()
+        else:
+            total_pesquisas = 0
+            pesquisas_respondidas = 0
+            media_nota = 0
+            pct_atenciosa = 0
+            notas_labels = []
+            notas_data = []
+            comentarios_usuario = []
+
+        # =====================================================================
+        # CAMPANHAS RECENTES DO USUÁRIO
+        # =====================================================================
+        campanhas_recentes = db.session.query(
+            CampanhaConsulta,
+            func.count(AgendamentoConsulta.id).label('total_agendamentos'),
+            func.sum(case((AgendamentoConsulta.mensagem_enviada == True, 1), else_=0)).label('msg1_enviadas'),
+            func.sum(case((AgendamentoConsulta.status == 'CONFIRMADO', 1), else_=0)).label('confirmados')
+        ).outerjoin(AgendamentoConsulta, AgendamentoConsulta.campanha_id == CampanhaConsulta.id
+        ).filter(CampanhaConsulta.criador_id == usuario_id
+        ).group_by(CampanhaConsulta.id
+        ).order_by(CampanhaConsulta.data_criacao.desc()
+        ).limit(10).all()
+
+        # =====================================================================
+        # MÉTRICAS DE TEMPO
+        # =====================================================================
+        # Tempo médio entre envio MSG1 e confirmação (apenas confirmados)
+        tempo_medio_confirmacao = db.session.query(
+            func.avg(
+                func.extract('epoch', AgendamentoConsulta.data_confirmacao) -
+                func.extract('epoch', AgendamentoConsulta.data_envio_mensagem)
+            )
+        ).filter(
+            AgendamentoConsulta.campanha_id.in_(campanha_ids),
+            AgendamentoConsulta.status == 'CONFIRMADO',
+            AgendamentoConsulta.data_envio_mensagem.isnot(None),
+            AgendamentoConsulta.data_confirmacao.isnot(None)
+        ).scalar()
+
+        if tempo_medio_confirmacao:
+            horas_media = int(tempo_medio_confirmacao // 3600)
+            minutos_media = int((tempo_medio_confirmacao % 3600) // 60)
+            tempo_medio_str = f"{horas_media}h {minutos_media}min"
+        else:
+            tempo_medio_str = "N/A"
+
+    else:
+        # Usuário sem campanhas
+        total_agendamentos = 0
+        msg1_enviadas = 0
+        confirmados = 0
+        rejeitados = 0
+        aguardando = 0
+        cancelados = 0
+        taxa_sucesso = 0
+        dias_labels = []
+        msg1_data = []
+        comprovantes_data = []
+        rejeitados_data = []
+        horas_labels = []
+        horas_data = []
+        especialidades_usuario = []
+        total_pesquisas = 0
+        pesquisas_respondidas = 0
+        media_nota = 0
+        pct_atenciosa = 0
+        notas_labels = []
+        notas_data = []
+        comentarios_usuario = []
+        campanhas_recentes = []
+        tempo_medio_str = "N/A"
+
+    return render_template('admin_usuario_detalhes.html',
+        usuario=usuario,
+        total_campanhas=total_campanhas,
+        campanhas_ativas=campanhas_ativas,
+        total_agendamentos=total_agendamentos,
+        msg1_enviadas=msg1_enviadas,
+        confirmados=confirmados,
+        rejeitados=rejeitados,
+        aguardando=aguardando,
+        cancelados=cancelados,
+        taxa_sucesso=taxa_sucesso,
+        dias_labels=dias_labels,
+        msg1_data=msg1_data,
+        comprovantes_data=comprovantes_data,
+        rejeitados_data=rejeitados_data,
+        horas_labels=horas_labels,
+        horas_data=horas_data,
+        especialidades_usuario=especialidades_usuario,
+        total_pesquisas=total_pesquisas,
+        pesquisas_respondidas=pesquisas_respondidas,
+        media_nota=media_nota,
+        pct_atenciosa=pct_atenciosa,
+        notas_labels=notas_labels,
+        notas_data=notas_data,
+        comentarios_usuario=comentarios_usuario,
+        campanhas_recentes=campanhas_recentes,
+        tempo_medio_str=tempo_medio_str
+    )
+
+
+@app.route('/admin/usuario/<int:usuario_id>/deletar', methods=['POST'])
+@login_required
+@admin_required
+def admin_deletar_usuario(usuario_id):
+    """Deletar um usuário do sistema"""
+    usuario = Usuario.query.get_or_404(usuario_id)
+
+    # Não permitir deletar o próprio usuário logado
+    if usuario.id == current_user.id:
+        flash('Voce nao pode deletar sua propria conta!', 'danger')
+        return redirect(url_for('admin_usuario_detalhes', usuario_id=usuario_id))
+
+    # Não permitir deletar outros admins (segurança)
+    if usuario.is_admin and not current_user.is_admin:
+        flash('Apenas administradores podem deletar outros administradores!', 'danger')
+        return redirect(url_for('admin_usuario_detalhes', usuario_id=usuario_id))
+
+    nome_usuario = usuario.nome
+
+    try:
+        # Deletar campanhas de consulta do usuário e seus agendamentos
+        campanhas_consulta = CampanhaConsulta.query.filter_by(criador_id=usuario_id).all()
+        for campanha in campanhas_consulta:
+            # Deletar pesquisas de satisfação dos agendamentos
+            for agendamento in campanha.agendamentos:
+                PesquisaSatisfacao.query.filter_by(consulta_id=agendamento.id).delete()
+            # Deletar agendamentos
+            AgendamentoConsulta.query.filter_by(campanha_id=campanha.id).delete()
+            # Deletar logs de mensagens
+            LogMsgConsulta.query.filter_by(campanha_id=campanha.id).delete()
+        # Deletar campanhas de consulta
+        CampanhaConsulta.query.filter_by(criador_id=usuario_id).delete()
+
+        # Deletar campanhas de fila do usuário
+        campanhas_fila = Campanha.query.filter_by(criador_id=usuario_id).all()
+        for campanha in campanhas_fila:
+            # Deletar contatos
+            Contato.query.filter_by(campanha_id=campanha.id).delete()
+            # Deletar logs de mensagens
+            LogMsg.query.filter_by(campanha_id=campanha.id).delete()
+        # Deletar campanhas de fila
+        Campanha.query.filter_by(criador_id=usuario_id).delete()
+
+        # Deletar o usuário
+        db.session.delete(usuario)
+        db.session.commit()
+
+        flash(f'Usuario "{nome_usuario}" deletado com sucesso!', 'success')
+        return redirect(url_for('admin_dashboard'))
+
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Erro ao deletar usuario: {str(e)}', 'danger')
+        return redirect(url_for('admin_usuario_detalhes', usuario_id=usuario_id))
 
 
 @app.route('/admin/comentarios')

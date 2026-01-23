@@ -7,7 +7,7 @@
     <div class="d-flex justify-content-between align-items-center mb-4">
         <div>
             <h2 class="mb-1"><i class="bi bi-shield-lock me-2"></i>Painel Administrativo</h2>
-            <p class="text-muted mb-0">Visao geral da performance do sistema</p>
+            <p class="text-muted mb-0">Visão geral da performance do sistema</p>
         </div>
         <div class="d-flex gap-2 align-items-center">
             <!-- Seletor de Modo -->
@@ -37,9 +37,9 @@
         <i class="bi {% if modo_selecionado == 'consulta' %}bi-calendar-check{% else %}bi-people-fill{% endif %} me-2"></i>
         <strong>Visualizando:</strong>
         {% if modo_selecionado == 'consulta' %}
-        Modo Consulta (Agendamentos) - Exibindo apenas usuarios e dados do sistema de agendamento de consultas
+        Modo Consulta (Agendamentos) - Exibindo apenas usuários e dados do sistema de agendamento de consultas
         {% else %}
-        Modo Fila (Busca Ativa) - Exibindo apenas usuarios e dados do sistema de busca ativa
+        Modo Fila (Busca Ativa) - Exibindo apenas usuários e dados do sistema de busca ativa
         {% endif %}
     </div>
     {% endif %}
@@ -50,7 +50,7 @@
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body text-center">
                     <div class="display-6 fw-bold text-primary">{{ total_usuarios }}</div>
-                    <div class="text-muted small">Usuarios</div>
+                    <div class="text-muted small">Usuários</div>
                     <div class="mt-1">
                         <span class="badge bg-success">{{ usuarios_ativos }} ativos</span>
                     </div>
@@ -105,7 +105,7 @@
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-body text-center">
                     <div class="display-6 fw-bold text-warning">{{ media_nota }}</div>
-                    <div class="text-muted small">Nota Media</div>
+                    <div class="text-muted small">Nota Média</div>
                     <div class="mt-1">
                         {% for i in range(media_nota|int) %}
                         <i class="bi bi-star-fill text-warning small"></i>
@@ -160,7 +160,7 @@
                     </div>
                     <div class="mt-3">
                         <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span>Taxa de Confirmacao</span>
+                            <span>Taxa de Confirmação</span>
                             <span class="fw-bold text-success">{{ fila_taxa_confirmacao }}%</span>
                         </div>
                         <div class="progress" style="height: 10px;">
@@ -219,7 +219,7 @@
                     </div>
                     <div class="mt-3">
                         <div class="d-flex justify-content-between align-items-center mb-1">
-                            <span>Taxa de Confirmacao</span>
+                            <span>Taxa de Confirmação</span>
                             <span class="fw-bold text-success">{{ consulta_taxa_confirmacao }}%</span>
                         </div>
                         <div class="progress" style="height: 10px;">
@@ -232,13 +232,13 @@
         {% endif %}
     </div>
 
-    <!-- Graficos -->
+    <!-- Gráficos -->
     <div class="row g-4 mb-4">
-        <!-- Grafico de MSG 1 por Dia -->
+        <!-- Gráfico de MSG 1 por Dia -->
         <div class="col-lg-8">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white">
-                    <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Atividade dos Ultimos 30 Dias (Baseado em MSG 1)</h5>
+                    <h5 class="mb-0"><i class="bi bi-graph-up me-2"></i>Atividade dos Últimos 30 Dias (Baseado em MSG 1)</h5>
                 </div>
                 <div class="card-body">
                     <canvas id="chartAtividade" height="100"></canvas>
@@ -246,11 +246,11 @@
             </div>
         </div>
 
-        <!-- Grafico de Distribuicao de Notas -->
+        <!-- Gráfico de Distribuição de Notas -->
         <div class="col-lg-4">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white">
-                    <h5 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Distribuicao de Notas</h5>
+                    <h5 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Distribuição de Notas</h5>
                 </div>
                 <div class="card-body">
                     <canvas id="chartNotas" height="200"></canvas>
@@ -259,19 +259,19 @@
         </div>
     </div>
 
-    <!-- Tabela de Desempenho por Usuario -->
+    <!-- Tabela de Desempenho por Usuário -->
     <div class="row g-4 mb-4">
         <div class="col-12">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="bi bi-person-badge me-2"></i>Desempenho por Usuario (Agendamento de Consultas)</h5>
+                    <h5 class="mb-0"><i class="bi bi-person-badge me-2"></i>Desempenho por Usuário (Agendamento de Consultas)</h5>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive">
                         <table class="table table-hover mb-0">
                             <thead class="table-light">
                                 <tr>
-                                    <th>Usuario</th>
+                                    <th>Usuário</th>
                                     <th class="text-center">Disparos MSG 1</th>
                                     <th class="text-center">Comprovantes Enviados</th>
                                     <th class="text-center">Aguardando</th>
@@ -303,7 +303,7 @@
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="7" class="text-center text-muted">Nenhum dado disponivel</td>
+                                    <td colspan="7" class="text-center text-muted">Nenhum dado disponível</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -314,7 +314,7 @@
         </div>
     </div>
 
-    <!-- Especialidades e Pesquisa de Satisfacao -->
+    <!-- Especialidades e Pesquisa de Satisfação -->
     <div class="row g-4 mb-4">
         <!-- Top Especialidades -->
         <div class="col-lg-6">
@@ -350,7 +350,7 @@
                                 </tr>
                                 {% else %}
                                 <tr>
-                                    <td colspan="5" class="text-center text-muted">Nenhum dado disponivel</td>
+                                    <td colspan="5" class="text-center text-muted">Nenhum dado disponível</td>
                                 </tr>
                                 {% endfor %}
                             </tbody>
@@ -360,11 +360,11 @@
             </div>
         </div>
 
-        <!-- Resumo Pesquisa de Satisfacao -->
+        <!-- Resumo Pesquisa de Satisfação -->
         <div class="col-lg-6">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white">
-                    <h5 class="mb-0"><i class="bi bi-star me-2"></i>Pesquisa de Satisfacao</h5>
+                    <h5 class="mb-0"><i class="bi bi-star me-2"></i>Pesquisa de Satisfação</h5>
                 </div>
                 <div class="card-body">
                     <div class="row g-3 mb-3">
@@ -392,7 +392,7 @@
                         <div class="col-6">
                             <div class="p-3 border rounded text-center">
                                 <div class="display-5 fw-bold text-warning">{{ media_nota }}</div>
-                                <div class="text-muted">Nota Media</div>
+                                <div class="text-muted">Nota Média</div>
                                 <div class="mt-1">
                                     {% for i in range(10) %}
                                     {% if i < media_nota|int %}
@@ -419,12 +419,12 @@
         </div>
     </div>
 
-    <!-- Comentarios Recentes -->
+    <!-- Comentários Recentes -->
     <div class="row g-4 mb-4">
         <div class="col-12">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white d-flex justify-content-between align-items-center">
-                    <h5 class="mb-0"><i class="bi bi-chat-quote me-2"></i>Comentarios Recentes</h5>
+                    <h5 class="mb-0"><i class="bi bi-chat-quote me-2"></i>Comentários Recentes</h5>
                     <div>
                         <span class="badge bg-secondary me-2">{{ total_comentarios }} no total</span>
                         <a href="{{ url_for('admin_comentarios') }}" class="btn btn-sm btn-primary">
@@ -461,7 +461,7 @@
                     {% else %}
                     <div class="text-center text-muted py-4">
                         <i class="bi bi-chat-text" style="font-size: 48px;"></i>
-                        <p class="mt-2">Nenhum comentario ainda</p>
+                        <p class="mt-2">Nenhum comentário ainda</p>
                     </div>
                     {% endif %}
                 </div>
@@ -469,20 +469,20 @@
         </div>
     </div>
 
-    <!-- Mensagens por Usuario - Modo Fila -->
+    <!-- Mensagens por Usuário - Modo Fila -->
     {% if msgs_por_usuario_fila %}
     <div class="row g-4 mb-4">
         <div class="col-lg-6">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-dark text-white">
-                    <h5 class="mb-0"><i class="bi bi-person-badge me-2"></i>Mensagens por Usuario (Fila)</h5>
+                    <h5 class="mb-0"><i class="bi bi-person-badge me-2"></i>Mensagens por Usuário (Fila)</h5>
                 </div>
                 <div class="card-body p-0">
                     <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
                         <table class="table table-hover mb-0">
                             <thead class="table-light sticky-top">
                                 <tr>
-                                    <th>Usuario</th>
+                                    <th>Usuário</th>
                                     <th class="text-center">Enviadas</th>
                                     <th class="text-center">Recebidas</th>
                                     <th class="text-center">Total</th>
@@ -506,15 +506,15 @@
     </div>
     {% endif %}
 
-    <!-- Notas Medias por Especialidade -->
+    <!-- Notas Médias por Especialidade -->
     {% if notas_por_especialidade %}
     <div class="row g-4 mb-4">
         <div class="col-12">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white">
                     <h5 class="mb-0">
-                        <i class="bi bi-star-half me-2"></i>Notas Medias por Especialidade
-                        <small class="text-muted ms-2">(Pesquisa de Satisfacao)</small>
+                        <i class="bi bi-star-half me-2"></i>Notas Médias por Especialidade
+                        <small class="text-muted ms-2">(Pesquisa de Satisfação)</small>
                     </h5>
                 </div>
                 <div class="card-body p-0">
@@ -523,10 +523,10 @@
                             <thead class="table-light">
                                 <tr>
                                     <th>Especialidade</th>
-                                    <th class="text-center">Nota Media</th>
+                                    <th class="text-center">Nota Média</th>
                                     <th class="text-center">Total Respostas</th>
                                     <th class="text-center">Equipe Atenciosa</th>
-                                    <th class="text-center">Visualizacao</th>
+                                    <th class="text-center">Visualização</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -577,14 +577,14 @@
     </div>
     {% endif %}
 
-    <!-- Estatisticas Detalhadas por Usuario -->
+    <!-- Estatísticas Detalhadas por Usuário -->
     {% if stats_detalhadas_usuario %}
     <div class="row g-4 mb-4">
         <div class="col-12">
             <div class="card border-0 shadow-sm">
                 <div class="card-header bg-white">
                     <h5 class="mb-0">
-                        <i class="bi bi-people me-2"></i>Estatisticas Detalhadas por Usuario
+                        <i class="bi bi-people me-2"></i>Estatísticas Detalhadas por Usuário
                         <small class="text-muted ms-2">(Modo Consulta)</small>
                     </h5>
                 </div>
@@ -593,15 +593,15 @@
                         <table class="table table-hover mb-0">
                             <thead class="table-light">
                                 <tr>
-                                    <th>Usuario</th>
+                                    <th>Usuário</th>
                                     <th class="text-center" data-bs-toggle="tooltip" title="Total de campanhas criadas">Campanhas</th>
                                     <th class="text-center" data-bs-toggle="tooltip" title="Total de agendamentos processados">Agendamentos</th>
                                     <th class="text-center" data-bs-toggle="tooltip" title="Mensagens enviadas com sucesso">Enviados</th>
                                     <th class="text-center" data-bs-toggle="tooltip" title="Consultas confirmadas">Confirmados</th>
                                     <th class="text-center" data-bs-toggle="tooltip" title="Consultas rejeitadas">Rejeitados</th>
-                                    <th class="text-center" data-bs-toggle="tooltip" title="Taxa de confirmacao (Confirmados/Enviados). Pode ser >100% se houver confirmacoes multiplas ou antigas">Taxa</th>
+                                    <th class="text-center" data-bs-toggle="tooltip" title="Taxa de confirmação (Confirmados/Enviados). Pode ser >100% se houver confirmações múltiplas ou antigas">Taxa</th>
                                     <th class="text-center" data-bs-toggle="tooltip" title="Pesquisas respondidas">Pesquisas</th>
-                                    <th class="text-center" data-bs-toggle="tooltip" title="Nota media nas pesquisas de satisfacao">Nota Media</th>
+                                    <th class="text-center" data-bs-toggle="tooltip" title="Nota media nas pesquisas de satisfacao">Nota Média</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -633,7 +633,7 @@
                                         </span>
                                         {% if taxa > 100 %}
                                         <i class="bi bi-info-circle text-primary ms-1" data-bs-toggle="tooltip"
-                                           title="Taxa acima de 100% indica que existem mais confirmacoes do que mensagens enviadas. Isso pode ocorrer por: confirmacoes multiplas, confirmacoes antigas sem registro de envio, ou confirmacoes manuais."></i>
+                                           title="Taxa acima de 100% indica que existem mais confirmações do que mensagens enviadas. Isso pode ocorrer por: confirmações múltiplas, confirmações antigas sem registro de envio, ou confirmações manuais."></i>
                                         {% endif %}
                                     </td>
                                     <td class="text-center">
@@ -662,23 +662,23 @@
     </div>
     {% endif %}
 
-    <!-- Explicacao sobre Taxa de Confirmacao -->
+    <!-- Explicacao sobre Taxa de Confirmação -->
     <div class="row g-4 mb-4">
         <div class="col-12">
             <div class="alert alert-info border-0 shadow-sm">
                 <h5 class="alert-heading">
-                    <i class="bi bi-info-circle me-2"></i>Entendendo a Taxa de Confirmacao
+                    <i class="bi bi-info-circle me-2"></i>Entendendo a Taxa de Confirmação
                 </h5>
                 <hr>
                 <p class="mb-2"><strong>Por que a taxa pode ser maior que 100%?</strong></p>
                 <ul class="mb-0">
-                    <li><strong>Confirmacoes multiplas:</strong> Um paciente pode confirmar a consulta mais de uma vez</li>
-                    <li><strong>Confirmacoes antigas:</strong> Consultas confirmadas antes do sistema registrar o envio da mensagem</li>
-                    <li><strong>Confirmacoes manuais:</strong> Confirmacoes feitas por outros canais (telefone, presencial) que foram registradas no sistema</li>
-                    <li><strong>Dados historicos:</strong> Registros importados de sistemas anteriores sem log de envio completo</li>
+                    <li><strong>Confirmações múltiplas:</strong> Um paciente pode confirmar a consulta mais de uma vez</li>
+                    <li><strong>Confirmações antigas:</strong> Consultas confirmadas antes do sistema registrar o envio da mensagem</li>
+                    <li><strong>Confirmações manuais:</strong> Confirmações feitas por outros canais (telefone, presencial) que foram registradas no sistema</li>
+                    <li><strong>Dados históricos:</strong> Registros importados de sistemas anteriores sem log de envio completo</li>
                 </ul>
                 <hr>
-                <p class="mb-0 small"><strong>Como interpretar:</strong> Uma taxa de 100% indica que todos os contatos confirmaram. Uma taxa acima de 100% ainda e positiva, indicando alto engajamento, mas reflete as situacoes acima.</p>
+                <p class="mb-0 small"><strong>Como interpretar:</strong> Uma taxa de 100% indica que todos os contatos confirmaram. Uma taxa acima de 100% ainda é positiva, indicando alto engajamento, mas reflete as situações acima.</p>
             </div>
         </div>
     </div>
@@ -689,7 +689,7 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-// Grafico de Atividade (Baseado em MSG 1)
+// Gráfico de Atividade (Baseado em MSG 1)
 const ctxAtividade = document.getElementById('chartAtividade').getContext('2d');
 new Chart(ctxAtividade, {
     type: 'line',
@@ -737,7 +737,7 @@ new Chart(ctxAtividade, {
     }
 });
 
-// Grafico de Distribuicao de Notas
+// Gráfico de Distribuição de Notas
 const ctxNotas = document.getElementById('chartNotas').getContext('2d');
 new Chart(ctxNotas, {
     type: 'bar',

@@ -184,9 +184,14 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
 
                     ok_pesq, _ = ws.enviar(telefone, msg_pesquisa)
                     if ok_pesq:
-                        consulta.etapa_pesquisa = 'NOTA'
-                        db.session.commit()
-                        logger.info(f"[BG] Pesquisa iniciada para consulta {consulta.id}")
+                        # Buscar consulta novamente para garantir estado atualizado da sessão
+                        consulta_atualizada = AgendamentoConsulta.query.get(consulta_id)
+                        if consulta_atualizada:
+                            consulta_atualizada.etapa_pesquisa = 'NOTA'
+                            db.session.commit()
+                            logger.info(f"[BG] Pesquisa iniciada para consulta {consulta_id}, etapa_pesquisa=NOTA")
+                        else:
+                            logger.error(f"[BG] Consulta {consulta_id} não encontrada ao iniciar pesquisa")
                 except Exception as e:
                     logger.warning(f"[BG] Erro ao iniciar pesquisa: {e}")
 

@@ -5629,7 +5629,232 @@ def admin_dashboard():
         total_campanhas=total_campanhas,
         total_enviados=total_enviados,
         total_confirmados=total_confirmados,
-        taxa_confirmacao_geral=taxa_confirmacao_geral
+        taxa_confirmacao_geral=taxa_confirmacao_geral,
+
+        # Lista de usuários para exportação
+        usuarios_export=Usuario.query.filter_by(tipo_sistema='AGENDAMENTO_CONSULTA').order_by(Usuario.nome).all()
+    )
+
+
+@app.route('/admin/exportar', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_exportar_dados():
+    """
+    Exportar dados de agendamentos para Excel com filtros.
+    Permite filtrar por status, tipo, especialidade, usuário, datas, etc.
+    """
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+    from io import BytesIO
+
+    # Obter parâmetros de filtro (GET ou POST)
+    if request.method == 'POST':
+        filtros = request.form
+    else:
+        filtros = request.args
+
+    # Filtros disponíveis
+    status_filtro = filtros.getlist('status') or filtros.get('status', '').split(',')
+    status_filtro = [s.strip() for s in status_filtro if s.strip()]
+
+    tipo_filtro = filtros.getlist('tipo') or filtros.get('tipo', '').split(',')
+    tipo_filtro = [t.strip() for t in tipo_filtro if t.strip()]
+
+    usuario_filtro = filtros.get('usuario_id', '')
+    especialidade_filtro = filtros.get('especialidade', '')
+    data_inicio = filtros.get('data_inicio', '')
+    data_fim = filtros.get('data_fim', '')
+
+    # Filtros de telefone
+    incluir_telefones_validos = filtros.get('telefones_validos', 'true').lower() == 'true'
+    incluir_telefones_invalidos = filtros.get('telefones_invalidos', 'true').lower() == 'true'
+
+    # Incluir pesquisa de satisfação
+    incluir_pesquisa = filtros.get('incluir_pesquisa', 'true').lower() == 'true'
+
+    # Query base
+    query = AgendamentoConsulta.query
+
+    # Aplicar filtros
+    if status_filtro:
+        query = query.filter(AgendamentoConsulta.status.in_(status_filtro))
+
+    if tipo_filtro:
+        query = query.filter(AgendamentoConsulta.tipo.in_(tipo_filtro))
+
+    if usuario_filtro:
+        query = query.filter(AgendamentoConsulta.usuario_id == int(usuario_filtro))
+
+    if especialidade_filtro:
+        query = query.filter(AgendamentoConsulta.especialidade.ilike(f'%{especialidade_filtro}%'))
+
+    if data_inicio:
+        try:
+            dt_inicio = datetime.strptime(data_inicio, '%Y-%m-%d')
+            query = query.filter(AgendamentoConsulta.created_at >= dt_inicio)
+        except:
+            pass
+
+    if data_fim:
+        try:
+            dt_fim = datetime.strptime(data_fim, '%Y-%m-%d') + timedelta(days=1)
+            query = query.filter(AgendamentoConsulta.created_at < dt_fim)
+        except:
+            pass
+
+    # Ordenar por data de criação (mais recente primeiro)
+    agendamentos = query.order_by(AgendamentoConsulta.created_at.desc()).all()
+
+    # Criar workbook Excel
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Agendamentos"
+
+    # Estilos
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+
+    # Cabeçalhos
+    headers = [
+        "ID", "Campanha", "Usuário", "Paciente", "Código AGHU", "Cod Master",
+        "Tipo", "Especialidade", "Sub-Especialidade", "Procedência",
+        "Médico Solicitante", "Data AGHU", "Grade AGHU", "Prioridade",
+        "Telefone Cadastro", "Telefone Registro", "Telefones Válidos", "Telefones Inválidos",
+        "Status", "Motivo Rejeição", "Data Criação", "Data Envio MSG1",
+        "Data Confirmação", "Data Rejeição", "Telefone que Confirmou",
+        "Comprovante Enviado", "Tentativas de Contato",
+        "Nova Data (Reagend.)", "Nova Hora (Reagend.)",
+        "Observações", "Exames"
+    ]
+
+    if incluir_pesquisa:
+        headers.extend(["Nota Satisfação", "Equipe Atenciosa", "Comentário Pesquisa"])
+
+    # Escrever cabeçalhos
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+        cell.border = thin_border
+
+    # Escrever dados
+    row_num = 2
+    for ag in agendamentos:
+        # Coletar telefones válidos e inválidos
+        telefones_validos = []
+        telefones_invalidos = []
+        for tel in ag.telefones:
+            if tel.invalido:
+                telefones_invalidos.append(tel.numero)
+            else:
+                telefones_validos.append(tel.numero)
+
+        # Aplicar filtro de telefones
+        if not incluir_telefones_validos and not incluir_telefones_invalidos:
+            continue
+        if not incluir_telefones_validos and len(telefones_validos) > 0 and len(telefones_invalidos) == 0:
+            continue
+        if not incluir_telefones_invalidos and len(telefones_invalidos) > 0 and len(telefones_validos) == 0:
+            continue
+
+        # Buscar pesquisa de satisfação
+        pesquisa = None
+        if incluir_pesquisa:
+            pesquisa = PesquisaSatisfacao.query.filter_by(consulta_id=ag.id).first()
+
+        # Dados da linha
+        row_data = [
+            ag.id,
+            ag.campanha.nome if ag.campanha else '',
+            ag.usuario.nome if ag.usuario else '',
+            ag.paciente,
+            ag.codigo_aghu or '',
+            ag.cod_master or '',
+            ag.tipo or '',
+            ag.especialidade or '',
+            ag.sub_especialidade or '',
+            ag.procedencia or '',
+            ag.medico_solicitante or '',
+            ag.data_aghu or '',
+            ag.grade_aghu or '',
+            ag.prioridade or '',
+            ag.telefone_cadastro or '',
+            ag.telefone_registro or '',
+            ', '.join(telefones_validos),
+            ', '.join(telefones_invalidos),
+            ag.status or '',
+            ag.motivo_rejeicao or '',
+            ag.created_at.strftime('%d/%m/%Y %H:%M') if ag.created_at else '',
+            ag.data_envio_mensagem.strftime('%d/%m/%Y %H:%M') if ag.data_envio_mensagem else '',
+            ag.data_confirmacao.strftime('%d/%m/%Y %H:%M') if ag.data_confirmacao else '',
+            ag.data_rejeicao.strftime('%d/%m/%Y %H:%M') if ag.data_rejeicao else '',
+            ag.telefone_confirmacao or '',
+            'Sim' if ag.comprovante_path else 'Não',
+            ag.tentativas_contato or 0,
+            ag.nova_data or '',
+            ag.nova_hora or '',
+            ag.observacoes or '',
+            ag.exames or ''
+        ]
+
+        if incluir_pesquisa:
+            if pesquisa:
+                row_data.extend([
+                    pesquisa.nota_satisfacao if pesquisa.nota_satisfacao else ('Pulou' if pesquisa.pulou else ''),
+                    'Sim' if pesquisa.equipe_atenciosa else ('Não' if pesquisa.equipe_atenciosa is False else ''),
+                    pesquisa.comentario or ''
+                ])
+            else:
+                row_data.extend(['', '', ''])
+
+        for col, value in enumerate(row_data, 1):
+            cell = ws.cell(row=row_num, column=col, value=value)
+            cell.border = thin_border
+            cell.alignment = Alignment(vertical="center", wrap_text=True)
+
+        row_num += 1
+
+    # Ajustar largura das colunas
+    for col in range(1, len(headers) + 1):
+        ws.column_dimensions[get_column_letter(col)].width = 18
+
+    # Colunas específicas mais largas
+    ws.column_dimensions['D'].width = 30  # Paciente
+    ws.column_dimensions['H'].width = 25  # Especialidade
+    ws.column_dimensions['Q'].width = 25  # Telefones Válidos
+    ws.column_dimensions['R'].width = 25  # Telefones Inválidos
+    ws.column_dimensions['T'].width = 40  # Motivo Rejeição
+    ws.column_dimensions['AD'].width = 40  # Observações
+    ws.column_dimensions['AE'].width = 40  # Exames
+    if incluir_pesquisa:
+        ws.column_dimensions['AH'].width = 40  # Comentário Pesquisa
+
+    # Congelar primeira linha (cabeçalhos)
+    ws.freeze_panes = 'A2'
+
+    # Salvar em memória
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    # Nome do arquivo com data
+    filename = f"agendamentos_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
     )
 
 

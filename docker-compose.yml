@@ -10,8 +10,10 @@ services:
       POSTGRES_DB: buscaativa_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # Porta NÃO exposta externamente por segurança (evita scanners/bots)
+    # Para acessar localmente use: docker exec -it busca-ativa-db psql -U buscaativa -d buscaativa_db
+    expose:
+      - "5432"
     networks:
       - busca-ativa-network
     healthcheck:
@@ -19,14 +21,20 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    # Reduz logs de checkpoint (apenas warnings e erros)
+    command: >
+      postgres
+      -c log_checkpoints=off
+      -c log_min_messages=warning
 
   # Redis (Message Broker para Celery)
   redis:
     image: redis:7-alpine
     container_name: busca-ativa-redis
     restart: always
-    ports:
-      - "6379:6379"
+    # Porta NÃO exposta externamente por segurança
+    expose:
+      - "6379"
     networks:
       - busca-ativa-network
     healthcheck:

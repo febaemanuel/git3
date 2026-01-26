@@ -5632,7 +5632,8 @@ def admin_dashboard():
         taxa_confirmacao_geral=taxa_confirmacao_geral,
 
         # Lista de usuários para exportação
-        usuarios_export=Usuario.query.filter_by(tipo_sistema='AGENDAMENTO_CONSULTA').order_by(Usuario.nome).all()
+        usuarios_export=Usuario.query.filter_by(tipo_sistema='AGENDAMENTO_CONSULTA').order_by(Usuario.nome).all(),
+        usuarios_fila_export=Usuario.query.filter_by(tipo_sistema='BUSCA_ATIVA').order_by(Usuario.nome).all()
     )
 
 
@@ -5849,6 +5850,178 @@ def admin_exportar_dados():
 
     # Nome do arquivo com data
     filename = f"agendamentos_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
+
+
+@app.route('/admin/exportar/fila', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def admin_exportar_fila():
+    """
+    Exportar dados de campanhas de Fila (Busca Ativa) para Excel com filtros.
+    """
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+    from io import BytesIO
+
+    # Obter parâmetros de filtro
+    if request.method == 'POST':
+        filtros = request.form
+    else:
+        filtros = request.args
+
+    # Filtros
+    status_filtro = filtros.getlist('status_fila') or []
+    usuario_filtro = filtros.get('usuario_id_fila', '')
+    procedimento_filtro = filtros.get('procedimento_fila', '')
+    data_inicio = filtros.get('data_inicio_fila', '')
+    data_fim = filtros.get('data_fim_fila', '')
+
+    # Query base - Contatos das campanhas
+    query = Contato.query.join(Campanha)
+
+    # Aplicar filtros
+    if status_filtro:
+        # Mapear status para campos booleanos
+        conditions = []
+        if 'confirmado' in status_filtro:
+            conditions.append(Contato.confirmado == True)
+        if 'rejeitado' in status_filtro:
+            conditions.append(Contato.rejeitado == True)
+        if 'enviado' in status_filtro:
+            conditions.append((Contato.enviado == True) & (Contato.confirmado == False) & (Contato.rejeitado == False))
+        if 'aguardando' in status_filtro:
+            conditions.append(Contato.enviado == False)
+        if 'erro' in status_filtro:
+            conditions.append(Contato.erro != None)
+        if conditions:
+            from sqlalchemy import or_
+            query = query.filter(or_(*conditions))
+
+    if usuario_filtro:
+        query = query.filter(Campanha.usuario_id == int(usuario_filtro))
+
+    if procedimento_filtro:
+        query = query.filter(Contato.procedimento.ilike(f'%{procedimento_filtro}%'))
+
+    if data_inicio:
+        try:
+            dt_inicio = datetime.strptime(data_inicio, '%Y-%m-%d')
+            query = query.filter(Contato.criado_em >= dt_inicio)
+        except:
+            pass
+
+    if data_fim:
+        try:
+            dt_fim = datetime.strptime(data_fim, '%Y-%m-%d') + timedelta(days=1)
+            query = query.filter(Contato.criado_em < dt_fim)
+        except:
+            pass
+
+    # Ordenar
+    contatos = query.order_by(Contato.criado_em.desc()).all()
+
+    # Criar workbook Excel
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Fila Cirurgica"
+
+    # Estilos
+    header_font = Font(bold=True, color="FFFFFF")
+    header_fill = PatternFill(start_color="343A40", end_color="343A40", fill_type="solid")
+    header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+
+    # Cabeçalhos
+    headers = [
+        "ID", "Campanha", "Usuário", "Nome", "Data Nascimento", "Telefones",
+        "Procedimento", "Status", "Enviado", "Data Envio", "Confirmado",
+        "Data Confirmação", "Rejeitado", "Data Rejeição", "Resposta",
+        "Erro", "Data Criação"
+    ]
+
+    # Escrever cabeçalhos
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_alignment
+        cell.border = thin_border
+
+    # Escrever dados
+    row_num = 2
+    for c in contatos:
+        # Determinar status
+        if c.confirmado:
+            status = 'CONFIRMADO'
+        elif c.rejeitado:
+            status = 'REJEITADO'
+        elif c.erro:
+            status = 'ERRO'
+        elif c.enviado:
+            status = 'ENVIADO'
+        else:
+            status = 'AGUARDANDO'
+
+        row_data = [
+            c.id,
+            c.campanha.nome if c.campanha else '',
+            c.campanha.usuario.nome if c.campanha and c.campanha.usuario else '',
+            c.nome,
+            c.data_nascimento.strftime('%d/%m/%Y') if c.data_nascimento else '',
+            c.telefones or '',
+            c.procedimento or '',
+            status,
+            'Sim' if c.enviado else 'Não',
+            c.data_envio.strftime('%d/%m/%Y %H:%M') if c.data_envio else '',
+            'Sim' if c.confirmado else 'Não',
+            c.data_confirmacao.strftime('%d/%m/%Y %H:%M') if c.data_confirmacao else '',
+            'Sim' if c.rejeitado else 'Não',
+            c.data_rejeicao.strftime('%d/%m/%Y %H:%M') if c.data_rejeicao else '',
+            c.resposta or '',
+            c.erro or '',
+            c.criado_em.strftime('%d/%m/%Y %H:%M') if c.criado_em else ''
+        ]
+
+        for col, value in enumerate(row_data, 1):
+            cell = ws.cell(row=row_num, column=col, value=value)
+            cell.border = thin_border
+            cell.alignment = Alignment(vertical="center", wrap_text=True)
+
+        row_num += 1
+
+    # Ajustar largura das colunas
+    for col in range(1, len(headers) + 1):
+        ws.column_dimensions[get_column_letter(col)].width = 18
+
+    # Colunas específicas
+    ws.column_dimensions['D'].width = 30  # Nome
+    ws.column_dimensions['F'].width = 25  # Telefones
+    ws.column_dimensions['G'].width = 30  # Procedimento
+    ws.column_dimensions['O'].width = 40  # Resposta
+    ws.column_dimensions['P'].width = 30  # Erro
+
+    # Congelar primeira linha
+    ws.freeze_panes = 'A2'
+
+    # Salvar
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    filename = f"fila_cirurgica_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
 
     return send_file(
         output,

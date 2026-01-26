@@ -214,9 +214,17 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
             flash('Acesso negado. Usuário configurado para Fila Cirúrgica.', 'warning')
             return redirect(url_for('dashboard'))
 
-        campanhas = CampanhaConsulta.query.filter_by(
-            criador_id=current_user.id
-        ).order_by(CampanhaConsulta.data_criacao.desc()).all()
+        # Parâmetro para mostrar campanhas excluídas
+        mostrar_excluidas = request.args.get('excluidas', 'false').lower() == 'true'
+
+        # Query base
+        query = CampanhaConsulta.query.filter_by(criador_id=current_user.id)
+
+        # Filtrar excluídas (por padrão não mostra)
+        if not mostrar_excluidas:
+            query = query.filter((CampanhaConsulta.excluida == False) | (CampanhaConsulta.excluida == None))
+
+        campanhas = query.order_by(CampanhaConsulta.data_criacao.desc()).all()
 
         # Atualizar estatísticas de cada campanha
         for camp in campanhas:
@@ -1264,29 +1272,93 @@ _Hospital Universitário Walter Cantídio_"""
 
 
     # =========================================================================
-    # EXCLUIR CAMPANHA
+    # EXCLUIR CAMPANHA (Soft Delete)
     # =========================================================================
 
     @app.route('/api/consultas/campanha/<int:id>/excluir', methods=['DELETE', 'POST'])
     @login_required
     def consultas_campanha_excluir(id):
-        """Exclui uma campanha e todas as suas consultas"""
+        """Exclui uma campanha (soft delete - marca como excluída mas mantém os dados)"""
         campanha = CampanhaConsulta.query.get_or_404(id)
 
         if campanha.criador_id != current_user.id and not current_user.is_admin:
             return jsonify({'erro': 'Acesso negado'}), 403
 
         try:
+            # Soft delete: apenas marca como excluída
+            campanha.excluida = True
+            campanha.data_exclusao = datetime.utcnow()
+            campanha.excluido_por_id = current_user.id
+            db.session.commit()
+
+            logger.info(f"Campanha {campanha.id} ({campanha.nome}) marcada como excluída por {current_user.nome}")
+
+            return jsonify({'sucesso': True, 'mensagem': 'Campanha excluída com sucesso'})
+
+        except Exception as e:
+            db.session.rollback()
+            logger.exception(f"Erro ao excluir campanha: {e}")
+            return jsonify({'erro': str(e)}), 500
+
+
+    # =========================================================================
+    # RESTAURAR CAMPANHA (Desfazer exclusão)
+    # =========================================================================
+
+    @app.route('/api/consultas/campanha/<int:id>/restaurar', methods=['POST'])
+    @login_required
+    def consultas_campanha_restaurar(id):
+        """Restaura uma campanha excluída"""
+        campanha = CampanhaConsulta.query.get_or_404(id)
+
+        if campanha.criador_id != current_user.id and not current_user.is_admin:
+            return jsonify({'erro': 'Acesso negado'}), 403
+
+        if not campanha.excluida:
+            return jsonify({'erro': 'Campanha não está excluída'}), 400
+
+        try:
+            campanha.excluida = False
+            campanha.data_exclusao = None
+            campanha.excluido_por_id = None
+            db.session.commit()
+
+            logger.info(f"Campanha {campanha.id} ({campanha.nome}) restaurada por {current_user.nome}")
+
+            return jsonify({'sucesso': True, 'mensagem': 'Campanha restaurada com sucesso'})
+
+        except Exception as e:
+            db.session.rollback()
+            logger.exception(f"Erro ao restaurar campanha: {e}")
+            return jsonify({'erro': str(e)}), 500
+
+
+    # =========================================================================
+    # EXCLUIR CAMPANHA PERMANENTEMENTE (Hard Delete - apenas admin)
+    # =========================================================================
+
+    @app.route('/api/consultas/campanha/<int:id>/excluir-permanente', methods=['DELETE', 'POST'])
+    @login_required
+    def consultas_campanha_excluir_permanente(id):
+        """Exclui uma campanha permanentemente (apenas admin)"""
+        if not current_user.is_admin:
+            return jsonify({'erro': 'Apenas administradores podem excluir permanentemente'}), 403
+
+        campanha = CampanhaConsulta.query.get_or_404(id)
+
+        try:
             # Buscar todas as consultas da campanha
             consultas = AgendamentoConsulta.query.filter_by(campanha_id=campanha.id).all()
 
             for consulta in consultas:
+                # Excluir pesquisas de satisfação
+                PesquisaSatisfacao.query.filter_by(consulta_id=consulta.id).delete()
                 # Excluir logs
                 LogMsgConsulta.query.filter_by(consulta_id=consulta.id).delete()
                 # Excluir telefones
                 TelefoneConsulta.query.filter_by(consulta_id=consulta.id).delete()
 
-            # Excluir logs da campanha (que não têm consulta específica)
+            # Excluir logs da campanha
             LogMsgConsulta.query.filter_by(campanha_id=campanha.id).delete()
 
             # Excluir todas as consultas
@@ -1296,11 +1368,13 @@ _Hospital Universitário Walter Cantídio_"""
             db.session.delete(campanha)
             db.session.commit()
 
-            return jsonify({'sucesso': True, 'mensagem': 'Campanha excluída com sucesso'})
+            logger.info(f"Campanha {id} excluída PERMANENTEMENTE por {current_user.nome}")
+
+            return jsonify({'sucesso': True, 'mensagem': 'Campanha excluída permanentemente'})
 
         except Exception as e:
             db.session.rollback()
-            logger.exception(f"Erro ao excluir campanha: {e}")
+            logger.exception(f"Erro ao excluir campanha permanentemente: {e}")
             return jsonify({'erro': str(e)}), 500
 
 

@@ -807,6 +807,11 @@ class CampanhaConsulta(db.Model):
     data_inicio = db.Column(db.DateTime)
     data_fim = db.Column(db.DateTime)
 
+    # Soft Delete
+    excluida = db.Column(db.Boolean, default=False)
+    data_exclusao = db.Column(db.DateTime)
+    excluido_por_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'))
+
     # Task ID do Celery
     celery_task_id = db.Column(db.String(100))
 
@@ -5675,8 +5680,15 @@ def admin_exportar_dados():
     # Incluir pesquisa de satisfação
     incluir_pesquisa = filtros.get('incluir_pesquisa', 'true').lower() == 'true'
 
+    # Incluir campanhas excluídas
+    incluir_excluidas = filtros.get('incluir_excluidas', 'false').lower() == 'true'
+
     # Query base
-    query = AgendamentoConsulta.query
+    query = AgendamentoConsulta.query.join(CampanhaConsulta)
+
+    # Filtrar campanhas excluídas (por padrão não inclui)
+    if not incluir_excluidas:
+        query = query.filter((CampanhaConsulta.excluida == False) | (CampanhaConsulta.excluida == None))
 
     # Aplicar filtros
     if status_filtro:

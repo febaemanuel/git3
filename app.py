@@ -5734,7 +5734,8 @@ def admin_exportar_dados():
         "Data Confirmação", "Data Rejeição", "Telefone que Confirmou",
         "Comprovante Enviado", "Tentativas de Contato",
         "Nova Data (Reagend.)", "Nova Hora (Reagend.)",
-        "Observações", "Exames"
+        "Observações", "Exames",
+        "Tempo até Confirmar (min)", "Tempo até Comprovante (min)"
     ]
 
     if incluir_pesquisa:
@@ -5773,6 +5774,20 @@ def admin_exportar_dados():
         if incluir_pesquisa:
             pesquisa = PesquisaSatisfacao.query.filter_by(consulta_id=ag.id).first()
 
+        # Calcular tempos
+        tempo_ate_confirmar = ''
+        tempo_ate_comprovante = ''
+
+        if ag.data_envio_mensagem and ag.data_confirmacao:
+            diff = ag.data_confirmacao - ag.data_envio_mensagem
+            tempo_ate_confirmar = round(diff.total_seconds() / 60, 1)  # em minutos
+
+        if ag.data_confirmacao and ag.comprovante_path and ag.updated_at:
+            # Usar updated_at como aproximação de quando o comprovante foi enviado
+            diff = ag.updated_at - ag.data_confirmacao
+            if diff.total_seconds() > 0:
+                tempo_ate_comprovante = round(diff.total_seconds() / 60, 1)  # em minutos
+
         # Dados da linha
         row_data = [
             ag.id,
@@ -5805,7 +5820,9 @@ def admin_exportar_dados():
             ag.nova_data or '',
             ag.nova_hora or '',
             ag.observacoes or '',
-            ag.exames or ''
+            ag.exames or '',
+            tempo_ate_confirmar,
+            tempo_ate_comprovante
         ]
 
         if incluir_pesquisa:
@@ -5842,6 +5859,162 @@ def admin_exportar_dados():
 
     # Congelar primeira linha (cabeçalhos)
     ws.freeze_panes = 'A2'
+
+    # =====================================================
+    # ABA DE ESTATÍSTICAS
+    # =====================================================
+    ws_stats = wb.create_sheet(title="Estatísticas")
+
+    # Estilos para estatísticas
+    title_font = Font(bold=True, size=14)
+    subtitle_font = Font(bold=True, size=11)
+    stat_fill_blue = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    stat_fill_green = PatternFill(start_color="70AD47", end_color="70AD47", fill_type="solid")
+    stat_fill_red = PatternFill(start_color="C00000", end_color="C00000", fill_type="solid")
+    stat_fill_yellow = PatternFill(start_color="FFC000", end_color="FFC000", fill_type="solid")
+    stat_fill_gray = PatternFill(start_color="808080", end_color="808080", fill_type="solid")
+
+    # Calcular estatísticas
+    total_registros = len(agendamentos)
+    total_confirmados = sum(1 for a in agendamentos if a.status == 'CONFIRMADO')
+    total_rejeitados = sum(1 for a in agendamentos if a.status == 'REJEITADO')
+    total_aguardando = sum(1 for a in agendamentos if a.status in ['AGUARDANDO_ENVIO', 'AGUARDANDO_CONFIRMACAO', 'AGUARDANDO_COMPROVANTE'])
+    total_cancelados = sum(1 for a in agendamentos if a.status == 'CANCELADO')
+
+    # Calcular médias de tempo
+    tempos_confirmar = []
+    tempos_comprovante = []
+    for ag in agendamentos:
+        if ag.data_envio_mensagem and ag.data_confirmacao:
+            diff = (ag.data_confirmacao - ag.data_envio_mensagem).total_seconds() / 60
+            if diff > 0:
+                tempos_confirmar.append(diff)
+        if ag.data_confirmacao and ag.comprovante_path and ag.updated_at:
+            diff = (ag.updated_at - ag.data_confirmacao).total_seconds() / 60
+            if diff > 0:
+                tempos_comprovante.append(diff)
+
+    media_tempo_confirmar = round(sum(tempos_confirmar) / len(tempos_confirmar), 1) if tempos_confirmar else 0
+    media_tempo_comprovante = round(sum(tempos_comprovante) / len(tempos_comprovante), 1) if tempos_comprovante else 0
+
+    # Estatísticas por especialidade
+    stats_especialidade = {}
+    for ag in agendamentos:
+        esp = ag.especialidade or 'Não informado'
+        if esp not in stats_especialidade:
+            stats_especialidade[esp] = {'total': 0, 'confirmados': 0, 'rejeitados': 0}
+        stats_especialidade[esp]['total'] += 1
+        if ag.status == 'CONFIRMADO':
+            stats_especialidade[esp]['confirmados'] += 1
+        elif ag.status == 'REJEITADO':
+            stats_especialidade[esp]['rejeitados'] += 1
+
+    # Escrever estatísticas
+    row = 1
+
+    # Título
+    ws_stats.cell(row=row, column=1, value="RELATÓRIO DE ESTATÍSTICAS").font = title_font
+    row += 2
+
+    # Resumo Geral
+    ws_stats.cell(row=row, column=1, value="RESUMO GERAL").font = subtitle_font
+    row += 1
+
+    stats_geral = [
+        ("Total de Registros", total_registros, stat_fill_blue),
+        ("Confirmados", total_confirmados, stat_fill_green),
+        ("Rejeitados", total_rejeitados, stat_fill_red),
+        ("Aguardando", total_aguardando, stat_fill_yellow),
+        ("Cancelados", total_cancelados, stat_fill_gray),
+    ]
+
+    for label, valor, fill in stats_geral:
+        ws_stats.cell(row=row, column=1, value=label).font = Font(bold=True)
+        cell_valor = ws_stats.cell(row=row, column=2, value=valor)
+        cell_valor.fill = fill
+        cell_valor.font = Font(bold=True, color="FFFFFF")
+        cell_valor.alignment = Alignment(horizontal="center")
+        row += 1
+
+    row += 1
+
+    # Taxa de Sucesso
+    taxa_sucesso = round((total_confirmados / total_registros * 100), 1) if total_registros > 0 else 0
+    ws_stats.cell(row=row, column=1, value="Taxa de Confirmação").font = Font(bold=True)
+    ws_stats.cell(row=row, column=2, value=f"{taxa_sucesso}%").font = Font(bold=True, color="70AD47")
+    row += 2
+
+    # Tempos Médios
+    ws_stats.cell(row=row, column=1, value="TEMPOS MÉDIOS").font = subtitle_font
+    row += 1
+
+    ws_stats.cell(row=row, column=1, value="Tempo até Confirmar (média)")
+    ws_stats.cell(row=row, column=2, value=f"{media_tempo_confirmar} min")
+    row += 1
+
+    ws_stats.cell(row=row, column=1, value="Tempo até Comprovante (média)")
+    ws_stats.cell(row=row, column=2, value=f"{media_tempo_comprovante} min")
+    row += 2
+
+    # Estatísticas por Especialidade
+    ws_stats.cell(row=row, column=1, value="POR ESPECIALIDADE").font = subtitle_font
+    row += 1
+
+    # Cabeçalho da tabela
+    ws_stats.cell(row=row, column=1, value="Especialidade").font = Font(bold=True)
+    ws_stats.cell(row=row, column=2, value="Total").font = Font(bold=True)
+    ws_stats.cell(row=row, column=3, value="Confirmados").font = Font(bold=True)
+    ws_stats.cell(row=row, column=4, value="Rejeitados").font = Font(bold=True)
+    ws_stats.cell(row=row, column=5, value="Taxa Confirm.").font = Font(bold=True)
+    row += 1
+
+    # Ordenar por total (maior primeiro)
+    especialidades_ordenadas = sorted(stats_especialidade.items(), key=lambda x: x[1]['total'], reverse=True)
+
+    for esp, dados in especialidades_ordenadas[:20]:  # Top 20
+        ws_stats.cell(row=row, column=1, value=esp)
+        ws_stats.cell(row=row, column=2, value=dados['total'])
+        ws_stats.cell(row=row, column=3, value=dados['confirmados'])
+        ws_stats.cell(row=row, column=4, value=dados['rejeitados'])
+        taxa = round((dados['confirmados'] / dados['total'] * 100), 1) if dados['total'] > 0 else 0
+        ws_stats.cell(row=row, column=5, value=f"{taxa}%")
+        row += 1
+
+    # Ajustar largura das colunas da aba de estatísticas
+    ws_stats.column_dimensions['A'].width = 35
+    ws_stats.column_dimensions['B'].width = 15
+    ws_stats.column_dimensions['C'].width = 15
+    ws_stats.column_dimensions['D'].width = 15
+    ws_stats.column_dimensions['E'].width = 15
+
+    # Adicionar gráfico de pizza (Status)
+    try:
+        from openpyxl.chart import PieChart, Reference
+
+        # Criar dados para o gráfico
+        chart_row = 3
+        ws_stats.cell(row=chart_row, column=7, value="Status")
+        ws_stats.cell(row=chart_row, column=8, value="Quantidade")
+        ws_stats.cell(row=chart_row+1, column=7, value="Confirmados")
+        ws_stats.cell(row=chart_row+1, column=8, value=total_confirmados)
+        ws_stats.cell(row=chart_row+2, column=7, value="Rejeitados")
+        ws_stats.cell(row=chart_row+2, column=8, value=total_rejeitados)
+        ws_stats.cell(row=chart_row+3, column=7, value="Aguardando")
+        ws_stats.cell(row=chart_row+3, column=8, value=total_aguardando)
+        ws_stats.cell(row=chart_row+4, column=7, value="Cancelados")
+        ws_stats.cell(row=chart_row+4, column=8, value=total_cancelados)
+
+        pie = PieChart()
+        labels = Reference(ws_stats, min_col=7, min_row=chart_row+1, max_row=chart_row+4)
+        data = Reference(ws_stats, min_col=8, min_row=chart_row, max_row=chart_row+4)
+        pie.add_data(data, titles_from_data=True)
+        pie.set_categories(labels)
+        pie.title = "Distribuição por Status"
+        pie.width = 12
+        pie.height = 8
+        ws_stats.add_chart(pie, "G10")
+    except Exception as e:
+        logger.warning(f"Não foi possível criar gráfico: {e}")
 
     # Salvar em memória
     output = BytesIO()

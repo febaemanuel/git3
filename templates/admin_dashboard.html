@@ -944,6 +944,54 @@ function selecionarTodosTipos() {
 function desmarcarTodosTipos() {
     document.querySelectorAll('input[name="tipo"]').forEach(cb => cb.checked = false);
 }
+
+// Trocar entre Modo Consulta e Modo Fila
+function trocarModoExport(modo) {
+    const filtrosConsulta = document.getElementById('filtrosConsulta');
+    const filtrosFila = document.getElementById('filtrosFila');
+    const form = document.getElementById('formExportar');
+
+    if (modo === 'consulta') {
+        filtrosConsulta.style.display = 'block';
+        filtrosFila.style.display = 'none';
+        form.action = '{{ url_for("admin_exportar_dados") }}';
+    } else {
+        filtrosConsulta.style.display = 'none';
+        filtrosFila.style.display = 'block';
+        form.action = '{{ url_for("admin_exportar_fila") }}';
+    }
+}
+
+// Mostrar loading no botão de exportar
+function mostrarLoading() {
+    const btnTexto = document.getElementById('btnExportarTexto');
+    const btnLoading = document.getElementById('btnExportarLoading');
+    const btnExportar = document.getElementById('btnExportar');
+
+    btnTexto.style.display = 'none';
+    btnLoading.style.display = 'inline';
+    btnExportar.disabled = true;
+
+    // Restaurar botão após 30 segundos (caso algo dê errado)
+    setTimeout(function() {
+        btnTexto.style.display = 'inline';
+        btnLoading.style.display = 'none';
+        btnExportar.disabled = false;
+    }, 30000);
+
+    return true; // Permite o submit do form
+}
+
+// Restaurar botão quando modal fechar
+document.getElementById('modalExportar').addEventListener('hidden.bs.modal', function () {
+    const btnTexto = document.getElementById('btnExportarTexto');
+    const btnLoading = document.getElementById('btnExportarLoading');
+    const btnExportar = document.getElementById('btnExportar');
+
+    btnTexto.style.display = 'inline';
+    btnLoading.style.display = 'none';
+    btnExportar.disabled = false;
+});
 </script>
 
 <!-- Modal de Exportação -->
@@ -956,10 +1004,42 @@ function desmarcarTodosTipos() {
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form action="{{ url_for('admin_exportar_dados') }}" method="POST">
+            <form action="{{ url_for('admin_exportar_dados') }}" method="POST" id="formExportar" onsubmit="mostrarLoading()">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <p class="text-muted mb-3">Selecione os filtros para personalizar sua exportação:</p>
+
+                    <!-- Seletor de Modo -->
+                    <div class="card mb-3 border-primary">
+                        <div class="card-header bg-primary text-white">
+                            <strong><i class="bi bi-toggles me-2"></i>Modo de Exportação</strong>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="modo_export" id="modoConsulta" value="consulta" checked onchange="trocarModoExport('consulta')">
+                                        <label class="form-check-label" for="modoConsulta">
+                                            <i class="bi bi-calendar-check text-success me-1"></i>
+                                            <strong>Modo Consulta</strong> (Agendamentos)
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="modo_export" id="modoFila" value="fila" onchange="trocarModoExport('fila')">
+                                        <label class="form-check-label" for="modoFila">
+                                            <i class="bi bi-people-fill text-dark me-1"></i>
+                                            <strong>Modo Fila</strong> (Busca Ativa)
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filtros Modo Consulta -->
+                    <div id="filtrosConsulta">
 
                     <!-- Status -->
                     <div class="card mb-3">
@@ -1131,11 +1211,106 @@ function desmarcarTodosTipos() {
                         </div>
                     </div>
 
+                    </div><!-- Fim filtrosConsulta -->
+
+                    <!-- Filtros Modo Fila (inicialmente oculto) -->
+                    <div id="filtrosFila" style="display: none;">
+
+                        <!-- Status Fila -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                <strong><i class="bi bi-flag me-2"></i>Status</strong>
+                                <div>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="document.querySelectorAll('input[name=status_fila]').forEach(cb => cb.checked = true)">Todos</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.querySelectorAll('input[name=status_fila]').forEach(cb => cb.checked = false)">Nenhum</button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="status_fila" value="aguardando" id="statusFila1" checked>
+                                            <label class="form-check-label" for="statusFila1">Aguardando</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="status_fila" value="enviado" id="statusFila2" checked>
+                                            <label class="form-check-label" for="statusFila2">Enviado</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="status_fila" value="confirmado" id="statusFila3" checked>
+                                            <label class="form-check-label" for="statusFila3">
+                                                <span class="badge bg-success">Confirmado</span>
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="status_fila" value="rejeitado" id="statusFila4" checked>
+                                            <label class="form-check-label" for="statusFila4">
+                                                <span class="badge bg-danger">Rejeitado</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="status_fila" value="erro" id="statusFila5" checked>
+                                            <label class="form-check-label" for="statusFila5">
+                                                <span class="badge bg-warning">Erro</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Filtros Adicionais Fila -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <strong><i class="bi bi-funnel me-2"></i>Filtros Adicionais</strong>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Procedimento</label>
+                                        <input type="text" class="form-control" name="procedimento_fila" placeholder="Ex: Cirurgia">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Usuário</label>
+                                        <select class="form-select" name="usuario_id_fila">
+                                            <option value="">Todos os usuários</option>
+                                            {% for u in usuarios_fila_export %}
+                                            <option value="{{ u.id }}">{{ u.nome }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Data Início</label>
+                                        <input type="date" class="form-control" name="data_inicio_fila">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Data Fim</label>
+                                        <input type="date" class="form-control" name="data_fim_fila">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <strong>Modo Fila:</strong> Exporta dados das campanhas de Busca Ativa (fila cirúrgica).
+                        </div>
+
+                    </div><!-- Fim filtrosFila -->
+
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="submit" class="btn btn-success">
-                        <i class="bi bi-download me-1"></i> Exportar para Excel
+                    <button type="submit" class="btn btn-success" id="btnExportar">
+                        <span id="btnExportarTexto"><i class="bi bi-download me-1"></i> Exportar para Excel</span>
+                        <span id="btnExportarLoading" style="display: none;">
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            Gerando arquivo...
+                        </span>
                     </button>
                 </div>
             </form>

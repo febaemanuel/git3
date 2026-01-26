@@ -28,6 +28,9 @@
             <button class="btn btn-outline-secondary" onclick="window.location.reload()">
                 <i class="bi bi-arrow-clockwise me-1"></i> Atualizar
             </button>
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalExportar">
+                <i class="bi bi-file-earmark-excel me-1"></i> Exportar Excel
+            </button>
         </div>
     </div>
 
@@ -927,5 +930,216 @@ var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggl
 var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
     return new bootstrap.Tooltip(tooltipTriggerEl);
 });
+
+// Funções do modal de exportação
+function selecionarTodosStatus() {
+    document.querySelectorAll('input[name="status"]').forEach(cb => cb.checked = true);
+}
+function desmarcarTodosStatus() {
+    document.querySelectorAll('input[name="status"]').forEach(cb => cb.checked = false);
+}
+function selecionarTodosTipos() {
+    document.querySelectorAll('input[name="tipo"]').forEach(cb => cb.checked = true);
+}
+function desmarcarTodosTipos() {
+    document.querySelectorAll('input[name="tipo"]').forEach(cb => cb.checked = false);
+}
 </script>
+
+<!-- Modal de Exportação -->
+<div class="modal fade" id="modalExportar" tabindex="-1" aria-labelledby="modalExportarLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="modalExportarLabel">
+                    <i class="bi bi-file-earmark-excel me-2"></i>Exportar Dados para Excel
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('admin_exportar_dados') }}" method="POST">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <p class="text-muted mb-3">Selecione os filtros para personalizar sua exportação:</p>
+
+                    <!-- Status -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <strong><i class="bi bi-flag me-2"></i>Status</strong>
+                            <div>
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="selecionarTodosStatus()">Todos</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="desmarcarTodosStatus()">Nenhum</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status" value="AGUARDANDO_ENVIO" id="status1" checked>
+                                        <label class="form-check-label" for="status1">Aguardando Envio</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status" value="AGUARDANDO_CONFIRMACAO" id="status2" checked>
+                                        <label class="form-check-label" for="status2">Aguardando Confirmação</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status" value="AGUARDANDO_COMPROVANTE" id="status3" checked>
+                                        <label class="form-check-label" for="status3">Aguardando Comprovante</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status" value="CONFIRMADO" id="status4" checked>
+                                        <label class="form-check-label" for="status4">
+                                            <span class="badge bg-success">Confirmado</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status" value="REJEITADO" id="status5" checked>
+                                        <label class="form-check-label" for="status5">
+                                            <span class="badge bg-danger">Rejeitado</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status" value="CANCELADO" id="status6" checked>
+                                        <label class="form-check-label" for="status6">
+                                            <span class="badge bg-secondary">Cancelado</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status" value="REAGENDADO" id="status7" checked>
+                                        <label class="form-check-label" for="status7">Reagendado</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status" value="AGUARDANDO_REAGENDAMENTO" id="status8" checked>
+                                        <label class="form-check-label" for="status8">Aguard. Reagendamento</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status" value="AGUARDANDO_MOTIVO_REJEICAO" id="status9" checked>
+                                        <label class="form-check-label" for="status9">Aguard. Motivo</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tipo de Agendamento -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <strong><i class="bi bi-tags me-2"></i>Tipo de Agendamento</strong>
+                            <div>
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="selecionarTodosTipos()">Todos</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="desmarcarTodosTipos()">Nenhum</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="tipo" value="RETORNO" id="tipo1" checked>
+                                        <label class="form-check-label" for="tipo1">Retorno</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="tipo" value="INTERCONSULTA" id="tipo2" checked>
+                                        <label class="form-check-label" for="tipo2">Interconsulta</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="tipo" value="REMARCACAO" id="tipo3" checked>
+                                        <label class="form-check-label" for="tipo3">Remarcação</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Telefones -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <strong><i class="bi bi-telephone me-2"></i>Telefones</strong>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="telefones_validos" value="true" id="telValidos" checked>
+                                        <label class="form-check-label" for="telValidos">
+                                            <i class="bi bi-check-circle text-success me-1"></i>Incluir com telefones válidos
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="telefones_invalidos" value="true" id="telInvalidos" checked>
+                                        <label class="form-check-label" for="telInvalidos">
+                                            <i class="bi bi-x-circle text-danger me-1"></i>Incluir com telefones inválidos
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filtros Adicionais -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <strong><i class="bi bi-funnel me-2"></i>Filtros Adicionais</strong>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Especialidade</label>
+                                    <input type="text" class="form-control" name="especialidade" placeholder="Ex: Cardiologia">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Usuário</label>
+                                    <select class="form-select" name="usuario_id">
+                                        <option value="">Todos os usuários</option>
+                                        {% for u in usuarios_export %}
+                                        <option value="{{ u.id }}">{{ u.nome }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Data Início</label>
+                                    <input type="date" class="form-control" name="data_inicio">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Data Fim</label>
+                                    <input type="date" class="form-control" name="data_fim">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Opções de Conteúdo -->
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <strong><i class="bi bi-list-check me-2"></i>Conteúdo da Exportação</strong>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="incluir_pesquisa" value="true" id="incluirPesquisa" checked>
+                                <label class="form-check-label" for="incluirPesquisa">
+                                    <i class="bi bi-star me-1 text-warning"></i>Incluir dados da Pesquisa de Satisfação (nota, comentários)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success">
+                        <i class="bi bi-download me-1"></i> Exportar para Excel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
 {% endblock %}

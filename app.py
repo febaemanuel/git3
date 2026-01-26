@@ -6885,9 +6885,16 @@ def webhook():
                 STATUS_FINAIS = ['CANCELADO', 'CONFIRMADO', 'REJEITADO', 'INFORMADO']
 
                 # 1. Verificar se consulta já está em status final
+                # EXCEÇÃO: Se tem pesquisa ativa, permite continuar o fluxo
                 if consulta.status in STATUS_FINAIS:
-                    logger.info(f"Consulta {consulta.id} já finalizada (status: {consulta.status}). Resposta ignorada: {texto[:50]}")
-                    return jsonify({'status': 'ok'}), 200
+                    # Verificar se há pesquisa de satisfação em andamento
+                    if consulta.etapa_pesquisa and consulta.etapa_pesquisa not in ['CONCLUIDA', 'PULOU']:
+                        # Pesquisa ativa - deixa passar para processar a resposta
+                        logger.info(f"Consulta {consulta.id} com pesquisa ativa (etapa: {consulta.etapa_pesquisa}). Processando resposta: {texto[:50]}")
+                    else:
+                        # Sem pesquisa ativa - ignorar mensagem
+                        logger.info(f"Consulta {consulta.id} já finalizada (status: {consulta.status}). Resposta ignorada: {texto[:50]}")
+                        return jsonify({'status': 'ok'}), 200
 
                 # 2. Verificar se passou mais de 48h desde o envio da mensagem
                 if consulta.data_envio_mensagem:

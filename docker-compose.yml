@@ -10,8 +10,8 @@ services:
       POSTGRES_DB: buscaativa_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    # Porta não exposta externamente (segurança)
+    # Containers acessam via rede interna: db:5432
     networks:
       - busca-ativa-network
     healthcheck:
@@ -25,8 +25,8 @@ services:
     image: redis:7-alpine
     container_name: busca-ativa-redis
     restart: always
-    ports:
-      - "6379:6379"
+    # Porta não exposta externamente (segurança)
+    # Containers acessam via rede interna: redis:6379
     networks:
       - busca-ativa-network
     healthcheck:

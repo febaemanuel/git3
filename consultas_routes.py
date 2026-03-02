@@ -171,7 +171,29 @@ def init_consultas_routes(app, db):
                 except Exception as e:
                     logger.error(f"[BG] Erro ao salvar histórico: {e}")
 
-                # Pesquisa de satisfação desativada temporariamente
+                # =====================================================
+                # PESQUISA DE SATISFAÇÃO
+                # =====================================================
+                try:
+                    time.sleep(7)
+                    msg_pesquisa = """📊 *Pesquisa de Satisfação* (opcional)
+
+De *1 a 10*, qual sua satisfação com a marcação de consulta por WhatsApp?
+
+_(Digite um número de 1 a 10, ou "pular" para não responder)_"""
+
+                    ok_pesq, _ = ws.enviar(telefone, msg_pesquisa)
+                    if ok_pesq:
+                        # Buscar consulta novamente para garantir estado atualizado da sessão
+                        consulta_atualizada = AgendamentoConsulta.query.get(consulta_id)
+                        if consulta_atualizada:
+                            consulta_atualizada.etapa_pesquisa = 'NOTA'
+                            db.session.commit()
+                            logger.info(f"[BG] Pesquisa iniciada para consulta {consulta_id}, etapa_pesquisa=NOTA")
+                        else:
+                            logger.error(f"[BG] Consulta {consulta_id} não encontrada ao iniciar pesquisa")
+                except Exception as e:
+                    logger.warning(f"[BG] Erro ao iniciar pesquisa: {e}")
 
                 logger.info(f"[BG] Envio de comprovante concluído para consulta {consulta_id}")
 

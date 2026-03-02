@@ -7391,10 +7391,116 @@ _Hospital Universitário Walter Cantídio_"""
 
                     return jsonify({'status': 'ok'}), 200
 
-                # Outros status (CONFIRMADO, REJEITADO, etc.) — fluxo encerrado
+                # Outros status (CONFIRMADO, REJEITADO, etc.)
                 else:
-                    pass  # Pesquisa de satisfação desativada
-                    
+                    # =========================================================
+                    # PESQUISA DE SATISFAÇÃO - Processar se etapa_pesquisa ativa
+                    # =========================================================
+                    if consulta.status == 'CONFIRMADO' and consulta.etapa_pesquisa:
+
+                        # ETAPA 1: NOTA (1-10)
+                        if consulta.etapa_pesquisa == 'NOTA':
+                            texto_limpo = texto_up.strip()
+
+                            # Verificar se pulou
+                            if texto_limpo in ['PULAR', 'NAO', 'NÃO', 'N', 'SKIP']:
+                                consulta.etapa_pesquisa = 'CONCLUIDA'
+                                pesquisa = PesquisaSatisfacao(
+                                    consulta_id=consulta.id,
+                                    usuario_id=consulta.usuario_id,
+                                    tipo_agendamento=consulta.tipo,
+                                    especialidade=consulta.especialidade,
+                                    pulou=True
+                                )
+                                db.session.add(pesquisa)
+                                db.session.commit()
+                                enviar_e_registrar_consulta(ws, numero_resposta, "✅ Obrigado! Pesquisa finalizada.", consulta)
+                                return jsonify({'status': 'ok'}), 200
+
+                            try:
+                                nota = int(texto_limpo.replace('.', '').replace(',', '')[:2])
+                                if 1 <= nota <= 10:
+                                    pesquisa = PesquisaSatisfacao(
+                                        consulta_id=consulta.id,
+                                        usuario_id=consulta.usuario_id,
+                                        tipo_agendamento=consulta.tipo,
+                                        especialidade=consulta.especialidade,
+                                        nota_satisfacao=nota
+                                    )
+                                    db.session.add(pesquisa)
+                                    consulta.etapa_pesquisa = 'ATENDIMENTO'
+                                    db.session.commit()
+                                    enviar_e_registrar_consulta(ws, numero_resposta, """A equipe foi atenciosa e o processo foi ágil?
+
+*1* - Sim ✅
+*2* - Não ❌
+
+_(ou "pular" para finalizar)_""", consulta)
+                                    return jsonify({'status': 'ok'}), 200
+                                else:
+                                    enviar_e_registrar_consulta(ws, numero_resposta, "Por favor, digite um número de *1 a 10*:", consulta)
+                                    return jsonify({'status': 'ok'}), 200
+                            except:
+                                enviar_e_registrar_consulta(ws, numero_resposta, "Por favor, digite um número de *1 a 10*:", consulta)
+                                return jsonify({'status': 'ok'}), 200
+
+                        # ETAPA 2: ATENDIMENTO (Sim/Não)
+                        elif consulta.etapa_pesquisa == 'ATENDIMENTO':
+                            texto_limpo = texto_up.strip()
+                            pesquisa = PesquisaSatisfacao.query.filter_by(consulta_id=consulta.id).first()
+
+                            if texto_limpo in ['PULAR', 'NAO', 'N', 'SKIP', 'FINALIZAR']:
+                                consulta.etapa_pesquisa = 'CONCLUIDA'
+                                db.session.commit()
+                                enviar_e_registrar_consulta(ws, numero_resposta, "✅ Obrigado pela sua avaliação! Sua opinião é muito importante para nós.", consulta)
+                                return jsonify({'status': 'ok'}), 200
+
+                            if texto_limpo in ['1', 'SIM', 'S', 'YES']:
+                                if pesquisa:
+                                    pesquisa.equipe_atenciosa = True
+                                consulta.etapa_pesquisa = 'COMENTARIO'
+                                db.session.commit()
+                                enviar_e_registrar_consulta(ws, numero_resposta, """Tem algum comentário ou sugestão?
+
+_(Digite sua mensagem ou "N" para finalizar)_""", consulta)
+                                return jsonify({'status': 'ok'}), 200
+
+                            elif texto_limpo in ['2', 'NÃO', 'NAO']:
+                                if pesquisa:
+                                    pesquisa.equipe_atenciosa = False
+                                consulta.etapa_pesquisa = 'COMENTARIO'
+                                db.session.commit()
+                                enviar_e_registrar_consulta(ws, numero_resposta, """Tem algum comentário ou sugestão?
+
+_(Digite sua mensagem ou "N" para finalizar)_""", consulta)
+                                return jsonify({'status': 'ok'}), 200
+
+                            else:
+                                enviar_e_registrar_consulta(ws, numero_resposta, "Por favor, responda *1* (Sim) ou *2* (Não):", consulta)
+                                return jsonify({'status': 'ok'}), 200
+
+                        # ETAPA 3: COMENTÁRIO
+                        elif consulta.etapa_pesquisa == 'COMENTARIO':
+                            texto_limpo = texto_up.strip()
+                            pesquisa = PesquisaSatisfacao.query.filter_by(consulta_id=consulta.id).first()
+
+                            if texto_limpo not in ['N', 'NAO', 'NÃO', 'PULAR', 'SKIP', 'FINALIZAR']:
+                                if pesquisa:
+                                    pesquisa.comentario = texto[:500]
+
+                            consulta.etapa_pesquisa = 'CONCLUIDA'
+                            db.session.commit()
+                            enviar_e_registrar_consulta(ws, numero_resposta, """✅ *Obrigado pela sua avaliação!*
+
+Sua opinião é muito importante para continuarmos melhorando nosso atendimento.
+
+_Hospital Universitário Walter Cantídio_""", consulta)
+                            return jsonify({'status': 'ok'}), 200
+
+                        # Pesquisa já concluída - ignorar
+                        elif consulta.etapa_pesquisa == 'CONCLUIDA':
+                            return jsonify({'status': 'ok'}), 200
+
                     # CONFIRMADO sem pesquisa ativa
                     elif consulta.status == 'CONFIRMADO':
                         msg_ja_enviada = LogMsgConsulta.query.filter(

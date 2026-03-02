@@ -7693,23 +7693,47 @@ _Hospital Universitário Walter Cantídio_""", consulta)
                 # Determinar tipo de resposta
                 tipo_resp = 'confirmado' if verificar_resposta_em_lista(texto_up, RESPOSTAS_SIM) else 'rejeitado'
 
-                # SEMPRE pedir Data de Nascimento para validação
-                c.status = 'aguardando_nascimento'
-                c.resposta = texto # Guarda a intencao original (1 ou 2)
+                c.resposta = texto
                 c.data_resposta = datetime.utcnow()
 
-                # Salvar resposta no telefone específico (aguardando validação)
+                # Salvar resposta no telefone específico
                 if telefone_respondente:
                     telefone_respondente.resposta = texto
                     telefone_respondente.data_resposta = datetime.utcnow()
-                    telefone_respondente.tipo_resposta = tipo_resp  # Guarda a intenção
-                    telefone_respondente.validacao_pendente = True
+                    telefone_respondente.tipo_resposta = tipo_resp
+                    telefone_respondente.validacao_pendente = False
                     # Se o telefone respondeu, marcar como WhatsApp válido
                     telefone_respondente.whatsapp_valido = True
 
+                c.calcular_status_final()
+                db.session.commit()
+                c.campanha.atualizar_stats()
                 db.session.commit()
 
-                ws.enviar(numero, "🔒 Por segurança, por favor digite sua *Data de Nascimento* (ex: 03/09/1954).")
+                if tipo_resp == 'confirmado':
+                    ws.enviar(numero, """✅ *Confirmação Registrada com Sucesso!*
+
+Obrigado por confirmar seu interesse no procedimento.
+
+📞 *Próximos Passos:*
+• Nossa equipe entrará em contato em breve
+• Mantenha seu telefone com notificações ativas
+• Fique atento às ligações do hospital
+
+❓ *Tem dúvidas?*
+Digite sua pergunta a qualquer momento que responderemos!
+
+_Hospital Universitário Walter Cantídio_""")
+                else:
+                    ws.enviar(numero, """✅ *Registro Atualizado*
+
+Obrigado por sua resposta.
+
+Registramos que você não tem mais interesse no procedimento. Seus dados serão atualizados em nosso sistema.
+
+Se mudar de ideia ou tiver alguma dúvida, pode entrar em contato conosco.
+
+_Hospital Universitário Walter Cantídio_""")
 
             elif verificar_resposta_em_lista(texto_up, RESPOSTAS_DESCONHECO):
                 # Salvar resposta "desconheço" no telefone específico
@@ -7742,40 +7766,22 @@ Desculpe pelo transtorno.
 _Hospital Universitário Walter Cantídio_""")
                 
         elif c.status == 'aguardando_nascimento':
-            # Encontrar o telefone que está aguardando validação
+            # Validação de data de nascimento removida - finalizar direto com base na intenção gravada
             telefone_validando = None
             for t in telefones:
                 if t.contato_id == c.id and t.validacao_pendente:
                     telefone_validando = t
                     break
 
-            # Verificar Data
-            dt_input = None
-            try:
-                # Tentar varios formatos
-                for fmt in ['%d/%m/%Y', '%d-%m-%Y', '%d.%m.%Y', '%d%m%Y']:
-                    try:
-                        dt_input = datetime.strptime(texto.strip(), fmt).date()
-                        break
-                    except:
-                        pass
-            except:
-                pass
+            if telefone_validando:
+                telefone_validando.validacao_pendente = False
+                telefone_validando.whatsapp_valido = True
 
-            if dt_input:
-                if c.data_nascimento and dt_input == c.data_nascimento:
-                    # Data Correta - Confirmar a resposta do telefone
-                    if telefone_validando:
-                        telefone_validando.validacao_pendente = False
-                        # Telefone validado com sucesso, marcar como WhatsApp válido
-                        telefone_validando.whatsapp_valido = True
+            intent_up = (c.resposta or '').upper()
+            msg_final = "✅ Obrigado."
 
-                    # Verificar intencao original
-                    intent_up = (c.resposta or '').upper()
-                    msg_final = "✅ Obrigado."
-
-                    if verificar_resposta_em_lista(intent_up, RESPOSTAS_SIM):
-                        msg_final = """✅ *Confirmação Registrada com Sucesso!*
+            if verificar_resposta_em_lista(intent_up, RESPOSTAS_SIM):
+                msg_final = """✅ *Confirmação Registrada com Sucesso!*
 
 Obrigado por confirmar seu interesse no procedimento.
 
@@ -7788,8 +7794,8 @@ Obrigado por confirmar seu interesse no procedimento.
 Digite sua pergunta a qualquer momento que responderemos!
 
 _Hospital Universitário Walter Cantídio_"""
-                    elif verificar_resposta_em_lista(intent_up, RESPOSTAS_NAO):
-                        msg_final = """✅ *Registro Atualizado*
+            elif verificar_resposta_em_lista(intent_up, RESPOSTAS_NAO):
+                msg_final = """✅ *Registro Atualizado*
 
 Obrigado por sua resposta.
 
@@ -7799,28 +7805,48 @@ Se mudar de ideia ou tiver alguma dúvida, pode entrar em contato conosco.
 
 _Hospital Universitário Walter Cantídio_"""
 
-                    # Recalcular status final do contato baseado em todas as respostas validadas
-                    c.calcular_status_final()
-                    db.session.commit()
-                    c.campanha.atualizar_stats()
-                    db.session.commit()
-                    
-                    ws.enviar(numero, msg_final)
-                else:
-                    # Data incorreta
-                    ws.enviar(numero, "❌ Data de nascimento incorreta. Por favor, tente novamente (DD/MM/AAAA).")
-            else:
-                ws.enviar(numero, "⚠️ Formato inválido. Por favor, digite a data no formato DD/MM/AAAA (ex: 03/09/1954).")
+            c.calcular_status_final()
+            db.session.commit()
+            c.campanha.atualizar_stats()
+            db.session.commit()
+
+            ws.enviar(numero, msg_final)
 
         elif c.status == 'concluido':
-            # Se o usuario mandar mensagem depois de concluido, reforcar o status
+            # Se o usuario mandar mensagem depois de concluido, reforcar o status uma única vez
             # (FAQ já foi verificado no início do webhook)
-            if c.confirmado:
-                ws.enviar(numero, "✅ Você já confirmou seu interesse. Obrigado!")
-            elif c.rejeitado:
-                ws.enviar(numero, "✅ Você já informou que não tem interesse. Obrigado!")
+            # Verificar se já enviou resposta de "concluído" nas últimas 24h para evitar spam
+            um_dia_atras = datetime.utcnow() - timedelta(hours=24)
+            msg_concluido_recente = LogMsg.query.filter(
+                LogMsg.contato_id == c.id,
+                LogMsg.direcao == 'enviada',
+                LogMsg.data >= um_dia_atras
+            ).first()
+
+            if not msg_concluido_recente:
+                if c.confirmado:
+                    msg_concluido = "✅ Você já confirmou seu interesse. Obrigado!"
+                elif c.rejeitado:
+                    msg_concluido = "✅ Você já informou que não tem interesse. Obrigado!"
+                else:
+                    msg_concluido = "✅ Seu atendimento já foi concluído. Obrigado!"
+
+                ws.enviar(numero, msg_concluido)
+
+                # Registrar mensagem enviada para evitar spam nas próximas 24h
+                log_enviado = LogMsg(
+                    campanha_id=c.campanha_id,
+                    contato_id=c.id,
+                    direcao='enviada',
+                    telefone=numero,
+                    mensagem=msg_concluido[:500],
+                    status='ok'
+                )
+                db.session.add(log_enviado)
+                db.session.commit()
+                logger.info(f"Resposta de concluído enviada para {c.nome}")
             else:
-                ws.enviar(numero, "✅ Seu atendimento já foi concluído. Obrigado!")
+                logger.info(f"Mensagem de {c.nome} ignorada - resposta de concluído já enviada nas últimas 24h")
 
         return jsonify({'status': 'ok'}), 200
 

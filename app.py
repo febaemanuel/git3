@@ -1080,6 +1080,44 @@ class Paciente(db.Model):
     usuario = db.relationship('Usuario', backref='pacientes')
 
 
+class ComprovanteAntecipado(db.Model):
+    """Comprovante pré-carregado na campanha para envio automático quando paciente confirmar"""
+    __tablename__ = 'comprovantes_antecipados'
+    id = db.Column(db.Integer, primary_key=True)
+    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas_consultas.id', ondelete='CASCADE'), nullable=False)
+    nome_paciente = db.Column(db.String(200), nullable=False)   # extraído do nome do arquivo
+    filename = db.Column(db.String(255), nullable=False)        # nome do arquivo no disco
+    filepath = db.Column(db.String(500), nullable=False)        # caminho completo no servidor
+    usado = db.Column(db.Boolean, default=False)                # True após ser enviado
+    consulta_id = db.Column(db.Integer, db.ForeignKey('agendamentos_consultas.id', ondelete='SET NULL'), nullable=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
+    data_upload = db.Column(db.DateTime, default=datetime.utcnow)
+
+    campanha = db.relationship('CampanhaConsulta', backref='comprovantes_antecipados')
+    consulta = db.relationship('AgendamentoConsulta', backref='comprovante_antecipado', uselist=False)
+    usuario = db.relationship('Usuario', backref='comprovantes_antecipados_upload')
+
+
+def normalizar_nome_paciente(nome):
+    """Normaliza nome de paciente para matching: remove acentos, lowercase, colapsa espaços."""
+    import unicodedata
+    nome = unicodedata.normalize('NFKD', nome or '')
+    nome = nome.encode('ascii', 'ignore').decode('ascii')
+    return ' '.join(nome.lower().split())
+
+
+def buscar_comprovante_antecipado(campanha_id, nome_paciente):
+    """Busca comprovante antecipado não usado com nome matching na campanha."""
+    nome_normalizado = normalizar_nome_paciente(nome_paciente)
+    candidatos = ComprovanteAntecipado.query.filter_by(
+        campanha_id=campanha_id, usado=False
+    ).all()
+    for c in candidatos:
+        if normalizar_nome_paciente(c.nome_paciente) == nome_normalizado:
+            return c
+    return None
+
+
 class HistoricoConsulta(db.Model):
     """Histórico de consultas do paciente (dados do comprovante OCR)"""
     __tablename__ = 'historico_consultas'
@@ -7190,7 +7228,34 @@ def webhook():
                             consulta.campanha.atualizar_stats()
                             db.session.commit()
 
-                            enviar_e_registrar_consulta(ws, numero_resposta, "✅ Consulta confirmada! Aguarde o envio do comprovante.", consulta)
+                            # [COMPROVANTE ANTECIPADO] Verificar se existe arquivo pré-carregado para este paciente
+                            comp_ant = buscar_comprovante_antecipado(consulta.campanha_id, consulta.paciente)
+                            if comp_ant:
+                                try:
+                                    comp_ant.usado = True
+                                    comp_ant.consulta_id = consulta.id
+                                    consulta.comprovante_path = comp_ant.filepath
+                                    consulta.comprovante_nome = comp_ant.filename
+                                    consulta.status = 'CONFIRMADO'
+                                    db.session.commit()
+                                    consulta.campanha.atualizar_stats()
+                                    db.session.commit()
+                                    send_fn = app.extensions.get('enviar_comprovante_background')
+                                    if send_fn:
+                                        base_url = request.host_url.rstrip('/')
+                                        t = threading.Thread(
+                                            target=send_fn,
+                                            args=(consulta.campanha.usuario_id, consulta.id, comp_ant.filepath, numero_resposta, base_url),
+                                            daemon=True
+                                        )
+                                        t.start()
+                                    enviar_e_registrar_consulta(ws, numero_resposta, "✅ Consulta confirmada! Seu comprovante está sendo enviado agora.", consulta)
+                                    logger.info(f"[AUTO] Comprovante antecipado enviado automaticamente para {consulta.paciente}")
+                                except Exception as e_ant:
+                                    logger.error(f"[AUTO] Erro ao processar comprovante antecipado para {consulta.paciente}: {e_ant}")
+                                    enviar_e_registrar_consulta(ws, numero_resposta, "✅ Consulta confirmada! Aguarde o envio do comprovante.", consulta)
+                            else:
+                                enviar_e_registrar_consulta(ws, numero_resposta, "✅ Consulta confirmada! Aguarde o envio do comprovante.", consulta)
                             logger.info(f"Consulta {consulta.id} confirmada por {consulta.paciente}")
 
                         # Notificar OUTROS telefones que a consulta já foi confirmada
@@ -7347,7 +7412,51 @@ _Hospital Universitário Walter Cantídio_""", consulta)
                         # Mensagem de confirmação com a nova data
                         nova_data = consulta.nova_data or consulta.data_aghu or 'data agendada'
                         nova_hora = consulta.nova_hora or ''
-                        msg_confirmacao = f"""✅ *Reagendamento confirmado!*
+
+                        # [COMPROVANTE ANTECIPADO] Verificar arquivo pré-carregado no reagendamento
+                        comp_ant_reag = buscar_comprovante_antecipado(consulta.campanha_id, consulta.paciente)
+                        if comp_ant_reag:
+                            try:
+                                comp_ant_reag.usado = True
+                                comp_ant_reag.consulta_id = consulta.id
+                                consulta.comprovante_path = comp_ant_reag.filepath
+                                consulta.comprovante_nome = comp_ant_reag.filename
+                                consulta.status = 'CONFIRMADO'
+                                db.session.commit()
+                                consulta.campanha.atualizar_stats()
+                                db.session.commit()
+                                send_fn = app.extensions.get('enviar_comprovante_background')
+                                if send_fn:
+                                    base_url = request.host_url.rstrip('/')
+                                    t = threading.Thread(
+                                        target=send_fn,
+                                        args=(consulta.campanha.usuario_id, consulta.id, comp_ant_reag.filepath, numero_resposta, base_url),
+                                        daemon=True
+                                    )
+                                    t.start()
+                                msg_confirmacao = f"""✅ *Reagendamento confirmado!*
+
+📅 Data: {nova_data}
+⏰ Horário: {nova_hora}
+👨‍⚕️ Especialidade: {consulta.especialidade}
+
+Seu comprovante está sendo enviado agora.
+
+_Hospital Universitário Walter Cantídio_"""
+                                logger.info(f"[AUTO] Comprovante antecipado enviado (reagendamento) para {consulta.paciente}")
+                            except Exception as e_ant:
+                                logger.error(f"[AUTO] Erro comprovante antecipado reagendamento {consulta.paciente}: {e_ant}")
+                                msg_confirmacao = f"""✅ *Reagendamento confirmado!*
+
+📅 Data: {nova_data}
+⏰ Horário: {nova_hora}
+👨‍⚕️ Especialidade: {consulta.especialidade}
+
+Aguarde o envio do comprovante.
+
+_Hospital Universitário Walter Cantídio_"""
+                        else:
+                            msg_confirmacao = f"""✅ *Reagendamento confirmado!*
 
 📅 Data: {nova_data}
 ⏰ Horário: {nova_hora}

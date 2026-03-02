@@ -268,6 +268,13 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
                 erros.append(f'{arquivo.filename}: nome inválido')
                 continue
 
+            # Verificar se já existe comprovante não-usado para o mesmo paciente (normalizado)
+            nome_norm = normalizar_nome_paciente(nome_paciente)
+            existentes = ComprovanteAntecipado.query.filter_by(campanha_id=campanha_id, usado=False).all()
+            if any(normalizar_nome_paciente(e.nome_paciente) == nome_norm for e in existentes):
+                erros.append(f'{arquivo.filename}: já existe comprovante pendente para "{nome_paciente}"')
+                continue
+
             # Salvar arquivo no servidor
             ts = datetime.now().strftime('%Y%m%d%H%M%S%f')
             filename_disk = secure_filename(f'comp_ant_{campanha_id}_{ts}{ext}')

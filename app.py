@@ -7232,25 +7232,36 @@ def webhook():
                             comp_ant = buscar_comprovante_antecipado(consulta.campanha_id, consulta.paciente)
                             if comp_ant:
                                 try:
-                                    comp_ant.usado = True
-                                    comp_ant.consulta_id = consulta.id
-                                    consulta.comprovante_path = comp_ant.filepath
-                                    consulta.comprovante_nome = comp_ant.filename
-                                    consulta.status = 'CONFIRMADO'
+                                    # UPDATE atômico para evitar race condition entre webhooks simultâneos
+                                    from sqlalchemy import update as sa_update
+                                    rows = db.session.execute(
+                                        sa_update(ComprovanteAntecipado)
+                                        .where(ComprovanteAntecipado.id == comp_ant.id, ComprovanteAntecipado.usado == False)
+                                        .values(usado=True, consulta_id=consulta.id)
+                                    ).rowcount
                                     db.session.commit()
-                                    consulta.campanha.atualizar_stats()
-                                    db.session.commit()
-                                    send_fn = app.extensions.get('enviar_comprovante_background')
-                                    if send_fn:
-                                        base_url = request.host_url.rstrip('/')
-                                        t = threading.Thread(
-                                            target=send_fn,
-                                            args=(consulta.campanha.usuario_id, consulta.id, comp_ant.filepath, numero_resposta, base_url),
-                                            daemon=True
-                                        )
-                                        t.start()
-                                    enviar_e_registrar_consulta(ws, numero_resposta, "✅ Consulta confirmada! Seu comprovante está sendo enviado agora.", consulta)
-                                    logger.info(f"[AUTO] Comprovante antecipado enviado automaticamente para {consulta.paciente}")
+                                    if rows == 0:
+                                        # Outro webhook já reivindicou este comprovante — fluxo normal
+                                        enviar_e_registrar_consulta(ws, numero_resposta, "✅ Consulta confirmada! Aguarde o envio do comprovante.", consulta)
+                                    else:
+                                        db.session.refresh(comp_ant)
+                                        consulta.comprovante_path = comp_ant.filepath
+                                        consulta.comprovante_nome = comp_ant.filename
+                                        consulta.status = 'CONFIRMADO'
+                                        db.session.commit()
+                                        consulta.campanha.atualizar_stats()
+                                        db.session.commit()
+                                        send_fn = app.extensions.get('enviar_comprovante_background')
+                                        if send_fn:
+                                            base_url = request.host_url.rstrip('/')
+                                            t = threading.Thread(
+                                                target=send_fn,
+                                                args=(consulta.campanha.usuario_id, consulta.id, comp_ant.filepath, numero_resposta, base_url),
+                                                daemon=True
+                                            )
+                                            t.start()
+                                        enviar_e_registrar_consulta(ws, numero_resposta, "✅ Consulta confirmada! Seu comprovante está sendo enviado agora.", consulta)
+                                        logger.info(f"[AUTO] Comprovante antecipado enviado automaticamente para {consulta.paciente}")
                                 except Exception as e_ant:
                                     logger.error(f"[AUTO] Erro ao processar comprovante antecipado para {consulta.paciente}: {e_ant}")
                                     enviar_e_registrar_consulta(ws, numero_resposta, "✅ Consulta confirmada! Aguarde o envio do comprovante.", consulta)
@@ -7417,16 +7428,24 @@ _Hospital Universitário Walter Cantídio_""", consulta)
                         comp_ant_reag = buscar_comprovante_antecipado(consulta.campanha_id, consulta.paciente)
                         if comp_ant_reag:
                             try:
-                                comp_ant_reag.usado = True
-                                comp_ant_reag.consulta_id = consulta.id
-                                consulta.comprovante_path = comp_ant_reag.filepath
-                                consulta.comprovante_nome = comp_ant_reag.filename
-                                consulta.status = 'CONFIRMADO'
+                                # UPDATE atômico para evitar race condition
+                                from sqlalchemy import update as sa_update
+                                rows_reag = db.session.execute(
+                                    sa_update(ComprovanteAntecipado)
+                                    .where(ComprovanteAntecipado.id == comp_ant_reag.id, ComprovanteAntecipado.usado == False)
+                                    .values(usado=True, consulta_id=consulta.id)
+                                ).rowcount
                                 db.session.commit()
-                                consulta.campanha.atualizar_stats()
-                                db.session.commit()
+                                if rows_reag > 0:
+                                    db.session.refresh(comp_ant_reag)
+                                    consulta.comprovante_path = comp_ant_reag.filepath
+                                    consulta.comprovante_nome = comp_ant_reag.filename
+                                    consulta.status = 'CONFIRMADO'
+                                    db.session.commit()
+                                    consulta.campanha.atualizar_stats()
+                                    db.session.commit()
                                 send_fn = app.extensions.get('enviar_comprovante_background')
-                                if send_fn:
+                                if rows_reag > 0 and send_fn:
                                     base_url = request.host_url.rstrip('/')
                                     t = threading.Thread(
                                         target=send_fn,
@@ -7434,7 +7453,7 @@ _Hospital Universitário Walter Cantídio_""", consulta)
                                         daemon=True
                                     )
                                     t.start()
-                                msg_confirmacao = f"""✅ *Reagendamento confirmado!*
+                                    msg_confirmacao = f"""✅ *Reagendamento confirmado!*
 
 📅 Data: {nova_data}
 ⏰ Horário: {nova_hora}
@@ -7443,7 +7462,17 @@ _Hospital Universitário Walter Cantídio_""", consulta)
 Seu comprovante está sendo enviado agora.
 
 _Hospital Universitário Walter Cantídio_"""
-                                logger.info(f"[AUTO] Comprovante antecipado enviado (reagendamento) para {consulta.paciente}")
+                                    logger.info(f"[AUTO] Comprovante antecipado enviado (reagendamento) para {consulta.paciente}")
+                                else:
+                                    msg_confirmacao = f"""✅ *Reagendamento confirmado!*
+
+📅 Data: {nova_data}
+⏰ Horário: {nova_hora}
+👨‍⚕️ Especialidade: {consulta.especialidade}
+
+Aguarde o envio do comprovante.
+
+_Hospital Universitário Walter Cantídio_"""
                             except Exception as e_ant:
                                 logger.error(f"[AUTO] Erro comprovante antecipado reagendamento {consulta.paciente}: {e_ant}")
                                 msg_confirmacao = f"""✅ *Reagendamento confirmado!*

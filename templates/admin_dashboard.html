@@ -616,6 +616,37 @@
     {% endif %}
     <!-- ==================== FIM SEÇÕES EXCLUSIVAS DO MODO CONSULTA ==================== -->
 
+    <!-- Gráficos - MODO FILA -->
+    {% if modo_selecionado == 'fila' %}
+    <div class="row g-4 mb-4">
+        <!-- Gráfico de Atividade Fila -->
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-graph-up me-2"></i>Atividade dos Últimos 30 Dias
+                        <span class="badge bg-dark ms-2">Modo Fila</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="chartAtividadeFila" height="100"></canvas>
+                </div>
+            </div>
+        </div>
+        <!-- Gráfico de Distribuição de Status -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-pie-chart me-2"></i>Distribuição de Status</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="chartStatusFila" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Mensagens por Usuário - Modo Fila -->
     {% if msgs_por_usuario_fila and modo_selecionado != 'consulta' %}
     <div class="row g-4 mb-4">
@@ -921,6 +952,80 @@ new Chart(ctxNotas, {
                 beginAtZero: true
             }
         }
+    }
+});
+{% endif %}
+
+{% if modo_selecionado == 'fila' %}
+// Gráfico de Atividade - MODO FILA
+const ctxAtividadeFila = document.getElementById('chartAtividadeFila').getContext('2d');
+new Chart(ctxAtividadeFila, {
+    type: 'line',
+    data: {
+        labels: {{ fila_dias_labels | tojson }},
+        datasets: [
+            {
+                label: 'Mensagens Enviadas',
+                data: {{ fila_enviados_data | tojson }},
+                borderColor: '#0dcaf0',
+                backgroundColor: 'rgba(13, 202, 240, 0.1)',
+                fill: true,
+                tension: 0.3
+            },
+            {
+                label: 'Confirmados',
+                data: {{ fila_confirmados_data | tojson }},
+                borderColor: '#198754',
+                backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                fill: true,
+                tension: 0.3
+            },
+            {
+                label: 'Rejeitados',
+                data: {{ fila_rejeitados_data | tojson }},
+                borderColor: '#dc3545',
+                backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                fill: true,
+                tension: 0.3
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { position: 'top' } },
+        scales: { y: { beginAtZero: true } }
+    }
+});
+
+// Gráfico de Distribuição de Status - MODO FILA
+const STATUS_CORES = {
+    'pendente': '#6c757d',
+    'validando': '#0dcaf0',
+    'pronto_envio': '#0d6efd',
+    'enviado': '#fd7e14',
+    'aguardando_nascimento': '#ffc107',
+    'aguardando_motivo_rejeicao': '#ffc107',
+    'concluido': '#198754',
+    'erro': '#dc3545',
+    'sem_whatsapp': '#adb5bd'
+};
+const filaStatusLabels = {{ fila_status_labels | tojson }};
+const filaStatusCores = filaStatusLabels.map(l => STATUS_CORES[l] || '#6c757d');
+
+const ctxStatusFila = document.getElementById('chartStatusFila').getContext('2d');
+new Chart(ctxStatusFila, {
+    type: 'doughnut',
+    data: {
+        labels: filaStatusLabels,
+        datasets: [{
+            data: {{ fila_status_data | tojson }},
+            backgroundColor: filaStatusCores,
+            borderWidth: 2
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { position: 'bottom' } }
     }
 });
 {% endif %}

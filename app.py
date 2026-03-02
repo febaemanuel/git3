@@ -5479,6 +5479,62 @@ def admin_dashboard():
         rejeitados_data.append(rejeitados_dict.get(dia, 0))
 
     # =====================================================================
+    # DADOS PARA GRÁFICOS - MODO FILA (últimos 30 dias)
+    # =====================================================================
+    fila_enviados_por_dia = db.session.query(
+        func.date(LogMsg.data).label('dia'),
+        func.count(LogMsg.id).label('total')
+    ).filter(
+        LogMsg.data >= data_inicio,
+        LogMsg.direcao == 'enviada'
+    ).group_by(func.date(LogMsg.data)
+    ).order_by(func.date(LogMsg.data)
+    ).all()
+
+    fila_confirmados_por_dia = db.session.query(
+        func.date(Contato.data_resposta).label('dia'),
+        func.count(Contato.id).label('total')
+    ).filter(
+        Contato.data_resposta >= data_inicio,
+        Contato.confirmado == True
+    ).group_by(func.date(Contato.data_resposta)
+    ).order_by(func.date(Contato.data_resposta)
+    ).all()
+
+    fila_rejeitados_por_dia = db.session.query(
+        func.date(Contato.data_resposta).label('dia'),
+        func.count(Contato.id).label('total')
+    ).filter(
+        Contato.data_resposta >= data_inicio,
+        Contato.rejeitado == True
+    ).group_by(func.date(Contato.data_resposta)
+    ).order_by(func.date(Contato.data_resposta)
+    ).all()
+
+    fila_dias_labels = [(data_inicio + timedelta(days=i)).strftime('%d/%m') for i in range(31)]
+
+    fila_env_dict = {str(r.dia): r.total for r in fila_enviados_por_dia}
+    fila_conf_dict = {str(r.dia): r.total for r in fila_confirmados_por_dia}
+    fila_rej_dict = {str(r.dia): r.total for r in fila_rejeitados_por_dia}
+
+    fila_enviados_data = []
+    fila_confirmados_data = []
+    fila_rejeitados_data = []
+    for i in range(31):
+        dia = (data_inicio + timedelta(days=i)).strftime('%Y-%m-%d')
+        fila_enviados_data.append(fila_env_dict.get(dia, 0))
+        fila_confirmados_data.append(fila_conf_dict.get(dia, 0))
+        fila_rejeitados_data.append(fila_rej_dict.get(dia, 0))
+
+    # Distribuição de status atual (Fila)
+    fila_status_counts = db.session.query(
+        Contato.status,
+        func.count(Contato.id).label('total')
+    ).group_by(Contato.status).all()
+    fila_status_labels = [r.status or 'pendente' for r in fila_status_counts]
+    fila_status_data = [r.total for r in fila_status_counts]
+
+    # =====================================================================
     # ESPECIALIDADES MAIS FREQUENTES
     # =====================================================================
     especialidades_top = db.session.query(
@@ -5614,11 +5670,19 @@ def admin_dashboard():
         comentarios_recentes=comentarios_recentes,
         total_comentarios=total_comentarios,
 
-        # Dados para gráficos
+        # Dados para gráficos - Modo Consulta
         dias_labels=dias_labels,
         msg1_data=msg1_data,
         comprovantes_data=comprovantes_data,
         rejeitados_data=rejeitados_data,
+
+        # Dados para gráficos - Modo Fila
+        fila_dias_labels=fila_dias_labels,
+        fila_enviados_data=fila_enviados_data,
+        fila_confirmados_data=fila_confirmados_data,
+        fila_rejeitados_data=fila_rejeitados_data,
+        fila_status_labels=fila_status_labels,
+        fila_status_data=fila_status_data,
 
         # Especialidades
         especialidades_top=especialidades_top,
@@ -7327,125 +7391,9 @@ _Hospital Universitário Walter Cantídio_"""
 
                     return jsonify({'status': 'ok'}), 200
 
-                # Outros status (CONFIRMADO, REJEITADO, etc.)
+                # Outros status (CONFIRMADO, REJEITADO, etc.) — fluxo encerrado
                 else:
-                    # =========================================================
-                    # PESQUISA DE SATISFAÇÃO - Processar se etapa_pesquisa ativa
-                    # =========================================================
-                    if consulta.status == 'CONFIRMADO' and consulta.etapa_pesquisa:
-                        
-                        # ETAPA 1: NOTA (1-10)
-                        if consulta.etapa_pesquisa == 'NOTA':
-                            texto_limpo = texto_up.strip()
-                            
-                            # Verificar se pulou
-                            if texto_limpo in ['PULAR', 'NAO', 'NÃO', 'N', 'SKIP']:
-                                consulta.etapa_pesquisa = 'CONCLUIDA'
-                                # Salvar pesquisa como pulada
-                                pesquisa = PesquisaSatisfacao(
-                                    consulta_id=consulta.id,
-                                    usuario_id=consulta.usuario_id,
-                                    tipo_agendamento=consulta.tipo,
-                                    especialidade=consulta.especialidade,
-                                    pulou=True
-                                )
-                                db.session.add(pesquisa)
-                                db.session.commit()
-                                enviar_e_registrar_consulta(ws, numero_resposta, "✅ Obrigado! Pesquisa finalizada.", consulta)
-                                return jsonify({'status': 'ok'}), 200
-                            
-                            # Tentar extrair nota
-                            try:
-                                nota = int(texto_limpo.replace('.', '').replace(',', '')[:2])
-                                if 1 <= nota <= 10:
-                                    # Salvar nota temporariamente (criar pesquisa)
-                                    pesquisa = PesquisaSatisfacao(
-                                        consulta_id=consulta.id,
-                                        usuario_id=consulta.usuario_id,
-                                        tipo_agendamento=consulta.tipo,
-                                        especialidade=consulta.especialidade,
-                                        nota_satisfacao=nota
-                                    )
-                                    db.session.add(pesquisa)
-                                    consulta.etapa_pesquisa = 'ATENDIMENTO'
-                                    db.session.commit()
-                                    
-                                    # Próxima pergunta
-                                    enviar_e_registrar_consulta(ws, numero_resposta, """A equipe foi atenciosa e o processo foi ágil?
-
-*1* - Sim ✅
-*2* - Não ❌
-
-_(ou "pular" para finalizar)_""", consulta)
-                                    return jsonify({'status': 'ok'}), 200
-                                else:
-                                    enviar_e_registrar_consulta(ws, numero_resposta, "Por favor, digite um número de *1 a 10*:", consulta)
-                                    return jsonify({'status': 'ok'}), 200
-                            except:
-                                enviar_e_registrar_consulta(ws, numero_resposta, "Por favor, digite um número de *1 a 10*:", consulta)
-                                return jsonify({'status': 'ok'}), 200
-                        
-                        # ETAPA 2: ATENDIMENTO (Sim/Não)
-                        elif consulta.etapa_pesquisa == 'ATENDIMENTO':
-                            texto_limpo = texto_up.strip()
-                            
-                            # Buscar pesquisa existente
-                            pesquisa = PesquisaSatisfacao.query.filter_by(consulta_id=consulta.id).first()
-                            
-                            if texto_limpo in ['PULAR', 'NAO', 'N', 'SKIP', 'FINALIZAR']:
-                                consulta.etapa_pesquisa = 'CONCLUIDA'
-                                db.session.commit()
-                                enviar_e_registrar_consulta(ws, numero_resposta, "✅ Obrigado pela sua avaliação! Sua opinião é muito importante para nós.", consulta)
-                                return jsonify({'status': 'ok'}), 200
-                            
-                            if texto_limpo in ['1', 'SIM', 'S', 'YES']:
-                                if pesquisa:
-                                    pesquisa.equipe_atenciosa = True
-                                consulta.etapa_pesquisa = 'COMENTARIO'
-                                db.session.commit()
-                                enviar_e_registrar_consulta(ws, numero_resposta, """Tem algum comentário ou sugestão?
-
-_(Digite sua mensagem ou "N" para finalizar)_""", consulta)
-                                return jsonify({'status': 'ok'}), 200
-                            
-                            elif texto_limpo in ['2', 'NÃO', 'NAO']:
-                                if pesquisa:
-                                    pesquisa.equipe_atenciosa = False
-                                consulta.etapa_pesquisa = 'COMENTARIO'
-                                db.session.commit()
-                                enviar_e_registrar_consulta(ws, numero_resposta, """Tem algum comentário ou sugestão?
-
-_(Digite sua mensagem ou "N" para finalizar)_""", consulta)
-                                return jsonify({'status': 'ok'}), 200
-                            
-                            else:
-                                enviar_e_registrar_consulta(ws, numero_resposta, "Por favor, responda *1* (Sim) ou *2* (Não):", consulta)
-                                return jsonify({'status': 'ok'}), 200
-                        
-                        # ETAPA 3: COMENTÁRIO
-                        elif consulta.etapa_pesquisa == 'COMENTARIO':
-                            texto_limpo = texto_up.strip()
-                            
-                            pesquisa = PesquisaSatisfacao.query.filter_by(consulta_id=consulta.id).first()
-                            
-                            if texto_limpo not in ['N', 'NAO', 'NÃO', 'PULAR', 'SKIP', 'FINALIZAR']:
-                                if pesquisa:
-                                    pesquisa.comentario = texto[:500]  # Limitar tamanho
-                            
-                            consulta.etapa_pesquisa = 'CONCLUIDA'
-                            db.session.commit()
-                            
-                            enviar_e_registrar_consulta(ws, numero_resposta, """✅ *Obrigado pela sua avaliação!*
-
-Sua opinião é muito importante para continuarmos melhorando nosso atendimento.
-
-_Hospital Universitário Walter Cantídio_""", consulta)
-                            return jsonify({'status': 'ok'}), 200
-                        
-                        # Pesquisa já concluída - ignorar
-                        elif consulta.etapa_pesquisa == 'CONCLUIDA':
-                            # Não responde mais - fluxo totalmente encerrado
-                            return jsonify({'status': 'ok'}), 200
+                    pass  # Pesquisa de satisfação desativada
                     
                     # CONFIRMADO sem pesquisa ativa
                     elif consulta.status == 'CONFIRMADO':
@@ -7689,20 +7637,15 @@ _Hospital Universitário Walter Cantídio_""", consulta)
                     telefone_respondente = t
                     break
 
-            if verificar_resposta_em_lista(texto_up, RESPOSTAS_SIM) or verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO):
-                # Determinar tipo de resposta
-                tipo_resp = 'confirmado' if verificar_resposta_em_lista(texto_up, RESPOSTAS_SIM) else 'rejeitado'
-
+            if verificar_resposta_em_lista(texto_up, RESPOSTAS_SIM):
                 c.resposta = texto
                 c.data_resposta = datetime.utcnow()
 
-                # Salvar resposta no telefone específico
                 if telefone_respondente:
                     telefone_respondente.resposta = texto
                     telefone_respondente.data_resposta = datetime.utcnow()
-                    telefone_respondente.tipo_resposta = tipo_resp
+                    telefone_respondente.tipo_resposta = 'confirmado'
                     telefone_respondente.validacao_pendente = False
-                    # Se o telefone respondeu, marcar como WhatsApp válido
                     telefone_respondente.whatsapp_valido = True
 
                 c.calcular_status_final()
@@ -7710,8 +7653,7 @@ _Hospital Universitário Walter Cantídio_""", consulta)
                 c.campanha.atualizar_stats()
                 db.session.commit()
 
-                if tipo_resp == 'confirmado':
-                    ws.enviar(numero, """✅ *Confirmação Registrada com Sucesso!*
+                ws.enviar(numero, """✅ *Confirmação Registrada com Sucesso!*
 
 Obrigado por confirmar seu interesse no procedimento.
 
@@ -7724,32 +7666,46 @@ Obrigado por confirmar seu interesse no procedimento.
 Digite sua pergunta a qualquer momento que responderemos!
 
 _Hospital Universitário Walter Cantídio_""")
-                else:
-                    ws.enviar(numero, """✅ *Registro Atualizado*
 
-Obrigado por sua resposta.
+            elif verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO):
+                # Guarda intenção e pergunta o motivo antes de concluir
+                c.resposta = texto
+                c.data_resposta = datetime.utcnow()
+                c.status = 'aguardando_motivo_rejeicao'
 
-Registramos que você não tem mais interesse no procedimento. Seus dados serão atualizados em nosso sistema.
+                if telefone_respondente:
+                    telefone_respondente.resposta = texto
+                    telefone_respondente.data_resposta = datetime.utcnow()
+                    telefone_respondente.tipo_resposta = 'rejeitado'
+                    telefone_respondente.validacao_pendente = False
+                    telefone_respondente.whatsapp_valido = True
 
-Se mudar de ideia ou tiver alguma dúvida, pode entrar em contato conosco.
+                db.session.commit()
 
-_Hospital Universitário Walter Cantídio_""")
+                ws.enviar(numero, """Entendemos sua decisão.
+
+Para nos ajudar a melhorar, poderia informar o *motivo*?
+
+1️⃣ Já realizei em outro hospital
+2️⃣ Problemas de saúde / Não tenho condições
+3️⃣ Não quero mais a cirurgia
+4️⃣ Outro motivo
+
+_(Responda com o número ou descreva o motivo)_""")
 
             elif verificar_resposta_em_lista(texto_up, RESPOSTAS_DESCONHECO):
-                # Salvar resposta "desconheço" no telefone específico
+                c.resposta = texto
+                c.data_resposta = datetime.utcnow()
+
                 if telefone_respondente:
                     telefone_respondente.resposta = texto
                     telefone_respondente.data_resposta = datetime.utcnow()
                     telefone_respondente.tipo_resposta = 'desconheco'
                     telefone_respondente.validacao_pendente = False
-                    # Se o telefone respondeu, marcar como WhatsApp válido
                     telefone_respondente.whatsapp_valido = True
 
-                # Recalcular status final do contato baseado em todas as respostas
-                # "Desconheço" não é conflito - pode ter outro número confirmado
                 c.calcular_status_final()
 
-                # Se não tem nenhuma confirmação/rejeição de outros números, marca erro
                 if not c.confirmado and not c.rejeitado:
                     c.erro = "Desconhecido pelo portador"
 
@@ -7764,6 +7720,16 @@ Vamos atualizar nossos registros e remover seu contato da nossa lista.
 Desculpe pelo transtorno.
 
 _Hospital Universitário Walter Cantídio_""")
+
+            else:
+                # Resposta inválida — orienta o paciente
+                ws.enviar(numero, """⚠️ Não entendi sua resposta.
+
+Por favor, responda com:
+
+*1* — Tenho interesse ✅
+*2* — Não tenho mais interesse ❌
+*3* — Não sou essa pessoa 🔄""")
                 
         elif c.status == 'aguardando_nascimento':
             # Validação de data de nascimento removida - finalizar direto com base na intenção gravada
@@ -7772,6 +7738,10 @@ _Hospital Universitário Walter Cantídio_""")
                 if t.contato_id == c.id and t.validacao_pendente:
                     telefone_validando = t
                     break
+
+            # Fallback: se nenhum tem validacao_pendente, usar o primeiro telefone do contato
+            if not telefone_validando:
+                telefone_validando = next((t for t in telefones if t.contato_id == c.id), None)
 
             if telefone_validando:
                 telefone_validando.validacao_pendente = False
@@ -7812,28 +7782,62 @@ _Hospital Universitário Walter Cantídio_"""
 
             ws.enviar(numero, msg_final)
 
+        elif c.status == 'aguardando_motivo_rejeicao':
+            # Processar motivo de rejeição — qualquer resposta finaliza o fluxo
+            MOTIVOS_REJEICAO = {
+                '1': 'Já realizei em outro hospital',
+                '2': 'Problemas de saúde / Não tenho condições',
+                '3': 'Não quero mais a cirurgia',
+                '4': 'Outro motivo',
+            }
+            motivo = MOTIVOS_REJEICAO.get(texto_up.strip(), texto[:200] if texto.strip() else 'Não informado')
+            c.erro = f"Motivo rejeição: {motivo}"
+            c.calcular_status_final()
+            db.session.commit()
+            c.campanha.atualizar_stats()
+            db.session.commit()
+
+            ws.enviar(numero, """✅ *Registro Atualizado*
+
+Obrigado por sua resposta.
+
+Registramos que você não tem mais interesse no procedimento. Seus dados serão atualizados em nosso sistema.
+
+Se mudar de ideia ou tiver alguma dúvida, pode entrar em contato conosco.
+
+_Hospital Universitário Walter Cantídio_""")
+
         elif c.status == 'concluido':
             # Se o usuario mandar mensagem depois de concluido, reforcar o status uma única vez
             # (FAQ já foi verificado no início do webhook)
-            # Verificar se já enviou resposta de "concluído" nas últimas 24h para evitar spam
+            # Cooldown de 24h POR NÚMERO para evitar spam e bloqueio no WhatsApp
             um_dia_atras = datetime.utcnow() - timedelta(hours=24)
             msg_concluido_recente = LogMsg.query.filter(
                 LogMsg.contato_id == c.id,
                 LogMsg.direcao == 'enviada',
+                LogMsg.telefone == numero,
                 LogMsg.data >= um_dia_atras
             ).first()
 
             if not msg_concluido_recente:
-                if c.confirmado:
-                    msg_concluido = "✅ Você já confirmou seu interesse. Obrigado!"
-                elif c.rejeitado:
-                    msg_concluido = "✅ Você já informou que não tem interesse. Obrigado!"
+                # Verificar se este número foi o que respondeu ou se é outro número do mesmo contato
+                tel_respondente = next((t for t in telefones if t.contato_id == c.id), None)
+                este_numero_respondeu = tel_respondente and tel_respondente.tipo_resposta is not None
+
+                if este_numero_respondeu:
+                    if c.confirmado:
+                        msg_concluido = "✅ Você já confirmou seu interesse. Obrigado!"
+                    elif c.rejeitado:
+                        msg_concluido = "✅ Você já informou que não tem interesse. Obrigado!"
+                    else:
+                        msg_concluido = "✅ Seu atendimento já foi concluído. Obrigado!"
                 else:
-                    msg_concluido = "✅ Seu atendimento já foi concluído. Obrigado!"
+                    # Outro número do mesmo contato tentando responder após já concluído
+                    msg_concluido = "✅ Este atendimento já foi respondido em outro número. Obrigado!"
 
                 ws.enviar(numero, msg_concluido)
 
-                # Registrar mensagem enviada para evitar spam nas próximas 24h
+                # Registrar mensagem enviada para evitar spam nas próximas 24h (por número)
                 log_enviado = LogMsg(
                     campanha_id=c.campanha_id,
                     contato_id=c.id,
@@ -7844,9 +7848,9 @@ _Hospital Universitário Walter Cantídio_"""
                 )
                 db.session.add(log_enviado)
                 db.session.commit()
-                logger.info(f"Resposta de concluído enviada para {c.nome}")
+                logger.info(f"Resposta de concluído enviada para {c.nome} ({numero})")
             else:
-                logger.info(f"Mensagem de {c.nome} ignorada - resposta de concluído já enviada nas últimas 24h")
+                logger.info(f"Mensagem de {c.nome} ({numero}) ignorada - resposta já enviada nas últimas 24h")
 
         return jsonify({'status': 'ok'}), 200
 

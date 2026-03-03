@@ -6146,24 +6146,29 @@ def admin_exportar_fila():
         else:
             status = 'AGUARDANDO'
 
+        # Dados de envio derivados dos telefones
+        tel_enviado = next((t for t in c.telefones if t.enviado), None)
+        data_envio = tel_enviado.data_envio if tel_enviado else None
+        data_confirmacao = c.data_resposta if c.confirmado else None
+
         row_data = [
             c.id,
             c.campanha.nome if c.campanha else '',
             c.campanha.usuario.nome if c.campanha and c.campanha.usuario else '',
             c.nome,
             c.data_nascimento.strftime('%d/%m/%Y') if c.data_nascimento else '',
-            c.telefones or '',
+            c.telefones_str(),
             c.procedimento or '',
             status,
-            'Sim' if c.enviado else 'Não',
-            c.data_envio.strftime('%d/%m/%Y %H:%M') if c.data_envio else '',
+            'Sim' if tel_enviado else 'Não',
+            data_envio.strftime('%d/%m/%Y %H:%M') if data_envio else '',
             'Sim' if c.confirmado else 'Não',
-            c.data_confirmacao.strftime('%d/%m/%Y %H:%M') if c.data_confirmacao else '',
+            data_confirmacao.strftime('%d/%m/%Y %H:%M') if data_confirmacao else '',
             'Sim' if c.rejeitado else 'Não',
             c.data_rejeicao.strftime('%d/%m/%Y %H:%M') if c.data_rejeicao else '',
             c.resposta or '',
             c.erro or '',
-            c.criado_em.strftime('%d/%m/%Y %H:%M') if c.criado_em else ''
+            c.data_criacao.strftime('%d/%m/%Y %H:%M') if c.data_criacao else ''
         ]
 
         for col, value in enumerate(row_data, 1):

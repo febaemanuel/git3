@@ -1624,7 +1624,7 @@ def retry_fila_sem_resposta():
             elif contato.tentativas_contato >= 2 and contato.data_ultima_tentativa:
                 horas_desde_retry2 = (agora - contato.data_ultima_tentativa).total_seconds() / 3600
 
-                if horas_desde_retry2 >= 1:
+                if horas_desde_retry2 >= 24:
                     msg = formatar_mensagem_fila_sem_resposta(contato)
 
                     ok, result = ws.enviar(telefone_envio, msg)

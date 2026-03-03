@@ -419,7 +419,11 @@ class Contato(db.Model):
 
     erro = db.Column(db.Text)
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
+    # Controle de tentativas de recontato (retry automático)
+    tentativas_contato = db.Column(db.Integer, default=0)
+    data_ultima_tentativa = db.Column(db.DateTime)
+
     telefones = db.relationship('Telefone', backref='contato', lazy='dynamic', cascade='all, delete-orphan')
 
     def telefones_str(self):
@@ -1730,6 +1734,67 @@ Sua consulta foi *CANCELADA* por falta de resposta.
 Caso ainda tenha interesse, procure o posto de saúde para reagendar.
 
 _Hospital Universitário Walter Cantídio_"""
+
+
+def formatar_mensagem_fila_retry1(contato):
+    """
+    MSG RETRY 1 (FILA): Primeira tentativa de recontato (24h após envio inicial)
+    """
+    saudacao = obter_saudacao_dinamica()
+    procedimento = contato.procedimento_normalizado or contato.procedimento or 'o procedimento'
+
+    return f"""{saudacao}
+
+📋 Ainda não recebemos sua confirmação para o procedimento de *{contato.nome}*.
+
+*Procedimento:* {procedimento}
+
+⚠️ *IMPORTANTE:* Caso não haja confirmação em até *2 dias*, sua vaga será disponibilizada para outra pessoa!
+
+Você ainda tem interesse em realizar esta cirurgia?
+
+1️⃣ *SIM* - Tenho interesse
+2️⃣ *NÃO* - Não tenho mais interesse
+3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
+
+
+def formatar_mensagem_fila_retry2(contato):
+    """
+    MSG RETRY 2 (FILA): Segunda e última tentativa de recontato (48h após retry 1)
+    """
+    saudacao = obter_saudacao_dinamica()
+    procedimento = contato.procedimento_normalizado or contato.procedimento or 'o procedimento'
+
+    return f"""{saudacao}
+
+🚨 *ÚLTIMA TENTATIVA DE CONTATO*
+
+Esta é nossa *ÚLTIMA TENTATIVA* antes de disponibilizarmos sua vaga para o procedimento de *{contato.nome}*.
+
+*Procedimento:* {procedimento}
+
+❌ *Se não recebermos sua resposta, sua vaga será disponibilizada automaticamente.*
+
+Você ainda tem interesse em realizar esta cirurgia?
+
+1️⃣ *SIM* - Tenho interesse
+2️⃣ *NÃO* - Não tenho mais interesse
+3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
+
+
+def formatar_mensagem_fila_sem_resposta(contato):
+    """
+    MSG SEM RESPOSTA (FILA): Encerramento por falta de resposta após 3 tentativas
+    """
+    procedimento = contato.procedimento_normalizado or contato.procedimento or 'o procedimento'
+
+    return f"""❌ *Olá, {contato.nome}.*
+
+Não recebemos sua confirmação para o procedimento de *{procedimento}*.
+
+Sua vaga foi *disponibilizada* por falta de resposta.
+
+Caso ainda tenha interesse, entre em contato conosco pelo telefone (85) 3366-8000."""
 
 
 # =============================================================================

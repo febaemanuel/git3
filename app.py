@@ -416,6 +416,8 @@ class Contato(db.Model):
     rejeitado = db.Column(db.Boolean, default=False)
     resposta = db.Column(db.Text)
     data_resposta = db.Column(db.DateTime)
+    motivo_rejeicao = db.Column(db.Text)
+    data_rejeicao = db.Column(db.DateTime)
 
     erro = db.Column(db.Text)
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
@@ -593,6 +595,8 @@ class Telefone(db.Model):
     data_resposta = db.Column(db.DateTime)
     tipo_resposta = db.Column(db.String(20))  # 'confirmado', 'rejeitado', 'desconheco', null
     validacao_pendente = db.Column(db.Boolean, default=False)  # waiting for birth date validation
+
+    nao_pertence = db.Column(db.Boolean, default=False)  # Número não pertence ao paciente (DESCONHEÇO)
 
     prioridade = db.Column(db.Integer, default=1) # 1 = principal
 
@@ -8010,21 +8014,48 @@ _(Responda com o número ou descreva o motivo)_""")
                     telefone_respondente.resposta = texto
                     telefone_respondente.data_resposta = datetime.utcnow()
                     telefone_respondente.tipo_resposta = 'desconheco'
+                    telefone_respondente.nao_pertence = True
                     telefone_respondente.validacao_pendente = False
                     telefone_respondente.whatsapp_valido = True
 
-                c.calcular_status_final()
-
-                if not c.confirmado and not c.rejeitado:
-                    c.erro = "Desconhecido pelo portador"
-
-                db.session.commit()
-                c.campanha.atualizar_stats()
                 db.session.commit()
 
-                ws.enviar(numero, """✅ *Obrigado pela informação!*
+                # Verificar se TODOS os telefones válidos (enviados) foram marcados como nao_pertence
+                telefones_validos = [t for t in c.telefones if t.enviado]
+                todos_nao_pertencem = (
+                    len(telefones_validos) > 0 and
+                    all(t.nao_pertence for t in telefones_validos)
+                )
 
-Vamos atualizar nossos registros e remover seu contato da nossa lista.
+                if todos_nao_pertencem:
+                    # TODOS os telefones responderam DESCONHEÇO → rejeitar contato
+                    c.rejeitado = True
+                    c.motivo_rejeicao = 'Paciente não localizado - todos os telefones responderam DESCONHEÇO'
+                    c.data_rejeicao = datetime.utcnow()
+                    c.status = 'concluido'
+                    db.session.commit()
+                    c.campanha.atualizar_stats()
+                    db.session.commit()
+
+                    logger.info(f"Contato {c.id} rejeitado - TODOS os telefones responderam DESCONHEÇO (paciente não localizado)")
+
+                    ws.enviar(numero, """✅ *Obrigado pela informação!*
+
+Vamos atualizar nossos registros.
+
+Desculpe pelo transtorno.
+
+_Hospital Universitário Walter Cantídio_""")
+                else:
+                    # Ainda há outros telefones que podem responder
+                    c.calcular_status_final()
+                    db.session.commit()
+
+                    logger.info(f"Contato {c.id}: telefone {numero} marcado como não pertence ao paciente. Aguardando outros telefones.")
+
+                    ws.enviar(numero, """✅ *Obrigado pela informação!*
+
+Este número foi marcado como não pertencente ao paciente.
 
 Desculpe pelo transtorno.
 
@@ -8100,11 +8131,14 @@ _Hospital Universitário Walter Cantídio_"""
                 '4': 'Outro motivo',
             }
             motivo = MOTIVOS_REJEICAO.get(texto_up.strip(), texto[:200] if texto.strip() else 'Não informado')
-            c.erro = f"Motivo rejeição: {motivo}"
+            c.motivo_rejeicao = motivo
+            c.data_rejeicao = datetime.utcnow()
             c.calcular_status_final()
             db.session.commit()
             c.campanha.atualizar_stats()
             db.session.commit()
+
+            logger.info(f"Contato {c.id} rejeitado. Motivo: {motivo}")
 
             ws.enviar(numero, """✅ *Registro Atualizado*
 

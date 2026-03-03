@@ -1,5 +1,5 @@
 """
-Script de migração para adicionar campos de retry tracking na tabela contatos (fila cirúrgica).
+Script de migração para adicionar campos de retry tracking e novos campos na fila cirúrgica.
 Execute com: docker exec -it busca-ativa-web python migrate_contato_retry_fields.py
 """
 
@@ -9,40 +9,55 @@ from sqlalchemy import text
 def migrate():
     with app.app_context():
         try:
-            print("🔄 Iniciando migração dos campos de retry da fila...")
+            print("🔄 Iniciando migração dos campos da fila cirúrgica...")
 
             with db.engine.connect() as conn:
-                # Verificar se as colunas já existem
+
+                # ── TABELA contatos ──────────────────────────────────────────
                 result = conn.execute(text("""
                     SELECT column_name
                     FROM information_schema.columns
                     WHERE table_name='contatos'
-                    AND column_name IN ('tentativas_contato', 'data_ultima_tentativa')
+                    AND column_name IN (
+                        'tentativas_contato', 'data_ultima_tentativa',
+                        'motivo_rejeicao', 'data_rejeicao'
+                    )
                 """))
+                existing_contatos = [row[0] for row in result]
 
-                existing_columns = [row[0] for row in result]
+                campos_contatos = [
+                    ('tentativas_contato',   'INTEGER DEFAULT 0'),
+                    ('data_ultima_tentativa', 'TIMESTAMP'),
+                    ('motivo_rejeicao',       'TEXT'),
+                    ('data_rejeicao',         'TIMESTAMP'),
+                ]
+                for col, tipo in campos_contatos:
+                    if col not in existing_contatos:
+                        print(f"➕ contatos: adicionando '{col}'...")
+                        conn.execute(text(f"ALTER TABLE contatos ADD COLUMN {col} {tipo}"))
+                        conn.commit()
+                        print(f"   ✅ '{col}' adicionada")
+                    else:
+                        print(f"   ⏭️  contatos.{col} já existe")
 
-                # Adicionar tentativas_contato se não existir
-                if 'tentativas_contato' not in existing_columns:
-                    print("➕ Adicionando coluna 'tentativas_contato'...")
+                # ── TABELA telefones ─────────────────────────────────────────
+                result = conn.execute(text("""
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_name='telefones'
+                    AND column_name IN ('nao_pertence')
+                """))
+                existing_telefones = [row[0] for row in result]
+
+                if 'nao_pertence' not in existing_telefones:
+                    print("➕ telefones: adicionando 'nao_pertence'...")
                     conn.execute(text(
-                        "ALTER TABLE contatos ADD COLUMN tentativas_contato INTEGER DEFAULT 0"
+                        "ALTER TABLE telefones ADD COLUMN nao_pertence BOOLEAN DEFAULT FALSE"
                     ))
                     conn.commit()
-                    print("   ✅ Coluna 'tentativas_contato' adicionada")
+                    print("   ✅ 'nao_pertence' adicionada")
                 else:
-                    print("   ⏭️  Coluna 'tentativas_contato' já existe")
-
-                # Adicionar data_ultima_tentativa se não existir
-                if 'data_ultima_tentativa' not in existing_columns:
-                    print("➕ Adicionando coluna 'data_ultima_tentativa'...")
-                    conn.execute(text(
-                        "ALTER TABLE contatos ADD COLUMN data_ultima_tentativa TIMESTAMP"
-                    ))
-                    conn.commit()
-                    print("   ✅ Coluna 'data_ultima_tentativa' adicionada")
-                else:
-                    print("   ⏭️  Coluna 'data_ultima_tentativa' já existe")
+                    print("   ⏭️  telefones.nao_pertence já existe")
 
             print("\n✅ Migração concluída com sucesso!")
             print("\n📊 Próximos passos:")

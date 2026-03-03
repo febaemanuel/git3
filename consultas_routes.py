@@ -383,7 +383,8 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
         if campanha.criador_id != current_user.id:
             return jsonify({'erro': 'Acesso negado'}), 403
 
-        from app import buscar_comprovante_antecipado
+        from app import buscar_comprovante_antecipado, ComprovanteAntecipado
+        from sqlalchemy import update as sa_update
         enviados = 0
         erros = []
 
@@ -408,8 +409,16 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
                 erros.append(f'{consulta.paciente}: sem telefone')
                 continue
             try:
-                comp.usado = True
-                comp.consulta_id = consulta.id
+                # Atomic update para evitar race condition (mesmo padrão do webhook)
+                rows = db.session.execute(
+                    sa_update(ComprovanteAntecipado)
+                    .where(ComprovanteAntecipado.id == comp.id, ComprovanteAntecipado.usado == False)
+                    .values(usado=True, consulta_id=consulta.id)
+                ).rowcount
+                db.session.commit()
+                if rows == 0:
+                    erros.append(f'{consulta.paciente}: comprovante já utilizado')
+                    continue
                 consulta.comprovante_path = comp.filepath
                 consulta.comprovante_nome = comp.filename
                 consulta.status = 'CONFIRMADO'

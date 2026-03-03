@@ -6085,19 +6085,19 @@ def admin_exportar_fila():
     if data_inicio:
         try:
             dt_inicio = datetime.strptime(data_inicio, '%Y-%m-%d')
-            query = query.filter(Contato.criado_em >= dt_inicio)
+            query = query.filter(Contato.data_criacao >= dt_inicio)
         except:
             pass
 
     if data_fim:
         try:
             dt_fim = datetime.strptime(data_fim, '%Y-%m-%d') + timedelta(days=1)
-            query = query.filter(Contato.criado_em < dt_fim)
+            query = query.filter(Contato.data_criacao < dt_fim)
         except:
             pass
 
     # Ordenar
-    contatos = query.order_by(Contato.criado_em.desc()).all()
+    contatos = query.order_by(Contato.data_criacao.desc()).all()
 
     # Criar workbook Excel
     wb = openpyxl.Workbook()

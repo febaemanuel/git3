@@ -285,7 +285,7 @@ class Campanha(db.Model):
         
         # Contar pessoas enviadas (todos os status que indicam que a pessoa foi contactada)
         self.total_enviados = self.contatos.filter(
-            Contato.status.in_(['enviado', 'aguardando_nascimento', 'concluido'])
+            Contato.status.in_(['enviado', 'aguardando_nascimento', 'aguardando_motivo_rejeicao', 'concluido'])
         ).count()
         self.total_confirmados = self.contatos.filter_by(confirmado=True).count()
         self.total_rejeitados = self.contatos.filter_by(rejeitado=True).count()
@@ -416,10 +416,16 @@ class Contato(db.Model):
     rejeitado = db.Column(db.Boolean, default=False)
     resposta = db.Column(db.Text)
     data_resposta = db.Column(db.DateTime)
+    motivo_rejeicao = db.Column(db.Text)
+    data_rejeicao = db.Column(db.DateTime)
 
     erro = db.Column(db.Text)
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
-    
+
+    # Controle de tentativas de recontato (retry automático)
+    tentativas_contato = db.Column(db.Integer, default=0)
+    data_ultima_tentativa = db.Column(db.DateTime)
+
     telefones = db.relationship('Telefone', backref='contato', lazy='dynamic', cascade='all, delete-orphan')
 
     def telefones_str(self):
@@ -452,6 +458,8 @@ class Contato(db.Model):
         if self.rejeitado: return 'REJEITADO'
         if self.status == 'enviado': return 'Aguardando resposta'
         if self.status == 'pronto_envio': return 'Pronto para envio'
+        if self.status == 'aguardando_motivo_rejeicao': return 'Aguardando motivo'
+        if self.status == 'sem_resposta': return 'Sem resposta'
         return self.status
 
     def status_badge(self):
@@ -460,6 +468,8 @@ class Contato(db.Model):
         if self.rejeitado: return 'bg-warning text-dark'
         if self.status == 'enviado': return 'bg-info'
         if self.status == 'pronto_envio': return 'bg-primary'
+        if self.status == 'aguardando_motivo_rejeicao': return 'bg-warning text-dark'
+        if self.status == 'sem_resposta': return 'bg-secondary'
         return 'bg-light text-dark'
 
     def calcular_status_final(self):
@@ -589,6 +599,8 @@ class Telefone(db.Model):
     data_resposta = db.Column(db.DateTime)
     tipo_resposta = db.Column(db.String(20))  # 'confirmado', 'rejeitado', 'desconheco', null
     validacao_pendente = db.Column(db.Boolean, default=False)  # waiting for birth date validation
+
+    nao_pertence = db.Column(db.Boolean, default=False)  # Número não pertence ao paciente (DESCONHEÇO)
 
     prioridade = db.Column(db.Integer, default=1) # 1 = principal
 
@@ -1078,6 +1090,44 @@ class Paciente(db.Model):
     
     # Relationships
     usuario = db.relationship('Usuario', backref='pacientes')
+
+
+class ComprovanteAntecipado(db.Model):
+    """Comprovante pré-carregado na campanha para envio automático quando paciente confirmar"""
+    __tablename__ = 'comprovantes_antecipados'
+    id = db.Column(db.Integer, primary_key=True)
+    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas_consultas.id', ondelete='CASCADE'), nullable=False)
+    nome_paciente = db.Column(db.String(200), nullable=False)   # extraído do nome do arquivo
+    filename = db.Column(db.String(255), nullable=False)        # nome do arquivo no disco
+    filepath = db.Column(db.String(500), nullable=False)        # caminho completo no servidor
+    usado = db.Column(db.Boolean, default=False)                # True após ser enviado
+    consulta_id = db.Column(db.Integer, db.ForeignKey('agendamentos_consultas.id', ondelete='SET NULL'), nullable=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=True)
+    data_upload = db.Column(db.DateTime, default=datetime.utcnow)
+
+    campanha = db.relationship('CampanhaConsulta', backref='comprovantes_antecipados')
+    consulta = db.relationship('AgendamentoConsulta', backref='comprovante_antecipado', uselist=False)
+    usuario = db.relationship('Usuario', backref='comprovantes_antecipados_upload')
+
+
+def normalizar_nome_paciente(nome):
+    """Normaliza nome de paciente para matching: remove acentos, lowercase, colapsa espaços."""
+    import unicodedata
+    nome = unicodedata.normalize('NFKD', nome or '')
+    nome = nome.encode('ascii', 'ignore').decode('ascii')
+    return ' '.join(nome.lower().split())
+
+
+def buscar_comprovante_antecipado(campanha_id, nome_paciente):
+    """Busca comprovante antecipado não usado com nome matching na campanha."""
+    nome_normalizado = normalizar_nome_paciente(nome_paciente)
+    candidatos = ComprovanteAntecipado.query.filter_by(
+        campanha_id=campanha_id, usado=False
+    ).all()
+    for c in candidatos:
+        if normalizar_nome_paciente(c.nome_paciente) == nome_normalizado:
+            return c
+    return None
 
 
 class HistoricoConsulta(db.Model):
@@ -1692,6 +1742,67 @@ Sua consulta foi *CANCELADA* por falta de resposta.
 Caso ainda tenha interesse, procure o posto de saúde para reagendar.
 
 _Hospital Universitário Walter Cantídio_"""
+
+
+def formatar_mensagem_fila_retry1(contato):
+    """
+    MSG RETRY 1 (FILA): Primeira tentativa de recontato (24h após envio inicial)
+    """
+    saudacao = obter_saudacao_dinamica()
+    procedimento = contato.procedimento_normalizado or contato.procedimento or 'o procedimento'
+
+    return f"""{saudacao}
+
+📋 Ainda não recebemos sua confirmação para o procedimento de *{contato.nome}*.
+
+*Procedimento:* {procedimento}
+
+⚠️ *IMPORTANTE:* Caso não haja confirmação em até *2 dias*, sua vaga será disponibilizada para outra pessoa!
+
+Você ainda tem interesse em realizar esta cirurgia?
+
+1️⃣ *SIM* - Tenho interesse
+2️⃣ *NÃO* - Não tenho mais interesse
+3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
+
+
+def formatar_mensagem_fila_retry2(contato):
+    """
+    MSG RETRY 2 (FILA): Segunda e última tentativa de recontato (48h após retry 1)
+    """
+    saudacao = obter_saudacao_dinamica()
+    procedimento = contato.procedimento_normalizado or contato.procedimento or 'o procedimento'
+
+    return f"""{saudacao}
+
+🚨 *ÚLTIMA TENTATIVA DE CONTATO*
+
+Esta é nossa *ÚLTIMA TENTATIVA* antes de disponibilizarmos sua vaga para o procedimento de *{contato.nome}*.
+
+*Procedimento:* {procedimento}
+
+❌ *Se não recebermos sua resposta, sua vaga será disponibilizada automaticamente.*
+
+Você ainda tem interesse em realizar esta cirurgia?
+
+1️⃣ *SIM* - Tenho interesse
+2️⃣ *NÃO* - Não tenho mais interesse
+3️⃣ *DESCONHEÇO* - Não sou essa pessoa"""
+
+
+def formatar_mensagem_fila_sem_resposta(contato):
+    """
+    MSG SEM RESPOSTA (FILA): Encerramento por falta de resposta após 3 tentativas
+    """
+    procedimento = contato.procedimento_normalizado or contato.procedimento or 'o procedimento'
+
+    return f"""❌ *Olá, {contato.nome}.*
+
+Não recebemos sua confirmação para o procedimento de *{procedimento}*.
+
+Sua vaga foi *disponibilizada* por falta de resposta.
+
+Caso ainda tenha interesse, entre em contato conosco pelo telefone (85) 3366-8000."""
 
 
 # =============================================================================
@@ -4772,7 +4883,7 @@ def exportar_campanha(id):
             'Telefones': c.telefones_str(),
             'Procedimento': c.procedimento,
             'Status': c.status_texto(),
-            'Enviado': 'Sim' if c.status in ['enviado', 'aguardando_nascimento', 'concluido'] or c.confirmado or c.rejeitado else 'Nao',
+            'Enviado': 'Sim' if c.status in ['enviado', 'aguardando_nascimento', 'aguardando_motivo_rejeicao', 'concluido'] or c.confirmado or c.rejeitado else 'Nao',
             'Data Envio': max([t.data_envio for t in c.telefones if t.data_envio], default=None).strftime('%d/%m/%Y %H:%M') if any(t.data_envio for t in c.telefones) else '',
             'Confirmado': 'SIM' if c.confirmado else '',
             'Rejeitado': 'SIM' if c.rejeitado else '',
@@ -5479,6 +5590,62 @@ def admin_dashboard():
         rejeitados_data.append(rejeitados_dict.get(dia, 0))
 
     # =====================================================================
+    # DADOS PARA GRÁFICOS - MODO FILA (últimos 30 dias)
+    # =====================================================================
+    fila_enviados_por_dia = db.session.query(
+        func.date(LogMsg.data).label('dia'),
+        func.count(LogMsg.id).label('total')
+    ).filter(
+        LogMsg.data >= data_inicio,
+        LogMsg.direcao == 'enviada'
+    ).group_by(func.date(LogMsg.data)
+    ).order_by(func.date(LogMsg.data)
+    ).all()
+
+    fila_confirmados_por_dia = db.session.query(
+        func.date(Contato.data_resposta).label('dia'),
+        func.count(Contato.id).label('total')
+    ).filter(
+        Contato.data_resposta >= data_inicio,
+        Contato.confirmado == True
+    ).group_by(func.date(Contato.data_resposta)
+    ).order_by(func.date(Contato.data_resposta)
+    ).all()
+
+    fila_rejeitados_por_dia = db.session.query(
+        func.date(Contato.data_resposta).label('dia'),
+        func.count(Contato.id).label('total')
+    ).filter(
+        Contato.data_resposta >= data_inicio,
+        Contato.rejeitado == True
+    ).group_by(func.date(Contato.data_resposta)
+    ).order_by(func.date(Contato.data_resposta)
+    ).all()
+
+    fila_dias_labels = [(data_inicio + timedelta(days=i)).strftime('%d/%m') for i in range(31)]
+
+    fila_env_dict = {str(r.dia): r.total for r in fila_enviados_por_dia}
+    fila_conf_dict = {str(r.dia): r.total for r in fila_confirmados_por_dia}
+    fila_rej_dict = {str(r.dia): r.total for r in fila_rejeitados_por_dia}
+
+    fila_enviados_data = []
+    fila_confirmados_data = []
+    fila_rejeitados_data = []
+    for i in range(31):
+        dia = (data_inicio + timedelta(days=i)).strftime('%Y-%m-%d')
+        fila_enviados_data.append(fila_env_dict.get(dia, 0))
+        fila_confirmados_data.append(fila_conf_dict.get(dia, 0))
+        fila_rejeitados_data.append(fila_rej_dict.get(dia, 0))
+
+    # Distribuição de status atual (Fila)
+    fila_status_counts = db.session.query(
+        Contato.status,
+        func.count(Contato.id).label('total')
+    ).group_by(Contato.status).all()
+    fila_status_labels = [r.status or 'pendente' for r in fila_status_counts]
+    fila_status_data = [r.total for r in fila_status_counts]
+
+    # =====================================================================
     # ESPECIALIDADES MAIS FREQUENTES
     # =====================================================================
     especialidades_top = db.session.query(
@@ -5614,11 +5781,19 @@ def admin_dashboard():
         comentarios_recentes=comentarios_recentes,
         total_comentarios=total_comentarios,
 
-        # Dados para gráficos
+        # Dados para gráficos - Modo Consulta
         dias_labels=dias_labels,
         msg1_data=msg1_data,
         comprovantes_data=comprovantes_data,
         rejeitados_data=rejeitados_data,
+
+        # Dados para gráficos - Modo Fila
+        fila_dias_labels=fila_dias_labels,
+        fila_enviados_data=fila_enviados_data,
+        fila_confirmados_data=fila_confirmados_data,
+        fila_rejeitados_data=fila_rejeitados_data,
+        fila_status_labels=fila_status_labels,
+        fila_status_data=fila_status_data,
 
         # Especialidades
         especialidades_top=especialidades_top,
@@ -5914,19 +6089,19 @@ def admin_exportar_fila():
     if data_inicio:
         try:
             dt_inicio = datetime.strptime(data_inicio, '%Y-%m-%d')
-            query = query.filter(Contato.criado_em >= dt_inicio)
+            query = query.filter(Contato.data_criacao >= dt_inicio)
         except:
             pass
 
     if data_fim:
         try:
             dt_fim = datetime.strptime(data_fim, '%Y-%m-%d') + timedelta(days=1)
-            query = query.filter(Contato.criado_em < dt_fim)
+            query = query.filter(Contato.data_criacao < dt_fim)
         except:
             pass
 
     # Ordenar
-    contatos = query.order_by(Contato.criado_em.desc()).all()
+    contatos = query.order_by(Contato.data_criacao.desc()).all()
 
     # Criar workbook Excel
     wb = openpyxl.Workbook()
@@ -5975,24 +6150,29 @@ def admin_exportar_fila():
         else:
             status = 'AGUARDANDO'
 
+        # Dados de envio derivados dos telefones
+        tel_enviado = next((t for t in c.telefones if t.enviado), None)
+        data_envio = tel_enviado.data_envio if tel_enviado else None
+        data_confirmacao = c.data_resposta if c.confirmado else None
+
         row_data = [
             c.id,
             c.campanha.nome if c.campanha else '',
             c.campanha.usuario.nome if c.campanha and c.campanha.usuario else '',
             c.nome,
             c.data_nascimento.strftime('%d/%m/%Y') if c.data_nascimento else '',
-            c.telefones or '',
+            c.telefones_str(),
             c.procedimento or '',
             status,
-            'Sim' if c.enviado else 'Não',
-            c.data_envio.strftime('%d/%m/%Y %H:%M') if c.data_envio else '',
+            'Sim' if tel_enviado else 'Não',
+            data_envio.strftime('%d/%m/%Y %H:%M') if data_envio else '',
             'Sim' if c.confirmado else 'Não',
-            c.data_confirmacao.strftime('%d/%m/%Y %H:%M') if c.data_confirmacao else '',
+            data_confirmacao.strftime('%d/%m/%Y %H:%M') if data_confirmacao else '',
             'Sim' if c.rejeitado else 'Não',
             c.data_rejeicao.strftime('%d/%m/%Y %H:%M') if c.data_rejeicao else '',
             c.resposta or '',
             c.erro or '',
-            c.criado_em.strftime('%d/%m/%Y %H:%M') if c.criado_em else ''
+            c.data_criacao.strftime('%d/%m/%Y %H:%M') if c.data_criacao else ''
         ]
 
         for col, value in enumerate(row_data, 1):
@@ -7126,7 +7306,45 @@ def webhook():
                             consulta.campanha.atualizar_stats()
                             db.session.commit()
 
-                            enviar_e_registrar_consulta(ws, numero_resposta, "✅ Consulta confirmada! Aguarde o envio do comprovante.", consulta)
+                            # [COMPROVANTE ANTECIPADO] Verificar se existe arquivo pré-carregado para este paciente
+                            comp_ant = buscar_comprovante_antecipado(consulta.campanha_id, consulta.paciente)
+                            if comp_ant:
+                                try:
+                                    # UPDATE atômico para evitar race condition entre webhooks simultâneos
+                                    from sqlalchemy import update as sa_update
+                                    rows = db.session.execute(
+                                        sa_update(ComprovanteAntecipado)
+                                        .where(ComprovanteAntecipado.id == comp_ant.id, ComprovanteAntecipado.usado == False)
+                                        .values(usado=True, consulta_id=consulta.id)
+                                    ).rowcount
+                                    db.session.commit()
+                                    if rows == 0:
+                                        # Outro webhook já reivindicou este comprovante — fluxo normal
+                                        enviar_e_registrar_consulta(ws, numero_resposta, "✅ Consulta confirmada! Aguarde o envio do comprovante.", consulta)
+                                    else:
+                                        db.session.refresh(comp_ant)
+                                        consulta.comprovante_path = comp_ant.filepath
+                                        consulta.comprovante_nome = comp_ant.filename
+                                        consulta.status = 'CONFIRMADO'
+                                        db.session.commit()
+                                        consulta.campanha.atualizar_stats()
+                                        db.session.commit()
+                                        send_fn = app.extensions.get('enviar_comprovante_background')
+                                        if send_fn:
+                                            base_url = request.host_url.rstrip('/')
+                                            t = threading.Thread(
+                                                target=send_fn,
+                                                args=(consulta.campanha.usuario_id, consulta.id, comp_ant.filepath, numero_resposta, base_url),
+                                                daemon=True
+                                            )
+                                            t.start()
+                                        enviar_e_registrar_consulta(ws, numero_resposta, "✅ Consulta confirmada! Seu comprovante está sendo enviado agora.", consulta)
+                                        logger.info(f"[AUTO] Comprovante antecipado enviado automaticamente para {consulta.paciente}")
+                                except Exception as e_ant:
+                                    logger.error(f"[AUTO] Erro ao processar comprovante antecipado para {consulta.paciente}: {e_ant}")
+                                    enviar_e_registrar_consulta(ws, numero_resposta, "✅ Consulta confirmada! Aguarde o envio do comprovante.", consulta)
+                            else:
+                                enviar_e_registrar_consulta(ws, numero_resposta, "✅ Consulta confirmada! Aguarde o envio do comprovante.", consulta)
                             logger.info(f"Consulta {consulta.id} confirmada por {consulta.paciente}")
 
                         # Notificar OUTROS telefones que a consulta já foi confirmada
@@ -7283,7 +7501,69 @@ _Hospital Universitário Walter Cantídio_""", consulta)
                         # Mensagem de confirmação com a nova data
                         nova_data = consulta.nova_data or consulta.data_aghu or 'data agendada'
                         nova_hora = consulta.nova_hora or ''
-                        msg_confirmacao = f"""✅ *Reagendamento confirmado!*
+
+                        # [COMPROVANTE ANTECIPADO] Verificar arquivo pré-carregado no reagendamento
+                        comp_ant_reag = buscar_comprovante_antecipado(consulta.campanha_id, consulta.paciente)
+                        if comp_ant_reag:
+                            try:
+                                # UPDATE atômico para evitar race condition
+                                from sqlalchemy import update as sa_update
+                                rows_reag = db.session.execute(
+                                    sa_update(ComprovanteAntecipado)
+                                    .where(ComprovanteAntecipado.id == comp_ant_reag.id, ComprovanteAntecipado.usado == False)
+                                    .values(usado=True, consulta_id=consulta.id)
+                                ).rowcount
+                                db.session.commit()
+                                if rows_reag > 0:
+                                    db.session.refresh(comp_ant_reag)
+                                    consulta.comprovante_path = comp_ant_reag.filepath
+                                    consulta.comprovante_nome = comp_ant_reag.filename
+                                    consulta.status = 'CONFIRMADO'
+                                    db.session.commit()
+                                    consulta.campanha.atualizar_stats()
+                                    db.session.commit()
+                                send_fn = app.extensions.get('enviar_comprovante_background')
+                                if rows_reag > 0 and send_fn:
+                                    base_url = request.host_url.rstrip('/')
+                                    t = threading.Thread(
+                                        target=send_fn,
+                                        args=(consulta.campanha.usuario_id, consulta.id, comp_ant_reag.filepath, numero_resposta, base_url),
+                                        daemon=True
+                                    )
+                                    t.start()
+                                    msg_confirmacao = f"""✅ *Reagendamento confirmado!*
+
+📅 Data: {nova_data}
+⏰ Horário: {nova_hora}
+👨‍⚕️ Especialidade: {consulta.especialidade}
+
+Seu comprovante está sendo enviado agora.
+
+_Hospital Universitário Walter Cantídio_"""
+                                    logger.info(f"[AUTO] Comprovante antecipado enviado (reagendamento) para {consulta.paciente}")
+                                else:
+                                    msg_confirmacao = f"""✅ *Reagendamento confirmado!*
+
+📅 Data: {nova_data}
+⏰ Horário: {nova_hora}
+👨‍⚕️ Especialidade: {consulta.especialidade}
+
+Aguarde o envio do comprovante.
+
+_Hospital Universitário Walter Cantídio_"""
+                            except Exception as e_ant:
+                                logger.error(f"[AUTO] Erro comprovante antecipado reagendamento {consulta.paciente}: {e_ant}")
+                                msg_confirmacao = f"""✅ *Reagendamento confirmado!*
+
+📅 Data: {nova_data}
+⏰ Horário: {nova_hora}
+👨‍⚕️ Especialidade: {consulta.especialidade}
+
+Aguarde o envio do comprovante.
+
+_Hospital Universitário Walter Cantídio_"""
+                        else:
+                            msg_confirmacao = f"""✅ *Reagendamento confirmado!*
 
 📅 Data: {nova_data}
 ⏰ Horário: {nova_hora}
@@ -7333,15 +7613,14 @@ _Hospital Universitário Walter Cantídio_"""
                     # PESQUISA DE SATISFAÇÃO - Processar se etapa_pesquisa ativa
                     # =========================================================
                     if consulta.status == 'CONFIRMADO' and consulta.etapa_pesquisa:
-                        
+
                         # ETAPA 1: NOTA (1-10)
                         if consulta.etapa_pesquisa == 'NOTA':
                             texto_limpo = texto_up.strip()
-                            
+
                             # Verificar se pulou
                             if texto_limpo in ['PULAR', 'NAO', 'NÃO', 'N', 'SKIP']:
                                 consulta.etapa_pesquisa = 'CONCLUIDA'
-                                # Salvar pesquisa como pulada
                                 pesquisa = PesquisaSatisfacao(
                                     consulta_id=consulta.id,
                                     usuario_id=consulta.usuario_id,
@@ -7353,12 +7632,10 @@ _Hospital Universitário Walter Cantídio_"""
                                 db.session.commit()
                                 enviar_e_registrar_consulta(ws, numero_resposta, "✅ Obrigado! Pesquisa finalizada.", consulta)
                                 return jsonify({'status': 'ok'}), 200
-                            
-                            # Tentar extrair nota
+
                             try:
                                 nota = int(texto_limpo.replace('.', '').replace(',', '')[:2])
                                 if 1 <= nota <= 10:
-                                    # Salvar nota temporariamente (criar pesquisa)
                                     pesquisa = PesquisaSatisfacao(
                                         consulta_id=consulta.id,
                                         usuario_id=consulta.usuario_id,
@@ -7369,8 +7646,6 @@ _Hospital Universitário Walter Cantídio_"""
                                     db.session.add(pesquisa)
                                     consulta.etapa_pesquisa = 'ATENDIMENTO'
                                     db.session.commit()
-                                    
-                                    # Próxima pergunta
                                     enviar_e_registrar_consulta(ws, numero_resposta, """A equipe foi atenciosa e o processo foi ágil?
 
 *1* - Sim ✅
@@ -7384,20 +7659,18 @@ _(ou "pular" para finalizar)_""", consulta)
                             except:
                                 enviar_e_registrar_consulta(ws, numero_resposta, "Por favor, digite um número de *1 a 10*:", consulta)
                                 return jsonify({'status': 'ok'}), 200
-                        
+
                         # ETAPA 2: ATENDIMENTO (Sim/Não)
                         elif consulta.etapa_pesquisa == 'ATENDIMENTO':
                             texto_limpo = texto_up.strip()
-                            
-                            # Buscar pesquisa existente
                             pesquisa = PesquisaSatisfacao.query.filter_by(consulta_id=consulta.id).first()
-                            
+
                             if texto_limpo in ['PULAR', 'NAO', 'N', 'SKIP', 'FINALIZAR']:
                                 consulta.etapa_pesquisa = 'CONCLUIDA'
                                 db.session.commit()
                                 enviar_e_registrar_consulta(ws, numero_resposta, "✅ Obrigado pela sua avaliação! Sua opinião é muito importante para nós.", consulta)
                                 return jsonify({'status': 'ok'}), 200
-                            
+
                             if texto_limpo in ['1', 'SIM', 'S', 'YES']:
                                 if pesquisa:
                                     pesquisa.equipe_atenciosa = True
@@ -7407,7 +7680,7 @@ _(ou "pular" para finalizar)_""", consulta)
 
 _(Digite sua mensagem ou "N" para finalizar)_""", consulta)
                                 return jsonify({'status': 'ok'}), 200
-                            
+
                             elif texto_limpo in ['2', 'NÃO', 'NAO']:
                                 if pesquisa:
                                     pesquisa.equipe_atenciosa = False
@@ -7417,36 +7690,33 @@ _(Digite sua mensagem ou "N" para finalizar)_""", consulta)
 
 _(Digite sua mensagem ou "N" para finalizar)_""", consulta)
                                 return jsonify({'status': 'ok'}), 200
-                            
+
                             else:
                                 enviar_e_registrar_consulta(ws, numero_resposta, "Por favor, responda *1* (Sim) ou *2* (Não):", consulta)
                                 return jsonify({'status': 'ok'}), 200
-                        
+
                         # ETAPA 3: COMENTÁRIO
                         elif consulta.etapa_pesquisa == 'COMENTARIO':
                             texto_limpo = texto_up.strip()
-                            
                             pesquisa = PesquisaSatisfacao.query.filter_by(consulta_id=consulta.id).first()
-                            
+
                             if texto_limpo not in ['N', 'NAO', 'NÃO', 'PULAR', 'SKIP', 'FINALIZAR']:
                                 if pesquisa:
-                                    pesquisa.comentario = texto[:500]  # Limitar tamanho
-                            
+                                    pesquisa.comentario = texto[:500]
+
                             consulta.etapa_pesquisa = 'CONCLUIDA'
                             db.session.commit()
-                            
                             enviar_e_registrar_consulta(ws, numero_resposta, """✅ *Obrigado pela sua avaliação!*
 
 Sua opinião é muito importante para continuarmos melhorando nosso atendimento.
 
 _Hospital Universitário Walter Cantídio_""", consulta)
                             return jsonify({'status': 'ok'}), 200
-                        
+
                         # Pesquisa já concluída - ignorar
                         elif consulta.etapa_pesquisa == 'CONCLUIDA':
-                            # Não responde mais - fluxo totalmente encerrado
                             return jsonify({'status': 'ok'}), 200
-                    
+
                     # CONFIRMADO sem pesquisa ativa
                     elif consulta.status == 'CONFIRMADO':
                         msg_ja_enviada = LogMsgConsulta.query.filter(
@@ -7534,7 +7804,7 @@ _Hospital Universitário Walter Cantídio_""", consulta)
         if contatos_validos:
             # Buscar campanhas concluídas e em fluxo ativo
             contatos_concluidos = [ct for ct in contatos_validos if ct.status == 'concluido' and ct.data_resposta]
-            contatos_em_fluxo = [ct for ct in contatos_validos if ct.status in ['enviado', 'aguardando_nascimento', 'pronto_envio']]
+            contatos_em_fluxo = [ct for ct in contatos_validos if ct.status in ['enviado', 'aguardando_nascimento', 'aguardando_motivo_rejeicao', 'pronto_envio']]
 
             # LÓGICA DE PRIORIZAÇÃO:
             # 1. Se há campanha concluída E campanha em fluxo ativo, comparar datas
@@ -7632,10 +7902,11 @@ _Hospital Universitário Walter Cantídio_""", consulta)
 
         # Primeiro, tentar responder com FAQ automático
         # IMPORTANTE: NÃO processar FAQ se contato está em fluxo ativo da campanha
-        # (status enviado/pronto_envio/aguardando_nascimento devem ir direto para a máquina de estados)
+        # (status enviado/pronto_envio/aguardando_nascimento/aguardando_motivo_rejeicao devem ir direto para a máquina de estados)
         # EXCEÇÃO: Se status é 'concluido', SEMPRE permitir FAQ (mesmo para respostas válidas como 1, 2, 3)
+        ESTADOS_FLUXO_ATIVO = ['aguardando_nascimento', 'aguardando_motivo_rejeicao', 'enviado', 'pronto_envio']
         resposta_faq = None
-        if c.status == 'concluido' or (c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio'] and not respostas_validas):
+        if c.status == 'concluido' or (c.status not in ESTADOS_FLUXO_ATIVO and not respostas_validas):
             # Buscar FAQs globais + FAQs do criador da campanha
             usuario_id = c.campanha.criador_id if c.campanha else None
             resposta_faq = SistemaFAQ.buscar_resposta(texto, usuario_id)
@@ -7643,7 +7914,7 @@ _Hospital Universitário Walter Cantídio_""", consulta)
         # Detecção de urgência/prioridade (para badges visuais e notificações)
         # NÃO cria tickets no banco - apenas sinaliza visualmente e notifica usuário
         prioridade = None
-        if c.status == 'concluido' or (c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio'] and not respostas_validas):
+        if c.status == 'concluido' or (c.status not in ESTADOS_FLUXO_ATIVO and not respostas_validas):
             prioridade = SistemaFAQ.requer_atendimento_humano(texto, c)
 
         # Se tem FAQ e NÃO é urgente, responde com FAQ
@@ -7654,7 +7925,7 @@ _Hospital Universitário Walter Cantídio_""", consulta)
 
         # Se é urgente/importante, notifica usuário mas NÃO cria ticket
         # Gestores veem badge visual na lista de contatos
-        if prioridade and c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio']:
+        if prioridade and c.status not in ESTADOS_FLUXO_ATIVO:
             # Se tem FAQ, envia antes da notificação
             if resposta_faq:
                 ws.enviar(numero, resposta_faq)
@@ -7689,93 +7960,148 @@ _Hospital Universitário Walter Cantídio_""", consulta)
                     telefone_respondente = t
                     break
 
-            if verificar_resposta_em_lista(texto_up, RESPOSTAS_SIM) or verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO):
-                # Determinar tipo de resposta
-                tipo_resp = 'confirmado' if verificar_resposta_em_lista(texto_up, RESPOSTAS_SIM) else 'rejeitado'
-
-                # SEMPRE pedir Data de Nascimento para validação
-                c.status = 'aguardando_nascimento'
-                c.resposta = texto # Guarda a intencao original (1 ou 2)
+            if verificar_resposta_em_lista(texto_up, RESPOSTAS_SIM):
+                c.resposta = texto
                 c.data_resposta = datetime.utcnow()
 
-                # Salvar resposta no telefone específico (aguardando validação)
                 if telefone_respondente:
                     telefone_respondente.resposta = texto
                     telefone_respondente.data_resposta = datetime.utcnow()
-                    telefone_respondente.tipo_resposta = tipo_resp  # Guarda a intenção
-                    telefone_respondente.validacao_pendente = True
-                    # Se o telefone respondeu, marcar como WhatsApp válido
-                    telefone_respondente.whatsapp_valido = True
-
-                db.session.commit()
-
-                ws.enviar(numero, "🔒 Por segurança, por favor digite sua *Data de Nascimento* (ex: 03/09/1954).")
-
-            elif verificar_resposta_em_lista(texto_up, RESPOSTAS_DESCONHECO):
-                # Salvar resposta "desconheço" no telefone específico
-                if telefone_respondente:
-                    telefone_respondente.resposta = texto
-                    telefone_respondente.data_resposta = datetime.utcnow()
-                    telefone_respondente.tipo_resposta = 'desconheco'
+                    telefone_respondente.tipo_resposta = 'confirmado'
                     telefone_respondente.validacao_pendente = False
-                    # Se o telefone respondeu, marcar como WhatsApp válido
                     telefone_respondente.whatsapp_valido = True
 
-                # Recalcular status final do contato baseado em todas as respostas
-                # "Desconheço" não é conflito - pode ter outro número confirmado
                 c.calcular_status_final()
-
-                # Se não tem nenhuma confirmação/rejeição de outros números, marca erro
-                if not c.confirmado and not c.rejeitado:
-                    c.erro = "Desconhecido pelo portador"
-
                 db.session.commit()
                 c.campanha.atualizar_stats()
                 db.session.commit()
 
-                ws.enviar(numero, """✅ *Obrigado pela informação!*
+                ws.enviar(numero, """✅ *Confirmação Registrada com Sucesso!*
 
-Vamos atualizar nossos registros e remover seu contato da nossa lista.
+Obrigado por confirmar seu interesse no procedimento.
+
+📞 *Próximos Passos:*
+• Nossa equipe entrará em contato em breve
+• Mantenha seu telefone com notificações ativas
+• Fique atento às ligações do hospital
+
+❓ *Tem dúvidas?*
+Digite sua pergunta a qualquer momento que responderemos!
+
+_Hospital Universitário Walter Cantídio_""")
+
+            elif verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO):
+                # Guarda intenção e pergunta o motivo antes de concluir
+                c.resposta = texto
+                c.data_resposta = datetime.utcnow()
+                c.status = 'aguardando_motivo_rejeicao'
+
+                if telefone_respondente:
+                    telefone_respondente.resposta = texto
+                    telefone_respondente.data_resposta = datetime.utcnow()
+                    telefone_respondente.tipo_resposta = 'rejeitado'
+                    telefone_respondente.validacao_pendente = False
+                    telefone_respondente.whatsapp_valido = True
+
+                db.session.commit()
+
+                ws.enviar(numero, """Entendemos sua decisão.
+
+Para nos ajudar a melhorar, poderia informar o *motivo*?
+
+1️⃣ Já realizei em outro hospital
+2️⃣ Problemas de saúde / Não tenho condições
+3️⃣ Não quero mais a cirurgia
+4️⃣ Outro motivo
+
+_(Responda com o número ou descreva o motivo)_""")
+
+            elif verificar_resposta_em_lista(texto_up, RESPOSTAS_DESCONHECO):
+                c.resposta = texto
+                c.data_resposta = datetime.utcnow()
+
+                if telefone_respondente:
+                    telefone_respondente.resposta = texto
+                    telefone_respondente.data_resposta = datetime.utcnow()
+                    telefone_respondente.tipo_resposta = 'desconheco'
+                    telefone_respondente.nao_pertence = True
+                    telefone_respondente.validacao_pendente = False
+                    telefone_respondente.whatsapp_valido = True
+
+                db.session.commit()
+
+                # Verificar se TODOS os telefones válidos (enviados) foram marcados como nao_pertence
+                telefones_validos = [t for t in c.telefones if t.enviado]
+                todos_nao_pertencem = (
+                    len(telefones_validos) > 0 and
+                    all(t.nao_pertence for t in telefones_validos)
+                )
+
+                if todos_nao_pertencem:
+                    # TODOS os telefones responderam DESCONHEÇO → rejeitar contato
+                    c.rejeitado = True
+                    c.motivo_rejeicao = 'Paciente não localizado - todos os telefones responderam DESCONHEÇO'
+                    c.data_rejeicao = datetime.utcnow()
+                    c.status = 'concluido'
+                    db.session.commit()
+                    c.campanha.atualizar_stats()
+                    db.session.commit()
+
+                    logger.info(f"Contato {c.id} rejeitado - TODOS os telefones responderam DESCONHEÇO (paciente não localizado)")
+
+                    ws.enviar(numero, """✅ *Obrigado pela informação!*
+
+Vamos atualizar nossos registros.
 
 Desculpe pelo transtorno.
 
 _Hospital Universitário Walter Cantídio_""")
+                else:
+                    # Ainda há outros telefones que podem responder
+                    c.calcular_status_final()
+                    db.session.commit()
+
+                    logger.info(f"Contato {c.id}: telefone {numero} marcado como não pertence ao paciente. Aguardando outros telefones.")
+
+                    ws.enviar(numero, """✅ *Obrigado pela informação!*
+
+Este número foi marcado como não pertencente ao paciente.
+
+Desculpe pelo transtorno.
+
+_Hospital Universitário Walter Cantídio_""")
+
+            else:
+                # Resposta inválida — orienta o paciente
+                ws.enviar(numero, """⚠️ Não entendi sua resposta.
+
+Por favor, responda com:
+
+*1* — Tenho interesse ✅
+*2* — Não tenho mais interesse ❌
+*3* — Não sou essa pessoa 🔄""")
                 
         elif c.status == 'aguardando_nascimento':
-            # Encontrar o telefone que está aguardando validação
+            # Validação de data de nascimento removida - finalizar direto com base na intenção gravada
             telefone_validando = None
             for t in telefones:
                 if t.contato_id == c.id and t.validacao_pendente:
                     telefone_validando = t
                     break
 
-            # Verificar Data
-            dt_input = None
-            try:
-                # Tentar varios formatos
-                for fmt in ['%d/%m/%Y', '%d-%m-%Y', '%d.%m.%Y', '%d%m%Y']:
-                    try:
-                        dt_input = datetime.strptime(texto.strip(), fmt).date()
-                        break
-                    except:
-                        pass
-            except:
-                pass
+            # Fallback: se nenhum tem validacao_pendente, usar o primeiro telefone do contato
+            if not telefone_validando:
+                telefone_validando = next((t for t in telefones if t.contato_id == c.id), None)
 
-            if dt_input:
-                if c.data_nascimento and dt_input == c.data_nascimento:
-                    # Data Correta - Confirmar a resposta do telefone
-                    if telefone_validando:
-                        telefone_validando.validacao_pendente = False
-                        # Telefone validado com sucesso, marcar como WhatsApp válido
-                        telefone_validando.whatsapp_valido = True
+            if telefone_validando:
+                telefone_validando.validacao_pendente = False
+                telefone_validando.whatsapp_valido = True
 
-                    # Verificar intencao original
-                    intent_up = (c.resposta or '').upper()
-                    msg_final = "✅ Obrigado."
+            intent_up = (c.resposta or '').upper()
+            msg_final = "✅ Obrigado."
 
-                    if verificar_resposta_em_lista(intent_up, RESPOSTAS_SIM):
-                        msg_final = """✅ *Confirmação Registrada com Sucesso!*
+            if verificar_resposta_em_lista(intent_up, RESPOSTAS_SIM):
+                msg_final = """✅ *Confirmação Registrada com Sucesso!*
 
 Obrigado por confirmar seu interesse no procedimento.
 
@@ -7788,8 +8114,8 @@ Obrigado por confirmar seu interesse no procedimento.
 Digite sua pergunta a qualquer momento que responderemos!
 
 _Hospital Universitário Walter Cantídio_"""
-                    elif verificar_resposta_em_lista(intent_up, RESPOSTAS_NAO):
-                        msg_final = """✅ *Registro Atualizado*
+            elif verificar_resposta_em_lista(intent_up, RESPOSTAS_NAO):
+                msg_final = """✅ *Registro Atualizado*
 
 Obrigado por sua resposta.
 
@@ -7799,28 +8125,85 @@ Se mudar de ideia ou tiver alguma dúvida, pode entrar em contato conosco.
 
 _Hospital Universitário Walter Cantídio_"""
 
-                    # Recalcular status final do contato baseado em todas as respostas validadas
-                    c.calcular_status_final()
-                    db.session.commit()
-                    c.campanha.atualizar_stats()
-                    db.session.commit()
-                    
-                    ws.enviar(numero, msg_final)
-                else:
-                    # Data incorreta
-                    ws.enviar(numero, "❌ Data de nascimento incorreta. Por favor, tente novamente (DD/MM/AAAA).")
-            else:
-                ws.enviar(numero, "⚠️ Formato inválido. Por favor, digite a data no formato DD/MM/AAAA (ex: 03/09/1954).")
+            c.calcular_status_final()
+            db.session.commit()
+            c.campanha.atualizar_stats()
+            db.session.commit()
+
+            ws.enviar(numero, msg_final)
+
+        elif c.status == 'aguardando_motivo_rejeicao':
+            # Processar motivo de rejeição — qualquer resposta finaliza o fluxo
+            MOTIVOS_REJEICAO = {
+                '1': 'Já realizei em outro hospital',
+                '2': 'Problemas de saúde / Não tenho condições',
+                '3': 'Não quero mais a cirurgia',
+                '4': 'Outro motivo',
+            }
+            motivo = MOTIVOS_REJEICAO.get(texto_up.strip(), texto[:200] if texto.strip() else 'Não informado')
+            c.motivo_rejeicao = motivo
+            c.data_rejeicao = datetime.utcnow()
+            c.calcular_status_final()
+            db.session.commit()
+            c.campanha.atualizar_stats()
+            db.session.commit()
+
+            logger.info(f"Contato {c.id} rejeitado. Motivo: {motivo}")
+
+            ws.enviar(numero, """✅ *Registro Atualizado*
+
+Obrigado por sua resposta.
+
+Registramos que você não tem mais interesse no procedimento. Seus dados serão atualizados em nosso sistema.
+
+Se mudar de ideia ou tiver alguma dúvida, pode entrar em contato conosco.
+
+_Hospital Universitário Walter Cantídio_""")
 
         elif c.status == 'concluido':
-            # Se o usuario mandar mensagem depois de concluido, reforcar o status
+            # Se o usuario mandar mensagem depois de concluido, reforcar o status uma única vez
             # (FAQ já foi verificado no início do webhook)
-            if c.confirmado:
-                ws.enviar(numero, "✅ Você já confirmou seu interesse. Obrigado!")
-            elif c.rejeitado:
-                ws.enviar(numero, "✅ Você já informou que não tem interesse. Obrigado!")
+            # Cooldown de 24h POR NÚMERO para evitar spam e bloqueio no WhatsApp
+            um_dia_atras = datetime.utcnow() - timedelta(hours=24)
+            msg_concluido_recente = LogMsg.query.filter(
+                LogMsg.contato_id == c.id,
+                LogMsg.direcao == 'enviada',
+                LogMsg.telefone == numero,
+                LogMsg.data >= um_dia_atras
+            ).first()
+
+            if not msg_concluido_recente:
+                # Verificar se este número foi o que respondeu ou se é outro número do mesmo contato
+                tel_respondente = next((t for t in telefones if t.contato_id == c.id), None)
+                este_numero_respondeu = tel_respondente and tel_respondente.tipo_resposta is not None
+
+                if este_numero_respondeu:
+                    if c.confirmado:
+                        msg_concluido = "✅ Você já confirmou seu interesse. Obrigado!"
+                    elif c.rejeitado:
+                        msg_concluido = "✅ Você já informou que não tem interesse. Obrigado!"
+                    else:
+                        msg_concluido = "✅ Seu atendimento já foi concluído. Obrigado!"
+                else:
+                    # Outro número do mesmo contato tentando responder após já concluído
+                    msg_concluido = "✅ Este atendimento já foi respondido em outro número. Obrigado!"
+
+                ws.enviar(numero, msg_concluido)
+
+                # Registrar mensagem enviada para evitar spam nas próximas 24h (por número)
+                log_enviado = LogMsg(
+                    campanha_id=c.campanha_id,
+                    contato_id=c.id,
+                    direcao='enviada',
+                    telefone=numero,
+                    mensagem=msg_concluido[:500],
+                    status='ok'
+                )
+                db.session.add(log_enviado)
+                db.session.commit()
+                logger.info(f"Resposta de concluído enviada para {c.nome} ({numero})")
             else:
-                ws.enviar(numero, "✅ Seu atendimento já foi concluído. Obrigado!")
+                logger.info(f"Mensagem de {c.nome} ({numero}) ignorada - resposta já enviada nas últimas 24h")
 
         return jsonify({'status': 'ok'}), 200
 

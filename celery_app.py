@@ -80,6 +80,14 @@ celery.conf.beat_schedule = {
         'options': {'expires': 1800}  # Task expira em 30min se não executar
     },
 
+    # Retry automático da fila cirúrgica (busca ativa) sem resposta a cada hora (durante horário comercial)
+    # Lógica: retry 1 em 24h, retry 2 em 48h após retry 1, sem_resposta após isso
+    'retry-fila-sem-resposta': {
+        'task': 'tasks.retry_fila_sem_resposta',
+        'schedule': crontab(minute=0, hour='8-21'),  # A cada hora, das 8h às 21h
+        'options': {'expires': 1800}  # Task expira em 30min se não executar
+    },
+
     # Limpar tasks antigas a cada 6 horas
     'limpar-tasks-antigas': {
         'task': 'tasks.limpar_tasks_antigas',

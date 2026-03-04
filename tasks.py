@@ -1493,3 +1493,173 @@ def retry_consultas_sem_resposta():
     except Exception as e:
         logger.exception(f"Erro no retry automático de consultas: {e}")
         return {'sucesso': False, 'erro': str(e)}
+
+
+@celery.task(
+    base=DatabaseTask,
+    name='tasks.retry_fila_sem_resposta'
+)
+def retry_fila_sem_resposta():
+    """
+    Task periódica para retentar contato com fila cirúrgica (busca ativa) sem resposta.
+    Executada a cada hora via Celery Beat.
+
+    Lógica (espelhando modo consulta):
+    - 1ª Retry: 24h após envio inicial
+    - 2ª Retry: 48h após a 1ª retry (72h total desde o envio inicial)
+    - Sem resposta: após 2ª retry sem resposta → marca status 'sem_resposta'
+
+    Para para um contato assim que ele confirmar (basta 1 confirmação).
+    """
+    from app import (
+        db, Contato, Telefone, LogMsg, WhatsApp,
+        formatar_mensagem_fila_retry1, formatar_mensagem_fila_retry2,
+        formatar_mensagem_fila_sem_resposta
+    )
+    from datetime import datetime, timedelta
+
+    logger.info("Verificando fila cirúrgica sem resposta para retry")
+
+    try:
+        # Buscar contatos em status 'enviado' que ainda não responderam
+        contatos = Contato.query.filter(
+            Contato.status == 'enviado',
+            Contato.confirmado == False,
+            Contato.rejeitado == False,
+            Contato.data_resposta == None
+        ).all()
+
+        if not contatos:
+            logger.info("Nenhum contato da fila aguardando resposta encontrado")
+            return {'sucesso': True, 'processadas': 0}
+
+        agora = datetime.utcnow()
+        processadas = 0
+        sem_resposta = 0
+
+        for contato in contatos:
+            # Buscar data do envio inicial (primeiro telefone enviado)
+            primeiro_envio = contato.telefones.filter(
+                Telefone.enviado == True
+            ).order_by(Telefone.data_envio).first()
+
+            if not primeiro_envio or not primeiro_envio.data_envio:
+                continue
+
+            # Inicializar contador se necessário
+            if contato.tentativas_contato is None:
+                contato.tentativas_contato = 0
+
+            envio_inicial = primeiro_envio.data_envio
+            horas_desde_envio = (agora - envio_inicial).total_seconds() / 3600
+
+            # Buscar telefone já enviado para reenviar
+            telefone_envio = None
+            for tel in contato.telefones.filter_by(whatsapp_valido=True).all():
+                if tel.enviado:
+                    telefone_envio = tel.numero_fmt
+                    break
+
+            if not telefone_envio:
+                logger.warning(f"Nenhum telefone válido para contato {contato.id}")
+                continue
+
+            ws = WhatsApp(contato.campanha.criador_id)
+            if not ws.ok():
+                logger.warning(f"WhatsApp não configurado para campanha {contato.campanha_id}")
+                continue
+
+            # --- RETRY 1: 24h após envio inicial ---
+            if horas_desde_envio >= 24 and contato.tentativas_contato == 0:
+                msg = formatar_mensagem_fila_retry1(contato)
+
+                ok, result = ws.enviar(telefone_envio, msg)
+
+                log = LogMsg(
+                    campanha_id=contato.campanha_id,
+                    contato_id=contato.id,
+                    direcao='enviada',
+                    telefone=telefone_envio,
+                    mensagem=f'[Retry 1 - 24h] {msg[:500]}',
+                    status='ok' if ok else 'erro',
+                    erro=str(result)[:200] if not ok else None
+                )
+                db.session.add(log)
+
+                contato.tentativas_contato = 1
+                contato.data_ultima_tentativa = agora
+                db.session.commit()
+
+                logger.info(f"Retry 1 (24h) enviado para contato {contato.id} - {contato.nome}")
+                processadas += 1
+
+            # --- RETRY 2: 48h após o retry 1 (data_ultima_tentativa) ---
+            elif contato.tentativas_contato == 1 and contato.data_ultima_tentativa:
+                horas_desde_retry1 = (agora - contato.data_ultima_tentativa).total_seconds() / 3600
+
+                if horas_desde_retry1 >= 48:
+                    msg = formatar_mensagem_fila_retry2(contato)
+
+                    ok, result = ws.enviar(telefone_envio, msg)
+
+                    log = LogMsg(
+                        campanha_id=contato.campanha_id,
+                        contato_id=contato.id,
+                        direcao='enviada',
+                        telefone=telefone_envio,
+                        mensagem=f'[Retry 2 - Final] {msg[:500]}',
+                        status='ok' if ok else 'erro',
+                        erro=str(result)[:200] if not ok else None
+                    )
+                    db.session.add(log)
+
+                    contato.tentativas_contato = 2
+                    contato.data_ultima_tentativa = agora
+                    db.session.commit()
+
+                    logger.info(f"Retry 2 (final) enviado para contato {contato.id} - {contato.nome}")
+                    processadas += 1
+
+            # --- SEM RESPOSTA: após retry 2 sem resposta ---
+            elif contato.tentativas_contato >= 2 and contato.data_ultima_tentativa:
+                horas_desde_retry2 = (agora - contato.data_ultima_tentativa).total_seconds() / 3600
+
+                if horas_desde_retry2 >= 24:
+                    msg = formatar_mensagem_fila_sem_resposta(contato)
+
+                    ok, result = ws.enviar(telefone_envio, msg)
+
+                    log = LogMsg(
+                        campanha_id=contato.campanha_id,
+                        contato_id=contato.id,
+                        direcao='enviada',
+                        telefone=telefone_envio,
+                        mensagem=f'[Sem resposta] {msg[:500]}',
+                        status='ok' if ok else 'erro',
+                        erro=str(result)[:200] if not ok else None
+                    )
+                    db.session.add(log)
+
+                    contato.status = 'sem_resposta'
+                    contato.erro = 'Sem resposta após 3 tentativas (fila cirúrgica)'
+                    contato.tentativas_contato = 3
+                    contato.data_ultima_tentativa = agora
+                    db.session.commit()
+
+                    logger.info(f"Contato {contato.id} marcado como sem_resposta após 3 tentativas - {contato.nome}")
+                    sem_resposta += 1
+
+            time.sleep(1)
+
+        logger.info(f"Retry fila concluído: {processadas} retries enviados, {sem_resposta} sem resposta")
+
+        return {
+            'sucesso': True,
+            'processadas': processadas,
+            'sem_resposta': sem_resposta,
+            'total_verificadas': len(contatos)
+        }
+
+    except Exception as e:
+        logger.exception(f"Erro no retry automático da fila: {e}")
+        return {'sucesso': False, 'erro': str(e)}

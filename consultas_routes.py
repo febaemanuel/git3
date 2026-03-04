@@ -34,7 +34,7 @@ def init_consultas_routes(app, db):
         LogMsgConsulta, WhatsApp, formatar_numero,
         formatar_mensagem_comprovante, formatar_mensagem_voltar_posto,
         extrair_dados_comprovante, PesquisaSatisfacao, enviar_e_registrar_consulta,
-        Paciente, HistoricoConsulta
+        Paciente, HistoricoConsulta, ComprovanteAntecipado, normalizar_nome_paciente
     )
 
     try:
@@ -200,6 +200,247 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
         except Exception as e:
             logger.error(f"[BG] Erro ao enviar comprovante para consulta {consulta_id}: {e}")
 
+    # Expor função para uso no webhook (auto-envio de comprovante antecipado)
+    app.extensions['enviar_comprovante_background'] = enviar_comprovante_background
+
+    # =========================================================================
+    # COMPROVANTES ANTECIPADOS - Upload em lote na campanha
+    # =========================================================================
+
+    @app.route('/api/consultas/campanha/<int:campanha_id>/comprovantes-antecipados', methods=['GET'])
+    @login_required
+    def listar_comprovantes_antecipados(campanha_id):
+        """Lista os comprovantes pré-carregados na campanha com status de matching."""
+        campanha = CampanhaConsulta.query.get_or_404(campanha_id)
+        if campanha.criador_id != current_user.id:
+            return jsonify({'erro': 'Acesso negado'}), 403
+
+        # Pegar todos os pacientes da campanha para mostrar matching
+        pacientes_camp = {c.id: c.paciente for c in campanha.consultas}
+
+        comps = ComprovanteAntecipado.query.filter_by(campanha_id=campanha_id).order_by(ComprovanteAntecipado.data_upload.desc()).all()
+        resultado = []
+        for c in comps:
+            paciente_vinculado = None
+            if c.consulta_id:
+                consulta_v = next((p for pid, p in pacientes_camp.items() if pid == c.consulta_id), None)
+                paciente_vinculado = consulta_v
+            resultado.append({
+                'id': c.id,
+                'nome_paciente': c.nome_paciente,
+                'filename': c.filename,
+                'usado': c.usado,
+                'consulta_id': c.consulta_id,
+                'paciente_vinculado': paciente_vinculado,
+                'data_upload': c.data_upload.strftime('%d/%m/%Y %H:%M') if c.data_upload else None,
+            })
+        return jsonify({'comprovantes': resultado})
+
+    @app.route('/api/consultas/campanha/<int:campanha_id>/comprovantes-antecipados', methods=['POST'])
+    @login_required
+    def upload_comprovantes_antecipados(campanha_id):
+        """Recebe múltiplos arquivos de comprovante pré-carregados para a campanha."""
+        campanha = CampanhaConsulta.query.get_or_404(campanha_id)
+        if campanha.criador_id != current_user.id:
+            return jsonify({'erro': 'Acesso negado'}), 403
+
+        arquivos = request.files.getlist('comprovantes')
+        if not arquivos:
+            return jsonify({'erro': 'Nenhum arquivo enviado'}), 400
+
+        EXTS_PERMITIDAS = {'.pdf', '.jpg', '.jpeg', '.png'}
+        salvos = []
+        erros = []
+
+        for arquivo in arquivos:
+            if not arquivo or not arquivo.filename:
+                continue
+            ext = os.path.splitext(arquivo.filename)[1].lower()
+            if ext not in EXTS_PERMITIDAS:
+                erros.append(f'{arquivo.filename}: formato não suportado')
+                continue
+
+            # Extrair nome do paciente do nome do arquivo (sem extensão)
+            nome_original = os.path.splitext(arquivo.filename)[0]
+            nome_paciente = nome_original.strip()
+
+            if not nome_paciente:
+                erros.append(f'{arquivo.filename}: nome inválido')
+                continue
+
+            # Verificar se já existe comprovante não-usado para o mesmo paciente (normalizado)
+            nome_norm = normalizar_nome_paciente(nome_paciente)
+            existentes = ComprovanteAntecipado.query.filter_by(campanha_id=campanha_id, usado=False).all()
+            if any(normalizar_nome_paciente(e.nome_paciente) == nome_norm for e in existentes):
+                erros.append(f'{arquivo.filename}: já existe comprovante pendente para "{nome_paciente}"')
+                continue
+
+            # Salvar arquivo no servidor
+            ts = datetime.now().strftime('%Y%m%d%H%M%S%f')
+            filename_disk = secure_filename(f'comp_ant_{campanha_id}_{ts}{ext}')
+            filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename_disk)
+            arquivo.save(filepath)
+
+            comp = ComprovanteAntecipado(
+                campanha_id=campanha_id,
+                nome_paciente=nome_paciente,
+                filename=arquivo.filename,
+                filepath=filepath,
+                usuario_id=current_user.id,
+            )
+            db.session.add(comp)
+            salvos.append({'nome_paciente': nome_paciente, 'filename': arquivo.filename})
+
+        if salvos:
+            db.session.commit()
+
+        return jsonify({'sucesso': True, 'salvos': salvos, 'erros': erros})
+
+    @app.route('/api/consultas/campanha/<int:campanha_id>/comprovante-antecipado/<int:comp_id>', methods=['DELETE'])
+    @login_required
+    def deletar_comprovante_antecipado(campanha_id, comp_id):
+        """Remove um comprovante pré-carregado não utilizado."""
+        campanha = CampanhaConsulta.query.get_or_404(campanha_id)
+        if campanha.criador_id != current_user.id:
+            return jsonify({'erro': 'Acesso negado'}), 403
+
+        comp = ComprovanteAntecipado.query.filter_by(id=comp_id, campanha_id=campanha_id).first_or_404()
+        if comp.usado:
+            return jsonify({'erro': 'Comprovante já foi enviado, não pode ser removido'}), 400
+
+        try:
+            if os.path.exists(comp.filepath):
+                os.remove(comp.filepath)
+        except Exception:
+            pass
+        db.session.delete(comp)
+        db.session.commit()
+        return jsonify({'sucesso': True})
+
+    @app.route('/api/consultas/campanha/<int:campanha_id>/comprovante-antecipado/<int:comp_id>/vincular', methods=['POST'])
+    @login_required
+    def vincular_comprovante_antecipado(campanha_id, comp_id):
+        """Vincula manualmente um comprovante pré-carregado a um paciente específico."""
+        campanha = CampanhaConsulta.query.get_or_404(campanha_id)
+        if campanha.criador_id != current_user.id:
+            return jsonify({'erro': 'Acesso negado'}), 403
+
+        comp = ComprovanteAntecipado.query.filter_by(id=comp_id, campanha_id=campanha_id).first_or_404()
+        if comp.usado:
+            return jsonify({'erro': 'Comprovante já foi enviado'}), 400
+
+        dados = request.get_json() or {}
+        consulta_id = dados.get('consulta_id')
+        if not consulta_id:
+            return jsonify({'erro': 'consulta_id obrigatório'}), 400
+
+        consulta = AgendamentoConsulta.query.filter_by(id=consulta_id, campanha_id=campanha_id).first()
+        if not consulta:
+            return jsonify({'erro': 'Consulta não encontrada na campanha'}), 404
+
+        # Se o paciente já está AGUARDANDO_COMPROVANTE, envia imediatamente
+        if consulta.status == 'AGUARDANDO_COMPROVANTE':
+            telefone = consulta.telefone_confirmacao
+            if not telefone:
+                for tel in consulta.telefones:
+                    if tel.enviado:
+                        telefone = tel.numero
+                        break
+            if not telefone:
+                return jsonify({'erro': 'Nenhum telefone válido para envio'}), 400
+
+            comp.usado = True
+            comp.consulta_id = consulta.id
+            consulta.comprovante_path = comp.filepath
+            consulta.comprovante_nome = comp.filename
+            consulta.status = 'CONFIRMADO'
+            consulta.data_confirmacao = datetime.utcnow()
+            db.session.commit()
+            consulta.campanha.atualizar_stats()
+            db.session.commit()
+
+            send_fn = app.extensions.get('enviar_comprovante_background')
+            if send_fn:
+                base_url = request.host_url.rstrip('/')
+                t = threading.Thread(
+                    target=send_fn,
+                    args=(current_user.id, consulta.id, comp.filepath, telefone, base_url),
+                    daemon=True
+                )
+                t.start()
+            return jsonify({'sucesso': True, 'enviado': True})
+
+        # Apenas vincula para envio automático quando confirmar
+        comp.consulta_id = consulta.id
+        db.session.commit()
+        return jsonify({'sucesso': True, 'enviado': False})
+
+    @app.route('/api/consultas/campanha/<int:campanha_id>/comprovantes-antecipados/enviar-lote', methods=['POST'])
+    @login_required
+    def enviar_lote_comprovantes_antecipados(campanha_id):
+        """Envia todos os comprovantes pré-carregados com match para pacientes AGUARDANDO_COMPROVANTE."""
+        campanha = CampanhaConsulta.query.get_or_404(campanha_id)
+        if campanha.criador_id != current_user.id:
+            return jsonify({'erro': 'Acesso negado'}), 403
+
+        from app import buscar_comprovante_antecipado, ComprovanteAntecipado
+        from sqlalchemy import update as sa_update
+        enviados = 0
+        erros = []
+
+        consultas_ag = AgendamentoConsulta.query.filter_by(
+            campanha_id=campanha_id, status='AGUARDANDO_COMPROVANTE'
+        ).all()
+
+        send_fn = app.extensions.get('enviar_comprovante_background')
+        base_url = request.host_url.rstrip('/')
+
+        for consulta in consultas_ag:
+            comp = buscar_comprovante_antecipado(campanha_id, consulta.paciente)
+            if not comp:
+                continue
+            telefone = consulta.telefone_confirmacao
+            if not telefone:
+                for tel in consulta.telefones:
+                    if tel.enviado:
+                        telefone = tel.numero
+                        break
+            if not telefone:
+                erros.append(f'{consulta.paciente}: sem telefone')
+                continue
+            try:
+                # Atomic update para evitar race condition (mesmo padrão do webhook)
+                rows = db.session.execute(
+                    sa_update(ComprovanteAntecipado)
+                    .where(ComprovanteAntecipado.id == comp.id, ComprovanteAntecipado.usado == False)
+                    .values(usado=True, consulta_id=consulta.id)
+                ).rowcount
+                db.session.commit()
+                if rows == 0:
+                    erros.append(f'{consulta.paciente}: comprovante já utilizado')
+                    continue
+                consulta.comprovante_path = comp.filepath
+                consulta.comprovante_nome = comp.filename
+                consulta.status = 'CONFIRMADO'
+                consulta.data_confirmacao = datetime.utcnow()
+                db.session.commit()
+                if send_fn:
+                    t = threading.Thread(
+                        target=send_fn,
+                        args=(current_user.id, consulta.id, comp.filepath, telefone, base_url),
+                        daemon=True
+                    )
+                    t.start()
+                enviados += 1
+            except Exception as e:
+                erros.append(f'{consulta.paciente}: {str(e)}')
+                db.session.rollback()
+
+        if enviados:
+            campanha.atualizar_stats()
+            db.session.commit()
+
+        return jsonify({'sucesso': True, 'enviados': enviados, 'erros': erros})
 
     # =========================================================================
     # DASHBOARD - Lista de campanhas de consultas

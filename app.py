@@ -285,7 +285,7 @@ class Campanha(db.Model):
         
         # Contar pessoas enviadas (todos os status que indicam que a pessoa foi contactada)
         self.total_enviados = self.contatos.filter(
-            Contato.status.in_(['enviado', 'aguardando_nascimento', 'concluido'])
+            Contato.status.in_(['enviado', 'aguardando_nascimento', 'aguardando_motivo_rejeicao', 'concluido'])
         ).count()
         self.total_confirmados = self.contatos.filter_by(confirmado=True).count()
         self.total_rejeitados = self.contatos.filter_by(rejeitado=True).count()
@@ -458,6 +458,8 @@ class Contato(db.Model):
         if self.rejeitado: return 'REJEITADO'
         if self.status == 'enviado': return 'Aguardando resposta'
         if self.status == 'pronto_envio': return 'Pronto para envio'
+        if self.status == 'aguardando_motivo_rejeicao': return 'Aguardando motivo'
+        if self.status == 'sem_resposta': return 'Sem resposta'
         return self.status
 
     def status_badge(self):
@@ -466,6 +468,8 @@ class Contato(db.Model):
         if self.rejeitado: return 'bg-warning text-dark'
         if self.status == 'enviado': return 'bg-info'
         if self.status == 'pronto_envio': return 'bg-primary'
+        if self.status == 'aguardando_motivo_rejeicao': return 'bg-warning text-dark'
+        if self.status == 'sem_resposta': return 'bg-secondary'
         return 'bg-light text-dark'
 
     def calcular_status_final(self):
@@ -4879,7 +4883,7 @@ def exportar_campanha(id):
             'Telefones': c.telefones_str(),
             'Procedimento': c.procedimento,
             'Status': c.status_texto(),
-            'Enviado': 'Sim' if c.status in ['enviado', 'aguardando_nascimento', 'concluido'] or c.confirmado or c.rejeitado else 'Nao',
+            'Enviado': 'Sim' if c.status in ['enviado', 'aguardando_nascimento', 'aguardando_motivo_rejeicao', 'concluido'] or c.confirmado or c.rejeitado else 'Nao',
             'Data Envio': max([t.data_envio for t in c.telefones if t.data_envio], default=None).strftime('%d/%m/%Y %H:%M') if any(t.data_envio for t in c.telefones) else '',
             'Confirmado': 'SIM' if c.confirmado else '',
             'Rejeitado': 'SIM' if c.rejeitado else '',
@@ -7800,7 +7804,7 @@ _Hospital Universitário Walter Cantídio_""", consulta)
         if contatos_validos:
             # Buscar campanhas concluídas e em fluxo ativo
             contatos_concluidos = [ct for ct in contatos_validos if ct.status == 'concluido' and ct.data_resposta]
-            contatos_em_fluxo = [ct for ct in contatos_validos if ct.status in ['enviado', 'aguardando_nascimento', 'pronto_envio']]
+            contatos_em_fluxo = [ct for ct in contatos_validos if ct.status in ['enviado', 'aguardando_nascimento', 'aguardando_motivo_rejeicao', 'pronto_envio']]
 
             # LÓGICA DE PRIORIZAÇÃO:
             # 1. Se há campanha concluída E campanha em fluxo ativo, comparar datas
@@ -7898,10 +7902,11 @@ _Hospital Universitário Walter Cantídio_""", consulta)
 
         # Primeiro, tentar responder com FAQ automático
         # IMPORTANTE: NÃO processar FAQ se contato está em fluxo ativo da campanha
-        # (status enviado/pronto_envio/aguardando_nascimento devem ir direto para a máquina de estados)
+        # (status enviado/pronto_envio/aguardando_nascimento/aguardando_motivo_rejeicao devem ir direto para a máquina de estados)
         # EXCEÇÃO: Se status é 'concluido', SEMPRE permitir FAQ (mesmo para respostas válidas como 1, 2, 3)
+        ESTADOS_FLUXO_ATIVO = ['aguardando_nascimento', 'aguardando_motivo_rejeicao', 'enviado', 'pronto_envio']
         resposta_faq = None
-        if c.status == 'concluido' or (c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio'] and not respostas_validas):
+        if c.status == 'concluido' or (c.status not in ESTADOS_FLUXO_ATIVO and not respostas_validas):
             # Buscar FAQs globais + FAQs do criador da campanha
             usuario_id = c.campanha.criador_id if c.campanha else None
             resposta_faq = SistemaFAQ.buscar_resposta(texto, usuario_id)
@@ -7909,7 +7914,7 @@ _Hospital Universitário Walter Cantídio_""", consulta)
         # Detecção de urgência/prioridade (para badges visuais e notificações)
         # NÃO cria tickets no banco - apenas sinaliza visualmente e notifica usuário
         prioridade = None
-        if c.status == 'concluido' or (c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio'] and not respostas_validas):
+        if c.status == 'concluido' or (c.status not in ESTADOS_FLUXO_ATIVO and not respostas_validas):
             prioridade = SistemaFAQ.requer_atendimento_humano(texto, c)
 
         # Se tem FAQ e NÃO é urgente, responde com FAQ
@@ -7920,7 +7925,7 @@ _Hospital Universitário Walter Cantídio_""", consulta)
 
         # Se é urgente/importante, notifica usuário mas NÃO cria ticket
         # Gestores veem badge visual na lista de contatos
-        if prioridade and c.status not in ['aguardando_nascimento', 'enviado', 'pronto_envio']:
+        if prioridade and c.status not in ESTADOS_FLUXO_ATIVO:
             # Se tem FAQ, envia antes da notificação
             if resposta_faq:
                 ws.enviar(numero, resposta_faq)

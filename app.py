@@ -7911,36 +7911,10 @@ _Hospital Universitário Walter Cantídio_""", consulta)
             usuario_id = c.campanha.criador_id if c.campanha else None
             resposta_faq = SistemaFAQ.buscar_resposta(texto, usuario_id)
 
-        # Detecção de urgência/prioridade (para badges visuais e notificações)
-        # NÃO cria tickets no banco - apenas sinaliza visualmente e notifica usuário
-        prioridade = None
-        if c.status == 'concluido' or (c.status not in ESTADOS_FLUXO_ATIVO and not respostas_validas):
-            prioridade = SistemaFAQ.requer_atendimento_humano(texto, c)
-
-        # Se tem FAQ e NÃO é urgente, responde com FAQ
-        if resposta_faq and not prioridade:
+        # Se tem FAQ, responde
+        if resposta_faq:
             ws.enviar(numero, resposta_faq)
             logger.info(f"FAQ automático enviado para {c.nome}")
-            return jsonify({'status': 'ok'}), 200
-
-        # Se é urgente/importante, notifica usuário mas NÃO cria ticket
-        # Gestores veem badge visual na lista de contatos
-        if prioridade and c.status not in ESTADOS_FLUXO_ATIVO:
-            # Se tem FAQ, envia antes da notificação
-            if resposta_faq:
-                ws.enviar(numero, resposta_faq)
-                logger.info(f"FAQ automático enviado antes de notificar urgência para {c.nome}")
-
-            # Notificar usuário sobre encaminhamento (apenas visual, sem ticket)
-            if not resposta_faq:
-                if prioridade == 'urgente':
-                    ws.enviar(numero, "🚨 Sua mensagem foi encaminhada com URGÊNCIA para nossa equipe. "
-                                     "Um atendente entrará em contato em breve.")
-                else:
-                    ws.enviar(numero, "👤 Sua mensagem foi encaminhada para um atendente. "
-                                     "Aguarde o retorno em até 24h úteis.")
-
-            logger.info(f"Mensagem urgente detectada de {c.nome} - Prioridade: {prioridade} (badge visual ativo)")
             return jsonify({'status': 'ok'}), 200
 
         # Maquina de Estados

@@ -778,83 +778,150 @@
                     Pacientes sem comprovante pré-carregado continuam no fluxo normal.
                 </p>
 
-                <!-- Upload area -->
-                <div class="card border-success mb-4">
-                    <div class="card-body">
-                        <h6 class="card-title text-success"><i class="bi bi-cloud-upload"></i> Enviar arquivos</h6>
-                        <div class="d-flex gap-2 align-items-end flex-wrap">
-                            <div class="flex-grow-1">
-                                <input type="file" class="form-control" id="inputComprovantesAntecipados"
-                                    accept=".pdf,.jpg,.jpeg,.png" multiple>
-                                <small class="text-muted">PDF, JPG ou PNG. O nome do arquivo deve ser o nome do paciente.</small>
+                <!-- Upload: automático (por nome de arquivo) + manual (escolher paciente) -->
+                <div class="row g-3 mb-4">
+                    <!-- Auto upload -->
+                    <div class="col-md-6">
+                        <div class="card border-success h-100">
+                            <div class="card-body">
+                                <h6 class="card-title text-success"><i class="bi bi-cloud-upload"></i> Enviar em lote (pelo nome do arquivo)</h6>
+                                <div class="mb-2">
+                                    <input type="file" class="form-control form-control-sm" id="inputComprovantesAntecipados"
+                                        accept=".pdf,.jpg,.jpeg,.png" multiple>
+                                    <small class="text-muted">PDF, JPG ou PNG. O nome do arquivo deve ser o nome do paciente.</small>
+                                </div>
+                                <button class="btn btn-success btn-sm" id="btnUploadAntecipados" onclick="uploadComprovantesAntecipados()">
+                                    <i class="bi bi-upload"></i> Enviar arquivos
+                                </button>
+                                <div id="uploadResultAntecipado" class="mt-2"></div>
                             </div>
-                            <button class="btn btn-success" id="btnUploadAntecipados" onclick="uploadComprovantesAntecipados()">
-                                <i class="bi bi-upload"></i> Enviar
-                            </button>
                         </div>
-                        <div id="uploadResultAntecipado" class="mt-2"></div>
                     </div>
-                </div>
-
-                <!-- Ações em lote -->
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h6 class="mb-0">Comprovantes carregados</h6>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-sm btn-outline-primary" onclick="carregarComprovantesAntecipados()">
-                            <i class="bi bi-arrow-clockwise"></i> Atualizar
-                        </button>
-                        <button class="btn btn-sm btn-warning" onclick="enviarLoteAntecipados()" id="btnEnviarLote">
-                            <i class="bi bi-send-fill"></i> Enviar todos com match agora
-                        </button>
-                    </div>
-                </div>
-
-                <!-- Tabela -->
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover align-middle" id="tabelaAntecipados">
-                        <thead class="table-light">
-                            <tr>
-                                <th>Nome extraído do arquivo</th>
-                                <th>Paciente na campanha</th>
-                                <th>Status</th>
-                                <th>Upload</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody id="tbodyAntecipados">
-                            <tr><td colspan="5" class="text-center text-muted">Carregando...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <!-- Vínculo manual -->
-                <div id="areaVinculoManual" class="d-none mt-3">
-                    <div class="card border-warning">
-                        <div class="card-body">
-                            <h6 class="text-warning"><i class="bi bi-link-45deg"></i> Vincular manualmente</h6>
-                            <p class="text-muted small mb-2">
-                                Comprovante: <strong id="vinculoNomePaciente"></strong>
-                            </p>
-                            <div class="d-flex gap-2 align-items-end">
-                                <div class="flex-grow-1">
-                                    <label class="form-label small">Selecionar paciente da campanha</label>
-                                    <select class="form-select form-select-sm" id="selectVinculoPaciente">
-                                        <option value="">-- selecione --</option>
+                    <!-- Manual: escolher paciente -->
+                    <div class="col-md-6">
+                        <div class="card border-info h-100">
+                            <div class="card-body">
+                                <h6 class="card-title text-info"><i class="bi bi-person-plus"></i> Inserir manualmente (escolher paciente)</h6>
+                                <div class="mb-2">
+                                    <label class="form-label small mb-1">Paciente da campanha</label>
+                                    <select class="form-select form-select-sm" id="selectPacienteManual">
+                                        <option value="">-- selecione o paciente --</option>
                                         {% for consulta in consultas %}
-                                        <option value="{{ consulta.id }}">{{ consulta.paciente }} - {{ consulta.especialidade }} ({{ consulta.status }})</option>
+                                        <option value="{{ consulta.paciente }}">{{ consulta.paciente }} — {{ consulta.especialidade }} ({{ consulta.status }})</option>
                                         {% endfor %}
                                     </select>
                                 </div>
-                                <button class="btn btn-sm btn-warning" onclick="confirmarVinculo()">
-                                    <i class="bi bi-check2"></i> Vincular
+                                <div class="mb-2">
+                                    <input type="file" class="form-control form-control-sm" id="inputComprovanteManual"
+                                        accept=".pdf,.jpg,.jpeg,.png">
+                                    <small class="text-muted">PDF, JPG ou PNG.</small>
+                                </div>
+                                <button class="btn btn-info btn-sm" id="btnUploadManual" onclick="uploadManual()">
+                                    <i class="bi bi-plus-circle"></i> Adicionar
                                 </button>
-                                <button class="btn btn-sm btn-outline-secondary" onclick="cancelarVinculo()">
-                                    Cancelar
-                                </button>
+                                <div id="uploadResultManual" class="mt-2"></div>
                             </div>
                         </div>
                     </div>
                 </div>
+
+                <!-- Tabs: Pendentes / Enviados -->
+                <ul class="nav nav-tabs mb-0" id="tabsComprovantesAnt" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="tab-pendentes-btn" data-bs-toggle="tab"
+                            data-bs-target="#tabPendentesAnt" type="button" role="tab">
+                            <i class="bi bi-clock"></i> Pendentes
+                            <span class="badge bg-secondary ms-1" id="badgePendentes">—</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="tab-enviados-btn" data-bs-toggle="tab"
+                            data-bs-target="#tabEnviadosAnt" type="button" role="tab">
+                            <i class="bi bi-check-circle"></i> Enviados
+                            <span class="badge bg-success ms-1" id="badgeEnviados">—</span>
+                        </button>
+                    </li>
+                </ul>
+
+                <div class="tab-content border border-top-0 rounded-bottom p-3">
+                    <!-- Tab Pendentes -->
+                    <div class="tab-pane fade show active" id="tabPendentesAnt" role="tabpanel">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="text-muted small">Comprovantes aguardando envio</span>
+                            <div class="d-flex gap-2">
+                                <button class="btn btn-sm btn-outline-primary" onclick="carregarComprovantesAntecipados()">
+                                    <i class="bi bi-arrow-clockwise"></i> Atualizar
+                                </button>
+                                <button class="btn btn-sm btn-warning" onclick="enviarLoteAntecipados()" id="btnEnviarLote">
+                                    <i class="bi bi-send-fill"></i> Enviar todos com match agora
+                                </button>
+                            </div>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Paciente (comprovante)</th>
+                                        <th>Match na campanha</th>
+                                        <th>Status</th>
+                                        <th>Upload</th>
+                                        <th></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbodyAntecipados">
+                                    <tr><td colspan="5" class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm me-2"></span>Carregando...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Área vínculo manual (inline) -->
+                        <div id="areaVinculoManual" class="d-none mt-3">
+                            <div class="card border-warning">
+                                <div class="card-body py-2">
+                                    <h6 class="text-warning mb-2"><i class="bi bi-link-45deg"></i> Vincular comprovante manualmente</h6>
+                                    <p class="text-muted small mb-2">Comprovante: <strong id="vinculoNomePaciente"></strong></p>
+                                    <div class="d-flex gap-2 align-items-end flex-wrap">
+                                        <div class="flex-grow-1">
+                                            <label class="form-label small mb-1">Selecionar paciente da campanha</label>
+                                            <select class="form-select form-select-sm" id="selectVinculoPaciente">
+                                                <option value="">-- selecione --</option>
+                                                {% for consulta in consultas %}
+                                                <option value="{{ consulta.id }}">{{ consulta.paciente }} — {{ consulta.especialidade }} ({{ consulta.status }})</option>
+                                                {% endfor %}
+                                            </select>
+                                        </div>
+                                        <button class="btn btn-sm btn-warning" onclick="confirmarVinculo()">
+                                            <i class="bi bi-check2"></i> Vincular
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary" onclick="cancelarVinculo()">
+                                            Cancelar
+                                        </button>
+                                    </div>
+                                    <div id="resultadoVinculo" class="mt-2"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tab Enviados -->
+                    <div class="tab-pane fade" id="tabEnviadosAnt" role="tabpanel">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Paciente (comprovante)</th>
+                                        <th>Vinculado a</th>
+                                        <th>Upload</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbodyEnviados">
+                                    <tr><td colspan="3" class="text-center text-muted py-3">Nenhum comprovante enviado ainda.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
@@ -867,63 +934,127 @@
     const CAMPANHA_ID = {{ campanha.id }};
     let _compIdVinculo = null;
 
-    // Carrega comprovantes antecipados ao abrir o modal
+    // Carrega ao abrir o modal
     document.getElementById('modalComprovanteAntecipado').addEventListener('show.bs.modal', function () {
         carregarComprovantesAntecipados();
     });
 
     function carregarComprovantesAntecipados() {
+        const tbodyPend = document.getElementById('tbodyAntecipados');
+        const tbodyEnv = document.getElementById('tbodyEnviados');
+        tbodyPend.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3"><span class="spinner-border spinner-border-sm me-2"></span>Carregando...</td></tr>';
+
         fetch(`/api/consultas/campanha/${CAMPANHA_ID}/comprovantes-antecipados`, {
             headers: { 'X-CSRFToken': '{{ csrf_token() }}' }
         })
-        .then(r => r.json())
-        .then(data => {
-            const tbody = document.getElementById('tbodyAntecipados');
-            if (!data.comprovantes || data.comprovantes.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Nenhum comprovante carregado ainda.</td></tr>';
-                return;
-            }
-            tbody.innerHTML = data.comprovantes.map(c => {
-                const statusBadge = c.usado
-                    ? '<span class="badge bg-success">Enviado</span>'
-                    : (c.consulta_id
-                        ? '<span class="badge bg-warning text-dark">Vinculado (aguardando confirmação)</span>'
-                        : '<span class="badge bg-secondary">Sem match</span>');
-
-                const pacienteMatch = c.paciente_vinculado
-                    ? `<span class="text-success"><i class="bi bi-check-circle-fill"></i> ${c.paciente_vinculado}</span>`
-                    : `<span class="text-muted">—</span>`;
-
-                const acoes = c.usado ? '' : `
-                    <button class="btn btn-xs btn-outline-warning btn-sm me-1" title="Vincular manualmente"
-                        onclick="iniciarVinculo(${c.id}, '${c.nome_paciente.replace(/'/g, "\\'")}')">
-                        <i class="bi bi-link-45deg"></i>
-                    </button>
-                    <button class="btn btn-xs btn-outline-danger btn-sm" title="Remover"
-                        onclick="deletarComprovanteAntecipado(${c.id})">
-                        <i class="bi bi-trash"></i>
-                    </button>`;
-
-                return `<tr>
-                    <td><strong>${c.nome_paciente}</strong><br><small class="text-muted">${c.filename}</small></td>
-                    <td>${pacienteMatch}</td>
-                    <td>${statusBadge}</td>
-                    <td><small class="text-muted">${c.data_upload || ''}</small></td>
-                    <td class="text-end">${acoes}</td>
-                </tr>`;
-            }).join('');
+        .then(r => {
+            if (!r.ok) return r.json().then(d => Promise.reject(d.erro || `Erro ${r.status}`));
+            return r.json();
         })
-        .catch(err => {
-            document.getElementById('tbodyAntecipados').innerHTML =
-                '<tr><td colspan="5" class="text-danger">Erro ao carregar.</td></tr>';
+        .then(data => {
+            const pendentes = (data.comprovantes || []).filter(c => !c.usado);
+            const enviados  = (data.comprovantes || []).filter(c => c.usado);
+
+            // Atualizar badges
+            document.getElementById('badgePendentes').textContent = pendentes.length;
+            document.getElementById('badgeEnviados').textContent  = enviados.length;
+
+            // Renderizar pendentes
+            if (pendentes.length === 0) {
+                tbodyPend.innerHTML = '<tr><td colspan="5" class="text-center text-muted py-3"><i class="bi bi-inbox"></i> Nenhum comprovante pendente.</td></tr>';
+            } else {
+                tbodyPend.innerHTML = pendentes.map(c => {
+                    const matchBadge = c.consulta_id
+                        ? `<span class="badge bg-warning text-dark"><i class="bi bi-link-45deg"></i> Vinculado</span>`
+                        : `<span class="badge bg-secondary"><i class="bi bi-question-circle"></i> Sem match</span>`;
+
+                    const pacienteMatch = c.paciente_vinculado
+                        ? `<span class="text-success fw-semibold"><i class="bi bi-check-circle-fill"></i> ${c.paciente_vinculado}</span>`
+                        : `<span class="text-muted">—</span>`;
+
+                    const nomeEsc = c.nome_paciente.replace(/'/g, "\\'").replace(/`/g, '\\`');
+                    return `<tr>
+                        <td>
+                            <strong>${c.nome_paciente}</strong><br>
+                            <small class="text-muted"><i class="bi bi-file-earmark"></i> ${c.filename}</small>
+                        </td>
+                        <td>${pacienteMatch} ${matchBadge}</td>
+                        <td></td>
+                        <td><small class="text-muted">${c.data_upload || ''}</small></td>
+                        <td class="text-end text-nowrap">
+                            <button class="btn btn-outline-warning btn-sm me-1" title="Vincular a paciente"
+                                onclick="iniciarVinculo(${c.id}, '${nomeEsc}')">
+                                <i class="bi bi-link-45deg"></i>
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" title="Remover"
+                                onclick="deletarComprovanteAntecipado(${c.id})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </td>
+                    </tr>`;
+                }).join('');
+            }
+
+            // Renderizar enviados
+            if (enviados.length === 0) {
+                tbodyEnv.innerHTML = '<tr><td colspan="3" class="text-center text-muted py-3"><i class="bi bi-inbox"></i> Nenhum comprovante enviado ainda.</td></tr>';
+            } else {
+                tbodyEnv.innerHTML = enviados.map(c => {
+                    const pac = c.paciente_vinculado
+                        ? `<span class="text-success"><i class="bi bi-check-circle-fill"></i> ${c.paciente_vinculado}</span>`
+                        : `<span class="text-muted">—</span>`;
+                    return `<tr>
+                        <td>
+                            <strong>${c.nome_paciente}</strong><br>
+                            <small class="text-muted"><i class="bi bi-file-earmark"></i> ${c.filename}</small>
+                        </td>
+                        <td>${pac} <span class="badge bg-success ms-1">Enviado</span></td>
+                        <td><small class="text-muted">${c.data_upload || ''}</small></td>
+                    </tr>`;
+                }).join('');
+            }
+        })
+        .catch(errMsg => {
+            const html = `<tr><td colspan="5" class="py-3">
+                <div class="alert alert-danger d-flex align-items-center gap-2 mb-0 py-2">
+                    <i class="bi bi-exclamation-triangle-fill fs-5"></i>
+                    <div><strong>Erro ao carregar comprovantes.</strong><br>
+                    <small>${errMsg || 'Verifique sua conexão e tente novamente.'}</small></div>
+                    <button class="btn btn-sm btn-outline-danger ms-auto" onclick="carregarComprovantesAntecipados()">
+                        <i class="bi bi-arrow-clockwise"></i> Tentar novamente
+                    </button>
+                </div>
+            </td></tr>`;
+            tbodyPend.innerHTML = html;
+            tbodyEnv.innerHTML  = '<tr><td colspan="3" class="text-center text-muted py-2">—</td></tr>';
         });
+    }
+
+    function _renderUploadResult(resultDiv, data) {
+        let partes = [];
+        if (data.salvos && data.salvos.length > 0) {
+            const itens = data.salvos.map(s =>
+                `<li><i class="bi bi-check-circle-fill text-success"></i> <strong>${s.nome_paciente}</strong> <small class="text-muted">(${s.filename})</small></li>`
+            ).join('');
+            partes.push(`<div><strong>${data.salvos.length} carregado(s) com sucesso:</strong><ul class="mb-0 mt-1 ps-3">${itens}</ul></div>`);
+        }
+        if (data.erros && data.erros.length > 0) {
+            const itens = data.erros.map(e =>
+                `<li><i class="bi bi-x-circle-fill text-danger"></i> ${e}</li>`
+            ).join('');
+            partes.push(`<div class="mt-1"><strong>${data.erros.length} erro(s):</strong><ul class="mb-0 mt-1 ps-3">${itens}</ul></div>`);
+        }
+        const cls = data.salvos && data.salvos.length > 0
+            ? (data.erros && data.erros.length > 0 ? 'alert-warning' : 'alert-success')
+            : 'alert-danger';
+        resultDiv.innerHTML = `<div class="alert ${cls} py-2 mb-0">${partes.join('<hr class="my-1">')}</div>`;
     }
 
     function uploadComprovantesAntecipados() {
         const input = document.getElementById('inputComprovantesAntecipados');
         const resultDiv = document.getElementById('uploadResultAntecipado');
         if (!input.files || input.files.length === 0) {
-            resultDiv.innerHTML = '<div class="alert alert-warning py-1">Selecione ao menos um arquivo.</div>';
+            resultDiv.innerHTML = '<div class="alert alert-warning py-1 mb-0"><i class="bi bi-exclamation-circle"></i> Selecione ao menos um arquivo.</div>';
             return;
         }
         const btn = document.getElementById('btnUploadAntecipados');
@@ -941,24 +1072,67 @@
         .then(r => r.json())
         .then(data => {
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-upload"></i> Enviar';
+            btn.innerHTML = '<i class="bi bi-upload"></i> Enviar arquivos';
             input.value = '';
             if (data.sucesso) {
-                let html = `<div class="alert alert-success py-1"><strong>${data.salvos.length}</strong> arquivo(s) carregado(s).`;
-                if (data.erros && data.erros.length > 0) {
-                    html += `<br><small class="text-warning">Erros: ${data.erros.join(', ')}</small>`;
-                }
-                html += '</div>';
-                resultDiv.innerHTML = html;
+                _renderUploadResult(resultDiv, data);
                 carregarComprovantesAntecipados();
             } else {
-                resultDiv.innerHTML = `<div class="alert alert-danger py-1">${data.erro}</div>`;
+                resultDiv.innerHTML = `<div class="alert alert-danger py-2 mb-0"><i class="bi bi-x-circle-fill"></i> ${data.erro || 'Erro desconhecido.'}</div>`;
             }
         })
-        .catch(err => {
+        .catch(() => {
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-upload"></i> Enviar';
-            resultDiv.innerHTML = '<div class="alert alert-danger py-1">Erro ao enviar.</div>';
+            btn.innerHTML = '<i class="bi bi-upload"></i> Enviar arquivos';
+            resultDiv.innerHTML = '<div class="alert alert-danger py-2 mb-0"><i class="bi bi-wifi-off"></i> Erro de conexão ao enviar. Tente novamente.</div>';
+        });
+    }
+
+    function uploadManual() {
+        const nomePaciente = document.getElementById('selectPacienteManual').value;
+        const input = document.getElementById('inputComprovanteManual');
+        const resultDiv = document.getElementById('uploadResultManual');
+
+        if (!nomePaciente) {
+            resultDiv.innerHTML = '<div class="alert alert-warning py-1 mb-0"><i class="bi bi-exclamation-circle"></i> Selecione um paciente.</div>';
+            return;
+        }
+        if (!input.files || input.files.length === 0) {
+            resultDiv.innerHTML = '<div class="alert alert-warning py-1 mb-0"><i class="bi bi-exclamation-circle"></i> Selecione um arquivo.</div>';
+            return;
+        }
+
+        const btn = document.getElementById('btnUploadManual');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Adicionando...';
+
+        const formData = new FormData();
+        formData.append('comprovantes', input.files[0]);
+        formData.append('nome_paciente_manual', nomePaciente);
+
+        fetch(`/api/consultas/campanha/${CAMPANHA_ID}/comprovantes-antecipados`, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': '{{ csrf_token() }}' },
+            body: formData
+        })
+        .then(r => r.json())
+        .then(data => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-plus-circle"></i> Adicionar';
+            if (data.sucesso && data.salvos.length > 0) {
+                resultDiv.innerHTML = `<div class="alert alert-success py-1 mb-0"><i class="bi bi-check-circle-fill"></i> Comprovante adicionado para <strong>${nomePaciente}</strong>.</div>`;
+                input.value = '';
+                document.getElementById('selectPacienteManual').value = '';
+                carregarComprovantesAntecipados();
+            } else {
+                const errs = data.erros && data.erros.length > 0 ? data.erros[0] : (data.erro || 'Erro desconhecido.');
+                resultDiv.innerHTML = `<div class="alert alert-danger py-1 mb-0"><i class="bi bi-x-circle-fill"></i> ${errs}</div>`;
+            }
+        })
+        .catch(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-plus-circle"></i> Adicionar';
+            resultDiv.innerHTML = '<div class="alert alert-danger py-1 mb-0"><i class="bi bi-wifi-off"></i> Erro de conexão. Tente novamente.</div>';
         });
     }
 
@@ -970,27 +1144,41 @@
         })
         .then(r => r.json())
         .then(data => {
-            if (data.sucesso) carregarComprovantesAntecipados();
-            else alert('Erro: ' + data.erro);
-        });
+            if (data.sucesso) {
+                carregarComprovantesAntecipados();
+            } else {
+                const msg = data.erro || 'Erro ao remover.';
+                document.getElementById('tbodyAntecipados').insertAdjacentHTML('beforebegin',
+                    `<div class="alert alert-danger py-1 mb-2"><i class="bi bi-x-circle-fill"></i> ${msg}</div>`
+                );
+            }
+        })
+        .catch(() => alert('Erro de conexão ao remover.'));
     }
 
     function iniciarVinculo(compId, nomePaciente) {
         _compIdVinculo = compId;
         document.getElementById('vinculoNomePaciente').textContent = nomePaciente;
         document.getElementById('selectVinculoPaciente').value = '';
-        document.getElementById('areaVinculoManual').classList.remove('d-none');
-        document.getElementById('areaVinculoManual').scrollIntoView({ behavior: 'smooth' });
+        document.getElementById('resultadoVinculo').innerHTML = '';
+        const area = document.getElementById('areaVinculoManual');
+        area.classList.remove('d-none');
+        area.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
 
     function cancelarVinculo() {
         _compIdVinculo = null;
         document.getElementById('areaVinculoManual').classList.add('d-none');
+        document.getElementById('resultadoVinculo').innerHTML = '';
     }
 
     function confirmarVinculo() {
         const consultaId = document.getElementById('selectVinculoPaciente').value;
-        if (!consultaId) { alert('Selecione um paciente.'); return; }
+        const resDiv = document.getElementById('resultadoVinculo');
+        if (!consultaId) {
+            resDiv.innerHTML = '<div class="alert alert-warning py-1 mb-0"><i class="bi bi-exclamation-circle"></i> Selecione um paciente.</div>';
+            return;
+        }
         fetch(`/api/consultas/campanha/${CAMPANHA_ID}/comprovante-antecipado/${_compIdVinculo}/vincular`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token() }}' },
@@ -998,15 +1186,21 @@
         })
         .then(r => r.json())
         .then(data => {
-            cancelarVinculo();
             if (data.sucesso) {
-                const msg = data.enviado ? 'Comprovante enviado para o paciente!' : 'Comprovante vinculado. Será enviado quando o paciente confirmar.';
-                alert(msg);
-                carregarComprovantesAntecipados();
-                if (data.enviado) location.reload();
+                cancelarVinculo();
+                if (data.enviado) {
+                    resDiv.innerHTML = '<div class="alert alert-success py-1 mb-0"><i class="bi bi-send-fill"></i> Comprovante enviado para o paciente!</div>';
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    carregarComprovantesAntecipados();
+                }
             } else {
-                alert('Erro: ' + data.erro);
+                resDiv.innerHTML = `<div class="alert alert-danger py-1 mb-0"><i class="bi bi-x-circle-fill"></i> ${data.erro || 'Erro ao vincular.'}</div>`;
             }
+        })
+        .catch(() => {
+            document.getElementById('resultadoVinculo').innerHTML =
+                '<div class="alert alert-danger py-1 mb-0"><i class="bi bi-wifi-off"></i> Erro de conexão.</div>';
         });
     }
 
@@ -1024,18 +1218,42 @@
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-send-fill"></i> Enviar todos com match agora';
             if (data.sucesso) {
-                let msg = `${data.enviados} comprovante(s) enviado(s).`;
-                if (data.erros && data.erros.length > 0) msg += `\nErros: ${data.erros.join('\n')}`;
-                alert(msg);
-                if (data.enviados > 0) location.reload();
+                if (data.enviados > 0) {
+                    let erroTxt = '';
+                    if (data.erros && data.erros.length > 0) {
+                        erroTxt = `<br><small>Erros: ${data.erros.join(', ')}</small>`;
+                    }
+                    // Mostrar resultado inline acima da tabela
+                    document.querySelector('#tabPendentesAnt .d-flex').insertAdjacentHTML('afterend',
+                        `<div class="alert alert-success py-2 mb-2">
+                            <i class="bi bi-send-fill"></i> <strong>${data.enviados}</strong> comprovante(s) enviado(s).${erroTxt}
+                        </div>`
+                    );
+                    setTimeout(() => location.reload(), 2000);
+                } else if (data.erros && data.erros.length > 0) {
+                    const itens = data.erros.map(e => `<li>${e}</li>`).join('');
+                    document.querySelector('#tabPendentesAnt .d-flex').insertAdjacentHTML('afterend',
+                        `<div class="alert alert-warning py-2 mb-2">
+                            <i class="bi bi-exclamation-triangle-fill"></i> Nenhum enviado. Erros:<ul class="mb-0 mt-1 ps-3">${itens}</ul>
+                        </div>`
+                    );
+                } else {
+                    document.querySelector('#tabPendentesAnt .d-flex').insertAdjacentHTML('afterend',
+                        `<div class="alert alert-info py-2 mb-2"><i class="bi bi-info-circle"></i> Nenhum paciente com match aguardando comprovante no momento.</div>`
+                    );
+                }
             } else {
-                alert('Erro: ' + data.erro);
+                document.querySelector('#tabPendentesAnt .d-flex').insertAdjacentHTML('afterend',
+                    `<div class="alert alert-danger py-2 mb-2"><i class="bi bi-x-circle-fill"></i> ${data.erro || 'Erro ao processar.'}</div>`
+                );
             }
         })
         .catch(() => {
             btn.disabled = false;
             btn.innerHTML = '<i class="bi bi-send-fill"></i> Enviar todos com match agora';
-            alert('Erro ao processar.');
+            document.querySelector('#tabPendentesAnt .d-flex').insertAdjacentHTML('afterend',
+                '<div class="alert alert-danger py-2 mb-2"><i class="bi bi-wifi-off"></i> Erro de conexão. Tente novamente.</div>'
+            );
         });
     }
 </script>

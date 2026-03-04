@@ -324,30 +324,6 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
         if salvos:
             db.session.commit()
 
-            # Disparar envio se a consulta já estiver aguardando comprovante
-            send_fn = app.extensions.get('enviar_comprovante_background')
-            base_url = request.host_url.rstrip('/')
-            for s in salvos:
-                if s.get('match'):
-                    comp_enviado = next(
-                        (ag for ag in campanha.agendamentos
-                         if normalizar_nome_paciente(ag.paciente) == normalizar_nome_paciente(s['nome_paciente'])),
-                        None
-                    )
-                    comp_rec = ComprovanteAntecipado.query.filter_by(
-                        campanha_id=campanha_id,
-                        nome_paciente=s['nome_paciente'],
-                        usado=False
-                    ).order_by(ComprovanteAntecipado.id.desc()).first()
-                    if comp_enviado and comp_rec and comp_enviado.status == 'AGUARDANDO_COMPROVANTE' and send_fn:
-                        tel = next((t.telefone for t in comp_enviado.telefones if t.ativo), None)
-                        if tel:
-                            threading.Thread(
-                                target=send_fn,
-                                args=(current_user.id, comp_enviado.id, comp_rec.filepath, tel, base_url),
-                                daemon=True
-                            ).start()
-
         return jsonify({'sucesso': True, 'salvos': salvos, 'erros': erros})
 
     @app.route('/api/consultas/campanha/<int:campanha_id>/comprovante-antecipado/<int:comp_id>', methods=['DELETE'])

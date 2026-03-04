@@ -215,16 +215,27 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
         if campanha.criador_id != current_user.id:
             return jsonify({'erro': 'Acesso negado'}), 403
 
-        # Pegar todos os pacientes da campanha para mostrar matching
-        pacientes_camp = {c.id: c.paciente for c in campanha.agendamentos}
+        agendamentos = campanha.agendamentos
+        pacientes_camp = {ag.id: ag.paciente for ag in agendamentos}
 
         comps = ComprovanteAntecipado.query.filter_by(campanha_id=campanha_id).order_by(ComprovanteAntecipado.data_upload.desc()).all()
         resultado = []
         for c in comps:
             paciente_vinculado = None
             if c.consulta_id:
-                consulta_v = next((p for pid, p in pacientes_camp.items() if pid == c.consulta_id), None)
-                paciente_vinculado = consulta_v
+                paciente_vinculado = pacientes_camp.get(c.consulta_id)
+
+            # Match potencial: paciente na campanha com mesmo nome (sem vínculo ainda)
+            match_potencial = None
+            if not c.consulta_id:
+                nome_norm = normalizar_nome_paciente(c.nome_paciente)
+                ag_match = next(
+                    (ag for ag in agendamentos if normalizar_nome_paciente(ag.paciente) == nome_norm),
+                    None
+                )
+                if ag_match:
+                    match_potencial = ag_match.paciente
+
             resultado.append({
                 'id': c.id,
                 'nome_paciente': c.nome_paciente,
@@ -232,6 +243,7 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
                 'usado': c.usado,
                 'consulta_id': c.consulta_id,
                 'paciente_vinculado': paciente_vinculado,
+                'match_potencial': match_potencial,
                 'data_upload': c.data_upload.strftime('%d/%m/%Y %H:%M') if c.data_upload else None,
             })
         return jsonify({'comprovantes': resultado})
@@ -295,10 +307,46 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
                 usuario_id=current_user.id,
             )
             db.session.add(comp)
-            salvos.append({'nome_paciente': nome_paciente, 'filename': arquivo.filename})
+
+            # Tentar vincular automaticamente ao paciente com mesmo nome na campanha
+            nome_norm = normalizar_nome_paciente(nome_paciente)
+            consulta_match = next(
+                (ag for ag in campanha.agendamentos
+                 if normalizar_nome_paciente(ag.paciente) == nome_norm and not ag.comprovante_path),
+                None
+            )
+            if consulta_match:
+                comp.consulta_id = consulta_match.id
+                logger.info(f"[UPLOAD] Auto-vínculo: '{nome_paciente}' → consulta {consulta_match.id}")
+
+            salvos.append({'nome_paciente': nome_paciente, 'filename': arquivo.filename, 'match': bool(consulta_match)})
 
         if salvos:
             db.session.commit()
+
+            # Disparar envio se a consulta já estiver aguardando comprovante
+            send_fn = app.extensions.get('enviar_comprovante_background')
+            base_url = request.host_url.rstrip('/')
+            for s in salvos:
+                if s.get('match'):
+                    comp_enviado = next(
+                        (ag for ag in campanha.agendamentos
+                         if normalizar_nome_paciente(ag.paciente) == normalizar_nome_paciente(s['nome_paciente'])),
+                        None
+                    )
+                    comp_rec = ComprovanteAntecipado.query.filter_by(
+                        campanha_id=campanha_id,
+                        nome_paciente=s['nome_paciente'],
+                        usado=False
+                    ).order_by(ComprovanteAntecipado.id.desc()).first()
+                    if comp_enviado and comp_rec and comp_enviado.status == 'AGUARDANDO_COMPROVANTE' and send_fn:
+                        tel = next((t.telefone for t in comp_enviado.telefones if t.ativo), None)
+                        if tel:
+                            threading.Thread(
+                                target=send_fn,
+                                args=(current_user.id, comp_enviado.id, comp_rec.filepath, tel, base_url),
+                                daemon=True
+                            ).start()
 
         return jsonify({'sucesso': True, 'salvos': salvos, 'erros': erros})
 

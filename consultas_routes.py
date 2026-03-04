@@ -216,7 +216,7 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
             return jsonify({'erro': 'Acesso negado'}), 403
 
         # Pegar todos os pacientes da campanha para mostrar matching
-        pacientes_camp = {c.id: c.paciente for c in campanha.consultas}
+        pacientes_camp = {c.id: c.paciente for c in campanha.agendamentos}
 
         comps = ComprovanteAntecipado.query.filter_by(campanha_id=campanha_id).order_by(ComprovanteAntecipado.data_upload.desc()).all()
         resultado = []
@@ -252,17 +252,23 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
         salvos = []
         erros = []
 
+        # Suporte a inserção manual: nome_paciente_manual sobrescreve o nome do arquivo
+        nome_paciente_manual = request.form.get('nome_paciente_manual', '').strip()
+
         for arquivo in arquivos:
             if not arquivo or not arquivo.filename:
                 continue
             ext = os.path.splitext(arquivo.filename)[1].lower()
             if ext not in EXTS_PERMITIDAS:
-                erros.append(f'{arquivo.filename}: formato não suportado')
+                erros.append(f'{arquivo.filename}: formato não suportado (use PDF, JPG ou PNG)')
                 continue
 
-            # Extrair nome do paciente do nome do arquivo (sem extensão)
-            nome_original = os.path.splitext(arquivo.filename)[0]
-            nome_paciente = nome_original.strip()
+            # Extrair nome do paciente: manual (inserção direta) ou do nome do arquivo
+            if nome_paciente_manual and len(arquivos) == 1:
+                nome_paciente = nome_paciente_manual
+            else:
+                nome_original = os.path.splitext(arquivo.filename)[0]
+                nome_paciente = nome_original.strip()
 
             if not nome_paciente:
                 erros.append(f'{arquivo.filename}: nome inválido')
@@ -272,7 +278,7 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
             nome_norm = normalizar_nome_paciente(nome_paciente)
             existentes = ComprovanteAntecipado.query.filter_by(campanha_id=campanha_id, usado=False).all()
             if any(normalizar_nome_paciente(e.nome_paciente) == nome_norm for e in existentes):
-                erros.append(f'{arquivo.filename}: já existe comprovante pendente para "{nome_paciente}"')
+                erros.append(f'"{nome_paciente}": já possui comprovante pendente — remova o existente na lista antes de enviar outro')
                 continue
 
             # Salvar arquivo no servidor

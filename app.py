@@ -7931,14 +7931,38 @@ _Hospital Universitário Walter Cantídio_""", consulta)
                 ws.enviar(numero, resposta_faq)
                 logger.info(f"FAQ automático enviado antes de notificar urgência para {c.nome}")
 
-            # Notificar usuário sobre encaminhamento (apenas visual, sem ticket)
+            # Notificar usuário sobre encaminhamento — cooldown de 6h para não spammar
             if not resposta_faq:
-                if prioridade == 'urgente':
-                    ws.enviar(numero, "🚨 Sua mensagem foi encaminhada com URGÊNCIA para nossa equipe. "
+                seis_horas_atras = datetime.utcnow() - timedelta(hours=6)
+                notif_recente = LogMsg.query.filter(
+                    LogMsg.contato_id == c.id,
+                    LogMsg.direcao == 'enviada',
+                    LogMsg.telefone == numero,
+                    LogMsg.mensagem.like('%encaminhada%atendente%'),
+                    LogMsg.data >= seis_horas_atras
+                ).first()
+
+                if not notif_recente:
+                    if prioridade == 'urgente':
+                        msg_notif = ("🚨 Sua mensagem foi encaminhada com URGÊNCIA para nossa equipe. "
                                      "Um atendente entrará em contato em breve.")
-                else:
-                    ws.enviar(numero, "👤 Sua mensagem foi encaminhada para um atendente. "
+                    else:
+                        msg_notif = ("👤 Sua mensagem foi encaminhada para um atendente. "
                                      "Aguarde o retorno em até 24h úteis.")
+                    ws.enviar(numero, msg_notif)
+                    log_notif = LogMsg(
+                        campanha_id=c.campanha_id,
+                        contato_id=c.id,
+                        direcao='enviada',
+                        telefone=numero,
+                        mensagem=msg_notif[:500],
+                        status='ok'
+                    )
+                    db.session.add(log_notif)
+                    db.session.commit()
+                    logger.info(f"Notificação de encaminhamento enviada para {c.nome} ({numero}) - prioridade: {prioridade}")
+                else:
+                    logger.info(f"Notificação de encaminhamento suprimida para {c.nome} ({numero}) - cooldown ativo (enviada há menos de 6h)")
 
             logger.info(f"Mensagem urgente detectada de {c.nome} - Prioridade: {prioridade} (badge visual ativo)")
             return jsonify({'status': 'ok'}), 200

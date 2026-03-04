@@ -7923,47 +7923,10 @@ _Hospital Universitário Walter Cantídio_""", consulta)
             logger.info(f"FAQ automático enviado para {c.nome}")
             return jsonify({'status': 'ok'}), 200
 
-        # Se é urgente/importante, notifica usuário mas NÃO cria ticket
-        # Gestores veem badge visual na lista de contatos
+        # Se é urgente/importante, apenas sinaliza visualmente (badge) — sem mensagem ao paciente
         if prioridade and c.status not in ESTADOS_FLUXO_ATIVO:
-            # Se tem FAQ, envia antes da notificação
             if resposta_faq:
                 ws.enviar(numero, resposta_faq)
-                logger.info(f"FAQ automático enviado antes de notificar urgência para {c.nome}")
-
-            # Notificar usuário sobre encaminhamento — cooldown de 6h para não spammar
-            if not resposta_faq:
-                seis_horas_atras = datetime.utcnow() - timedelta(hours=6)
-                notif_recente = LogMsg.query.filter(
-                    LogMsg.contato_id == c.id,
-                    LogMsg.direcao == 'enviada',
-                    LogMsg.telefone == numero,
-                    LogMsg.mensagem.like('%encaminhada%atendente%'),
-                    LogMsg.data >= seis_horas_atras
-                ).first()
-
-                if not notif_recente:
-                    if prioridade == 'urgente':
-                        msg_notif = ("🚨 Sua mensagem foi encaminhada com URGÊNCIA para nossa equipe. "
-                                     "Um atendente entrará em contato em breve.")
-                    else:
-                        msg_notif = ("👤 Sua mensagem foi encaminhada para um atendente. "
-                                     "Aguarde o retorno em até 24h úteis.")
-                    ws.enviar(numero, msg_notif)
-                    log_notif = LogMsg(
-                        campanha_id=c.campanha_id,
-                        contato_id=c.id,
-                        direcao='enviada',
-                        telefone=numero,
-                        mensagem=msg_notif[:500],
-                        status='ok'
-                    )
-                    db.session.add(log_notif)
-                    db.session.commit()
-                    logger.info(f"Notificação de encaminhamento enviada para {c.nome} ({numero}) - prioridade: {prioridade}")
-                else:
-                    logger.info(f"Notificação de encaminhamento suprimida para {c.nome} ({numero}) - cooldown ativo (enviada há menos de 6h)")
-
             logger.info(f"Mensagem urgente detectada de {c.nome} - Prioridade: {prioridade} (badge visual ativo)")
             return jsonify({'status': 'ok'}), 200
 

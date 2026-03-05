@@ -7,73 +7,104 @@ Saída: tutorial_fila_cirurgica.pdf
 
 from fpdf import FPDF
 
+FONT_REGULAR = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+FONT_BOLD    = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+FONT_ITALIC  = '/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Oblique.ttf'
+
+AZUL      = (0, 100, 200)
+AZUL_ESC  = (0, 60, 130)
+CINZA_ESC = (52, 58, 64)
+BRANCO    = (255, 255, 255)
+AMARELO   = (255, 243, 205)
+AZUL_CLARO = (209, 236, 241)
+VERDE_CLARO = (220, 248, 220)
+CINZA_CLARO = (240, 240, 240)
+VERMELHO  = (190, 0, 0)
+PRETO     = (0, 0, 0)
+
 class TutorialPDF(FPDF):
     def header(self):
-        self.set_font('Helvetica', 'B', 10)
-        self.set_text_color(100, 100, 100)
-        self.cell(0, 8, 'Tutorial - Fila Cirurgica | HUWC', 0, 1, 'C')
-        self.set_draw_color(0, 123, 255)
-        self.set_line_width(0.5)
+        self.set_font('dv', '', 9)
+        self.set_text_color(*[100]*3)
+        self.cell(0, 7, 'Tutorial – Modo Fila Cirúrgica | HUWC', 0, new_x='LMARGIN', new_y='NEXT', align='C')
+        self.set_draw_color(*AZUL)
+        self.set_line_width(0.4)
         self.line(10, self.get_y(), 200, self.get_y())
-        self.ln(4)
+        self.ln(3)
 
     def footer(self):
-        self.set_y(-15)
-        self.set_font('Helvetica', 'I', 8)
+        self.set_y(-14)
+        self.set_font('dv', '', 8)
         self.set_text_color(150, 150, 150)
-        self.cell(0, 10, f'Pagina {self.page_no()}/{{nb}}', 0, 0, 'C')
+        self.cell(0, 8, f'Página {self.page_no()}/{{nb}}', 0, align='C')
 
     def titulo_secao(self, numero, texto):
-        self.ln(6)
-        self.set_fill_color(0, 123, 255)
-        self.set_text_color(255, 255, 255)
-        self.set_font('Helvetica', 'B', 14)
-        self.cell(0, 10, f'  {numero}. {texto}', 0, 1, 'L', fill=True)
+        self.ln(5)
+        self.set_fill_color(*AZUL)
+        self.set_text_color(*BRANCO)
+        self.set_font('dvb', '', 13)
+        self.cell(0, 10, f'  {numero}. {texto}', 0, new_x='LMARGIN', new_y='NEXT', fill=True)
         self.ln(3)
-        self.set_text_color(0, 0, 0)
+        self.set_text_color(*PRETO)
 
     def subtitulo(self, texto):
         self.ln(3)
-        self.set_font('Helvetica', 'B', 11)
-        self.set_text_color(0, 90, 180)
-        self.cell(0, 7, texto, 0, 1)
-        self.set_text_color(0, 0, 0)
+        self.set_font('dvb', '', 11)
+        self.set_text_color(*AZUL_ESC)
+        self.cell(0, 7, texto, 0, new_x='LMARGIN', new_y='NEXT')
+        self.set_text_color(*PRETO)
         self.ln(1)
 
     def paragrafo(self, texto):
-        self.set_font('Helvetica', '', 10)
+        self.set_font('dv', '', 10)
         self.multi_cell(0, 5.5, texto)
         self.ln(2)
 
-    def item_lista(self, texto, bullet='  >'):
-        self.set_font('Helvetica', '', 10)
-        x = self.get_x()
-        self.cell(10, 5.5, bullet, 0, 0)
+    def item_lista(self, texto):
+        self.set_font('dv', '', 10)
+        self.cell(8, 5.5, '›', 0)
         self.multi_cell(0, 5.5, texto)
         self.ln(1)
 
     def destaque(self, texto):
-        self.set_fill_color(255, 243, 205)
-        self.set_font('Helvetica', 'B', 10)
-        self.multi_cell(0, 6, f'  IMPORTANTE: {texto}', 0, 'L', fill=True)
+        self.set_fill_color(*AMARELO)
+        self.set_font('dvb', '', 10)
+        self.multi_cell(0, 6, f'  [!] IMPORTANTE: {texto}', border=0, fill=True)
         self.ln(3)
 
     def dica(self, texto):
-        self.set_fill_color(209, 236, 241)
-        self.set_font('Helvetica', '', 10)
-        self.multi_cell(0, 6, f'  DICA: {texto}', 0, 'L', fill=True)
+        self.set_fill_color(*AZUL_CLARO)
+        self.set_font('dv', '', 10)
+        self.multi_cell(0, 6, f'  >> DICA: {texto}', border=0, fill=True)
         self.ln(3)
 
-    def celula_tabela(self, w, h, txt, border=1, ln=0, align='L', fill=False, bold=False):
-        if bold:
-            self.set_font('Helvetica', 'B', 9)
-        else:
-            self.set_font('Helvetica', '', 9)
-        self.cell(w, h, txt, border, ln, align, fill)
+    ROW_H = 7
+
+    def th(self, widths, labels):
+        self.set_fill_color(*CINZA_ESC)
+        self.set_text_color(*BRANCO)
+        self.set_font('dvb', '', 9)
+        for i, (w, label) in enumerate(zip(widths, labels)):
+            nx = 'LMARGIN' if i == len(labels)-1 else 'RIGHT'
+            ny = 'NEXT'    if i == len(labels)-1 else 'TOP'
+            self.cell(w, self.ROW_H, f' {label}', 1, new_x=nx, new_y=ny, fill=True)
+        self.set_text_color(*PRETO)
+
+    def tr(self, widths, values, fill=False, bold_first=False):
+        if fill:
+            self.set_fill_color(*CINZA_CLARO)
+        for i, (w, val) in enumerate(zip(widths, values)):
+            nx = 'LMARGIN' if i == len(values)-1 else 'RIGHT'
+            ny = 'NEXT'    if i == len(values)-1 else 'TOP'
+            self.set_font('dvb' if (bold_first and i == 0) else 'dv', '', 9)
+            self.cell(w, self.ROW_H, f' {val}', 1, new_x=nx, new_y=ny, fill=fill)
 
 
 def gerar_tutorial():
     pdf = TutorialPDF()
+    pdf.add_font('dv',  '', FONT_REGULAR)
+    pdf.add_font('dvb', '', FONT_BOLD)
+    pdf.add_font('dvi', '', FONT_ITALIC)
     pdf.alias_nb_pages()
     pdf.set_auto_page_break(auto=True, margin=20)
 
@@ -81,233 +112,177 @@ def gerar_tutorial():
     # CAPA
     # =========================================================================
     pdf.add_page()
-    pdf.ln(30)
-    pdf.set_font('Helvetica', 'B', 28)
-    pdf.set_text_color(0, 90, 180)
-    pdf.cell(0, 15, 'TUTORIAL', 0, 1, 'C')
-    pdf.set_font('Helvetica', 'B', 22)
-    pdf.cell(0, 12, 'Modo Fila Cirurgica', 0, 1, 'C')
-    pdf.ln(8)
-    pdf.set_draw_color(0, 123, 255)
+    pdf.ln(28)
+    pdf.set_font('dvb', '', 30)
+    pdf.set_text_color(*AZUL)
+    pdf.cell(0, 16, 'TUTORIAL', align='C', new_x='LMARGIN', new_y='NEXT')
+    pdf.set_font('dvb', '', 22)
+    pdf.cell(0, 12, 'Modo Fila Cirúrgica', align='C', new_x='LMARGIN', new_y='NEXT')
+    pdf.ln(6)
+    pdf.set_draw_color(*AZUL)
     pdf.set_line_width(1)
     pdf.line(60, pdf.get_y(), 150, pdf.get_y())
     pdf.ln(10)
-
-    pdf.set_font('Helvetica', '', 13)
+    pdf.set_font('dv', '', 13)
     pdf.set_text_color(80, 80, 80)
-    pdf.cell(0, 8, 'Sistema de Busca Ativa de Pacientes', 0, 1, 'C')
-    pdf.cell(0, 8, 'Hospital Universitario Walter Cantidio', 0, 1, 'C')
-    pdf.ln(15)
-
-    pdf.set_font('Helvetica', '', 11)
+    pdf.cell(0, 8, 'Sistema de Busca Ativa de Pacientes', align='C', new_x='LMARGIN', new_y='NEXT')
+    pdf.cell(0, 8, 'Hospital Universitário Walter Cantídio', align='C', new_x='LMARGIN', new_y='NEXT')
+    pdf.ln(12)
+    pdf.set_font('dv', '', 11)
     pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 7, 'Guia completo para criar campanhas,', 0, 1, 'C')
-    pdf.cell(0, 7, 'importar planilhas e gerenciar a fila cirurgica', 0, 1, 'C')
-    pdf.cell(0, 7, 'via WhatsApp de forma automatizada.', 0, 1, 'C')
-
-    pdf.ln(30)
-    pdf.set_fill_color(240, 240, 240)
-    pdf.set_font('Helvetica', 'I', 10)
+    pdf.cell(0, 7, 'Guia completo para criar campanhas,', align='C', new_x='LMARGIN', new_y='NEXT')
+    pdf.cell(0, 7, 'importar planilhas e gerenciar a fila cirúrgica', align='C', new_x='LMARGIN', new_y='NEXT')
+    pdf.cell(0, 7, 'via WhatsApp de forma automatizada.', align='C', new_x='LMARGIN', new_y='NEXT')
+    pdf.ln(28)
+    pdf.set_fill_color(242, 242, 242)
+    pdf.set_font('dvi', '', 10)
     pdf.set_text_color(120, 120, 120)
-    pdf.multi_cell(0, 6, '  Este tutorial foi feito para usuarios sem experiencia tecnica.\n  Siga cada passo na ordem indicada.', 0, 'C', fill=True)
+    pdf.multi_cell(0, 6,
+        '  Este tutorial foi feito para usuários sem experiência técnica.\n'
+        '  Siga cada passo na ordem indicada.',
+        border=0, align='C', fill=True)
 
     # =========================================================================
-    # PAGINA 2 - O QUE E O SISTEMA
+    # O QUE É O SISTEMA
     # =========================================================================
     pdf.add_page()
-    pdf.set_text_color(0, 0, 0)
-
-    pdf.titulo_secao('1', 'O que e o Sistema de Fila Cirurgica?')
-
+    pdf.set_text_color(*PRETO)
+    pdf.titulo_secao('1', 'O que é o Sistema de Fila Cirúrgica?')
     pdf.paragrafo(
-        'O Sistema de Fila Cirurgica e uma ferramenta que entra em contato com pacientes '
-        'que estao na lista de espera para cirurgias no Hospital Universitario Walter Cantidio. '
-        'O contato e feito de forma automatica pelo WhatsApp.'
+        'O Sistema de Fila Cirúrgica entra em contato com pacientes que estão na lista de espera '
+        'para cirurgias no Hospital Universitário Walter Cantídio. O contato é feito de forma '
+        'automática pelo WhatsApp.'
     )
-
-    pdf.paragrafo('O sistema faz o seguinte:')
-    pdf.item_lista('Envia mensagem automatica pelo WhatsApp para cada paciente da lista')
+    pdf.paragrafo('O sistema faz o seguinte automaticamente:')
+    pdf.item_lista('Envia mensagem pelo WhatsApp para cada paciente da lista')
     pdf.item_lista('Pergunta se o paciente ainda tem interesse na cirurgia')
-    pdf.item_lista('Registra a resposta automaticamente (SIM, NAO ou DESCONHECO)')
-    pdf.item_lista('Se o paciente nao responder, reenvia lembretes automaticamente')
-    pdf.item_lista('Gera relatorios com o resultado de cada paciente')
-    pdf.item_lista('Responde duvidas comuns dos pacientes automaticamente (FAQ)')
-
+    pdf.item_lista('Registra a resposta (SIM, NÃO ou DESCONHEÇO)')
+    pdf.item_lista('Se o paciente não responder, reenvia lembretes automaticamente')
+    pdf.item_lista('Gera relatórios com o resultado de cada paciente')
+    pdf.item_lista('Responde dúvidas comuns dos pacientes automaticamente (FAQ)')
     pdf.ln(3)
     pdf.destaque(
-        'Voce NAO precisa enviar mensagens manualmente. O sistema faz tudo sozinho '
-        'apos a campanha ser criada e iniciada.'
+        'Você NÃO precisa enviar mensagens manualmente. O sistema faz tudo sozinho '
+        'após a campanha ser criada e iniciada.'
     )
 
     # =========================================================================
-    # PAGINA 3 - PREPARAR A PLANILHA
+    # PREPARAR A PLANILHA
     # =========================================================================
     pdf.titulo_secao('2', 'Como Preparar a Planilha Excel')
-
     pdf.paragrafo(
-        'A planilha e o arquivo Excel (.xlsx) com os dados dos pacientes. '
-        'E a parte mais importante: se a planilha estiver errada, o sistema nao vai funcionar.'
+        'A planilha é o arquivo Excel (.xlsx) com os dados dos pacientes. '
+        'É a parte mais importante: se a planilha estiver errada, o sistema não vai funcionar.'
     )
+    pdf.subtitulo('Colunas obrigatórias')
+    pdf.paragrafo('A planilha DEVE ter estas duas colunas. O nome deve ser exatamente como abaixo:')
 
-    pdf.subtitulo('Colunas da Planilha')
-    pdf.paragrafo(
-        'A planilha deve ter as seguintes colunas (a primeira linha deve conter os nomes das colunas):'
-    )
-
-    # Tabela de colunas
-    col_w = [35, 25, 50, 80]
-    row_h = 7
-
-    pdf.set_fill_color(52, 58, 64)
-    pdf.set_text_color(255, 255, 255)
-    pdf.celula_tabela(col_w[0], row_h, ' Coluna', fill=True, bold=True)
-    pdf.celula_tabela(col_w[1], row_h, ' Obrigatorio?', fill=True, bold=True)
-    pdf.celula_tabela(col_w[2], row_h, ' Formato', fill=True, bold=True)
-    pdf.celula_tabela(col_w[3], row_h, ' Exemplo', fill=True, bold=True, ln=1)
-    pdf.set_text_color(0, 0, 0)
-
+    cw = [40, 30, 55, 65]
+    pdf.th(cw, ['Coluna', 'Obrigatório?', 'Formato', 'Exemplo'])
     linhas = [
-        ['Nome', 'SIM', 'Texto (nome completo)', 'Joao da Silva'],
-        ['Telefone', 'SIM', 'Numero com DDD', '85992231683'],
+        ['Nome', '✔ SIM', 'Texto (nome completo)', 'Maria da Silva'],
+        ['Telefone', '✔ SIM', 'Número com DDD, sem traços', '85992231683'],
         ['Procedimento', 'Opcional', 'Texto da cirurgia', 'Cirurgia de Catarata'],
-        ['Nascimento', 'Opcional', 'DD/MM/AAAA', '15/08/1985'],
     ]
     for i, linha in enumerate(linhas):
-        fill = i % 2 == 0
-        if fill:
-            pdf.set_fill_color(240, 240, 240)
-        pdf.celula_tabela(col_w[0], row_h, f' {linha[0]}', fill=fill, bold=True)
-        pdf.celula_tabela(col_w[1], row_h, f' {linha[1]}', fill=fill)
-        pdf.celula_tabela(col_w[2], row_h, f' {linha[2]}', fill=fill)
-        pdf.celula_tabela(col_w[3], row_h, f' {linha[3]}', fill=fill, ln=1)
+        pdf.tr(cw, linha, fill=(i % 2 == 0), bold_first=True)
 
     pdf.ln(5)
-
     pdf.subtitulo('Nomes aceitos para cada coluna')
-    pdf.paragrafo('O sistema aceita variantes dos nomes. Veja o que funciona:')
-    pdf.item_lista('Coluna Nome: "nome", "usuario", "paciente"')
+    pdf.paragrafo('O sistema reconhece variações do nome. Veja o que funciona:')
+    pdf.item_lista('Coluna Nome: "nome", "usuario", "usuário", "paciente"')
     pdf.item_lista('Coluna Telefone: "telefone", "celular", "fone", "tel", "whatsapp", "contato"')
     pdf.item_lista('Coluna Procedimento: "procedimento", "cirurgia", "procedimentos"')
-    pdf.item_lista('Coluna Nascimento: "nascimento", "data_nascimento", "data nascimento", "dt_nasc"')
+
+    pdf.ln(3)
+    pdf.subtitulo('Como informar o Telefone')
+    pdf.item_lista('Coloque o número com DDD, sem espaços, traços ou parênteses: 85992231683')
+    pdf.item_lista(
+        'Se o paciente tem MAIS DE UM telefone, coloque todos na MESMA célula separados por espaço:\n'
+        '       Exemplo: 85992231683 85997293229'
+    )
+    pdf.item_lista('O sistema separa e testa cada número automaticamente')
+    pdf.item_lista('Aceita até 5 telefones por paciente')
 
     pdf.ln(2)
-    pdf.subtitulo('Exemplo de Planilha Correta')
-
-    col_ex = [45, 35, 55, 55]
-    pdf.set_fill_color(52, 58, 64)
-    pdf.set_text_color(255, 255, 255)
-    pdf.celula_tabela(col_ex[0], row_h, ' Nome', fill=True, bold=True)
-    pdf.celula_tabela(col_ex[1], row_h, ' Telefone', fill=True, bold=True)
-    pdf.celula_tabela(col_ex[2], row_h, ' Procedimento', fill=True, bold=True)
-    pdf.celula_tabela(col_ex[3], row_h, ' Nascimento', fill=True, bold=True, ln=1)
-    pdf.set_text_color(0, 0, 0)
-
-    exemplos = [
-        ['Maria da Silva', '85999001122', 'Cirurgia de Catarata', '10/03/1960'],
-        ['Jose Santos', '85988112233', 'Hernia Inguinal', '22/07/1975'],
-        ['Ana Oliveira', '85977334455', 'Artroscopia de Joelho', '05/11/1988'],
-        ['Jose Santos', '85966778899', 'Hernia Inguinal', '22/07/1975'],
-    ]
-    for i, ex in enumerate(exemplos):
-        fill = i % 2 == 0
-        if fill:
-            pdf.set_fill_color(240, 240, 240)
-        pdf.celula_tabela(col_ex[0], row_h, f' {ex[0]}', fill=fill)
-        pdf.celula_tabela(col_ex[1], row_h, f' {ex[1]}', fill=fill)
-        pdf.celula_tabela(col_ex[2], row_h, f' {ex[2]}', fill=fill)
-        pdf.celula_tabela(col_ex[3], row_h, f' {ex[3]}', fill=fill, ln=1)
-
-    pdf.ln(4)
     pdf.dica(
-        'Note que "Jose Santos" aparece 2 vezes com telefones diferentes. '
-        'O sistema agrupa automaticamente e cadastra os 2 numeros para o mesmo paciente!'
-    )
-
-    pdf.destaque(
-        'Salve a planilha no formato .xlsx (Excel). Arquivos .csv ou .pdf NAO sao aceitos.'
+        'Telefones separados por vírgula, ponto e vírgula ou espaço são todos reconhecidos. '
+        'Ex: "85992231683 85997293229" ou "85992231683, 85997293229" — ambos funcionam.'
     )
 
     # =========================================================================
-    # REGRAS DA PLANILHA
+    # EXEMPLO DE PLANILHA
     # =========================================================================
     pdf.add_page()
-    pdf.titulo_secao('3', 'Regras Importantes da Planilha')
+    pdf.titulo_secao('3', 'Exemplo de Planilha Correta')
 
-    pdf.subtitulo('Telefones')
-    pdf.item_lista('Use numeros com DDD, sem espacos ou tracos. Ex: 85999001122')
-    pdf.item_lista('Pode ser com ou sem o 55 na frente. Ex: 5585999001122 tambem funciona')
-    pdf.item_lista('Se o paciente tem mais de um telefone, coloque cada um em uma linha separada com o mesmo nome')
-    pdf.item_lista('O sistema aceita ate 5 telefones por paciente')
-    pdf.item_lista('Numeros invalidos sao ignorados automaticamente')
+    cex = [55, 65, 70]
+    pdf.th(cex, ['Nome', 'Telefone', 'Procedimento'])
+    exemplos = [
+        ['Maria da Silva',  '85992231683 85997293229', 'Cirurgia de Catarata'],
+        ['José Santos',     '85988112233',             'Hérnia Inguinal'],
+        ['Ana Oliveira',    '85977334455',             'Artroscopia de Joelho'],
+    ]
+    for i, ex in enumerate(exemplos):
+        pdf.tr(cex, ex, fill=(i % 2 == 0))
 
-    pdf.subtitulo('Nomes')
-    pdf.item_lista('Use o nome completo do paciente')
+    pdf.ln(5)
+    pdf.dica(
+        '"Maria da Silva" tem dois telefones na mesma célula. O sistema separa '
+        'automaticamente e envia para os dois números!'
+    )
+    pdf.destaque(
+        'Salve a planilha no formato .xlsx (Excel). '
+        'Arquivos .csv ou .pdf NÃO são aceitos.'
+    )
+
+    pdf.subtitulo('Regras importantes')
+    pdf.item_lista('Use o nome completo do paciente na coluna Nome')
     pdf.item_lista('O sistema agrupa linhas com o MESMO NOME como sendo o mesmo paciente')
-    pdf.item_lista('Se o nome estiver escrito diferente (ex: "Jose" vs "Jose Santos"), serao tratados como pessoas diferentes')
-
-    pdf.subtitulo('Procedimento')
-    pdf.item_lista('Se nao preencher, o sistema usa "o procedimento" na mensagem')
-    pdf.item_lista('Se preencher, vai aparecer na mensagem: "voce esta na lista de espera para Cirurgia de Catarata"')
-    pdf.item_lista('O sistema usa inteligencia artificial para padronizar os nomes dos procedimentos')
-
-    pdf.subtitulo('Data de Nascimento')
-    pdf.item_lista('Formato: DD/MM/AAAA (ex: 15/08/1985)')
-    pdf.item_lista('Tambem aceita: DD-MM-AAAA ou DD.MM.AAAA')
-    pdf.item_lista('Se informada, ajuda a identificar pacientes com o mesmo nome')
+    pdf.item_lista(
+        'Se o nome estiver escrito diferente (ex: "Jose" vs "José Santos"), '
+        'serão tratados como pessoas diferentes — revise bem os nomes'
+    )
+    pdf.item_lista('Números inválidos são ignorados automaticamente')
 
     # =========================================================================
     # CRIAR CAMPANHA
     # =========================================================================
     pdf.add_page()
     pdf.titulo_secao('4', 'Como Criar uma Campanha')
-
     pdf.paragrafo(
-        'Campanha e o nome dado a um lote de pacientes que serao contatados. '
-        'Por exemplo: "Fila Cirurgica Oftalmologia Marco 2026".'
+        'Campanha é o nome dado a um lote de pacientes que serão contatados. '
+        'Exemplo: "Fila Cirúrgica Oftalmologia Março 2026".'
     )
 
-    pdf.subtitulo('Passo a Passo')
+    passos_campanha = [
+        ('Passo 1: Acesse o painel',
+         'Faça login no sistema com seu e-mail e senha.'),
+        ('Passo 2: Clique em "Nova Campanha"',
+         'No painel principal (Dashboard), clique no botão "Nova Campanha".'),
+        ('Passo 3: Preencha os dados',
+         'Nome da Campanha: dê um nome descritivo (ex: "Oftalmologia Março 2026")\n'
+         '       Meta Diária: quantas mensagens enviar por dia (recomendado: 50)\n'
+         '       Horário Início: quando começar os envios (ex: 08:00)\n'
+         '       Horário Fim: quando parar os envios (ex: 18:00)'),
+        ('Passo 4: Anexe a planilha',
+         'Clique no botão de upload e selecione o arquivo .xlsx que você preparou.'),
+        ('Passo 5: Aguarde o processamento',
+         'O sistema processa a planilha, valida os números e normaliza os procedimentos. '
+         'Uma barra de progresso será exibida. Pode levar alguns minutos.'),
+    ]
+    for titulo_p, desc in passos_campanha:
+        pdf.set_font('dvb', '', 10)
+        pdf.set_text_color(*AZUL_ESC)
+        pdf.cell(0, 6, titulo_p, new_x='LMARGIN', new_y='NEXT')
+        pdf.set_text_color(*PRETO)
+        pdf.set_font('dv', '', 10)
+        pdf.multi_cell(0, 5.5, f'       {desc}')
+        pdf.ln(3)
 
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(0, 6, 'Passo 1: Acesse o painel', 0, 1)
-    pdf.set_font('Helvetica', '', 10)
-    pdf.paragrafo('Faca login no sistema com seu email e senha.')
-
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(0, 6, 'Passo 2: Clique em "Nova Campanha"', 0, 1)
-    pdf.set_font('Helvetica', '', 10)
-    pdf.paragrafo('No painel principal (Dashboard), clique no botao "Nova Campanha".')
-
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(0, 6, 'Passo 3: Preencha os dados', 0, 1)
-    pdf.set_font('Helvetica', '', 10)
-    pdf.item_lista('Nome da Campanha: de um nome descritivo (ex: "Oftalmologia Marco 2026")')
-    pdf.item_lista('Descricao: opcional, para sua referencia')
-    pdf.item_lista('Mensagem: ja vem preenchida com a mensagem padrao. Pode personalizar se quiser.')
-    pdf.item_lista('Meta Diaria: quantas mensagens enviar por dia (recomendado: 50)')
-    pdf.item_lista('Horario Inicio: hora para comecar os envios (ex: 08:00)')
-    pdf.item_lista('Horario Fim: hora para parar os envios (ex: 18:00)')
-
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(0, 6, 'Passo 4: Anexe a planilha', 0, 1)
-    pdf.set_font('Helvetica', '', 10)
-    pdf.paragrafo(
-        'Clique no botao de upload e selecione o arquivo Excel (.xlsx) que voce preparou.'
-    )
-
-    pdf.set_font('Helvetica', 'B', 10)
-    pdf.cell(0, 6, 'Passo 5: Aguarde o processamento', 0, 1)
-    pdf.set_font('Helvetica', '', 10)
-    pdf.paragrafo(
-        'O sistema vai processar a planilha, validar os numeros e normalizar os procedimentos. '
-        'Isso pode levar alguns minutos dependendo da quantidade de pacientes. '
-        'Uma barra de progresso sera exibida.'
-    )
-
-    pdf.ln(3)
     pdf.dica(
-        'O calculo do intervalo entre envios e automatico. Se voce definir meta de 50 '
-        'mensagens entre 08:00 e 18:00 (10 horas), o sistema calcula: 1 envio a cada 12 minutos.'
+        'O cálculo do intervalo entre envios é automático. '
+        'Meta de 50 mensagens entre 08:00 e 18:00 = 1 envio a cada 12 minutos.'
     )
 
     # =========================================================================
@@ -317,284 +292,224 @@ def gerar_tutorial():
     pdf.titulo_secao('5', 'Iniciar os Envios')
 
     pdf.subtitulo('Antes de iniciar, verifique:')
-    pdf.item_lista('O WhatsApp esta conectado (indicador verde no topo da pagina)')
-    pdf.item_lista('A campanha foi processada com sucesso (status "Pronta")')
-    pdf.item_lista('Os horarios de envio estao corretos')
+    pdf.item_lista('O WhatsApp está conectado (indicador verde no topo da página)')
+    pdf.item_lista('A campanha foi processada com sucesso')
+    pdf.item_lista('Os horários de envio estão corretos')
 
     pdf.subtitulo('Iniciando')
     pdf.paragrafo(
-        'Na pagina da campanha, clique no botao "Iniciar Envios". '
-        'O sistema comecara a enviar as mensagens automaticamente, '
-        'respeitando o intervalo calculado e os horarios configurados.'
+        'Na página da campanha, clique no botão "Iniciar Envios". '
+        'O sistema começará a enviar automaticamente, respeitando o intervalo e os horários.'
     )
-
     pdf.destaque(
-        'NAO feche o navegador durante os envios. O sistema precisa estar ativo para enviar.'
+        'NÃO feche o navegador durante os envios. O sistema precisa estar ativo para enviar.'
     )
 
-    pdf.subtitulo('O que o paciente recebe?')
-    pdf.paragrafo('O paciente recebe uma mensagem no WhatsApp parecida com esta:')
-
+    pdf.subtitulo('Mensagem que o paciente recebe')
     pdf.ln(2)
-    pdf.set_fill_color(220, 248, 220)
-    pdf.set_font('Helvetica', '', 9)
-    msg_exemplo = (
-        '  Ola, Maria da Silva!\n'
-        '  \n'
-        '  Aqui e da Central de Agendamentos do Hospital Universitario Walter Cantidio.\n'
-        '  \n'
-        '  Consta em nossos registros que voce esta na lista de espera para\n'
-        '  o procedimento: Cirurgia de Catarata.\n'
-        '  \n'
-        '  Voce ainda tem interesse em realizar esta cirurgia?\n'
-        '  \n'
-        '  1 - SIM - Tenho interesse\n'
-        '  2 - NAO - Nao tenho mais interesse\n'
-        '  3 - DESCONHECO - Nao sou essa pessoa'
-    )
-    pdf.multi_cell(0, 5, msg_exemplo, 1, 'L', fill=True)
+    pdf.set_fill_color(*VERDE_CLARO)
+    pdf.set_font('dv', '', 9.5)
+    pdf.multi_cell(0, 5.5,
+        '  Olá, Maria da Silva!\n\n'
+        '  Aqui é da Central de Agendamentos do Hospital Universitário Walter Cantídio.\n\n'
+        '  Consta em nossos registros que você está na lista de espera para o\n'
+        '  procedimento: Cirurgia de Catarata.\n\n'
+        '  Você ainda tem interesse em realizar esta cirurgia?\n\n'
+        '  1 – SIM  – Tenho interesse\n'
+        '  2 – NÃO  – Não tenho mais interesse\n'
+        '  3 – DESCONHEÇO – Não sou essa pessoa',
+        border=1, fill=True)
     pdf.ln(4)
 
     pdf.subtitulo('O que acontece com a resposta do paciente?')
-
-    col_resp = [40, 150]
-    pdf.set_fill_color(52, 58, 64)
-    pdf.set_text_color(255, 255, 255)
-    pdf.celula_tabela(col_resp[0], row_h, ' Resposta', fill=True, bold=True)
-    pdf.celula_tabela(col_resp[1], row_h, ' O que acontece', fill=True, bold=True, ln=1)
-    pdf.set_text_color(0, 0, 0)
-
+    cw2 = [42, 148]
+    pdf.th(cw2, ['Resposta', 'O que acontece'])
     resps = [
-        ['1 ou SIM', 'Paciente fica como CONFIRMADO. Recebe mensagem de confirmacao.'],
-        ['2 ou NAO', 'Sistema pergunta o motivo. Paciente fica como REJEITADO.'],
-        ['3 ou DESCON.', 'Numero e marcado como "nao pertence ao paciente".'],
-        ['Sem resposta', 'Sistema reenvia lembretes automaticamente (ate 2 tentativas).'],
+        ['1 ou SIM',    'Paciente fica como CONFIRMADO. Recebe mensagem de confirmação.'],
+        ['2 ou NÃO',    'Sistema pergunta o motivo. Paciente fica como REJEITADO.'],
+        ['3 ou DESCON.','Número marcado como "não pertence ao paciente".'],
+        ['Sem resposta','Sistema reenvia lembretes automaticamente (até 2 vezes).'],
     ]
     for i, r in enumerate(resps):
-        fill = i % 2 == 0
-        if fill:
-            pdf.set_fill_color(240, 240, 240)
-        pdf.celula_tabela(col_resp[0], row_h, f' {r[0]}', fill=fill, bold=True)
-        pdf.celula_tabela(col_resp[1], row_h, f' {r[1]}', fill=fill, ln=1)
+        pdf.tr(cw2, r, fill=(i % 2 == 0), bold_first=True)
 
     # =========================================================================
     # ACOMPANHAMENTO
     # =========================================================================
     pdf.add_page()
     pdf.titulo_secao('6', 'Acompanhar os Resultados')
-
     pdf.paragrafo(
-        'No Dashboard voce pode acompanhar em tempo real o progresso de cada campanha:'
+        'No Dashboard você acompanha em tempo real o progresso de cada campanha:'
     )
-
     pdf.item_lista('Total de contatos importados')
-    pdf.item_lista('Quantos ja foram enviados')
+    pdf.item_lista('Quantos já foram enviados')
     pdf.item_lista('Quantos confirmaram interesse (SIM)')
-    pdf.item_lista('Quantos rejeitaram (NAO)')
-    pdf.item_lista('Quantos ainda nao responderam')
+    pdf.item_lista('Quantos rejeitaram (NÃO)')
+    pdf.item_lista('Quantos ainda não responderam')
     pdf.item_lista('Quantos tiveram erro no envio')
 
     pdf.subtitulo('Status dos Pacientes')
-
-    col_st = [40, 150]
-    row_h2 = 7
-    pdf.set_fill_color(52, 58, 64)
-    pdf.set_text_color(255, 255, 255)
-    pdf.celula_tabela(col_st[0], row_h2, ' Status', fill=True, bold=True)
-    pdf.celula_tabela(col_st[1], row_h2, ' Significado', fill=True, bold=True, ln=1)
-    pdf.set_text_color(0, 0, 0)
-
+    cw3 = [38, 152]
+    pdf.th(cw3, ['Status', 'Significado'])
     status_lista = [
-        ['AGUARDANDO', 'Mensagem ainda nao foi enviada (na fila de envio)'],
-        ['ENVIADO', 'Mensagem enviada, aguardando resposta do paciente'],
-        ['CONFIRMADO', 'Paciente respondeu SIM - tem interesse na cirurgia'],
-        ['REJEITADO', 'Paciente respondeu NAO ou todos os telefones nao reconhecem'],
-        ['ERRO', 'Houve erro no envio (numero invalido, WhatsApp desconectado, etc.)'],
+        ['AGUARDANDO',  'Mensagem ainda não foi enviada (na fila de envio)'],
+        ['ENVIADO',     'Mensagem enviada, aguardando resposta do paciente'],
+        ['CONFIRMADO',  'Paciente respondeu SIM – tem interesse na cirurgia'],
+        ['REJEITADO',   'Paciente respondeu NÃO ou todos os telefones não reconhecem'],
+        ['ERRO',        'Erro no envio (número inválido, WhatsApp desconectado, etc.)'],
     ]
     for i, s in enumerate(status_lista):
-        fill = i % 2 == 0
-        if fill:
-            pdf.set_fill_color(240, 240, 240)
-        pdf.celula_tabela(col_st[0], row_h2, f' {s[0]}', fill=fill, bold=True)
-        pdf.celula_tabela(col_st[1], row_h2, f' {s[1]}', fill=fill, ln=1)
+        pdf.tr(cw3, s, fill=(i % 2 == 0), bold_first=True)
 
     pdf.ln(5)
-
-    pdf.subtitulo('Exportar Relatorio')
+    pdf.subtitulo('Exportar Relatório')
     pdf.paragrafo(
-        'Voce pode exportar todos os dados para uma planilha Excel clicando em "Exportar". '
-        'O arquivo gerado contem todas as informacoes: nome, telefone, procedimento, status, '
-        'data de envio, resposta do paciente, etc.'
+        'Clique em "Exportar" para baixar todos os dados em Excel. '
+        'O arquivo contém: nome, telefone, procedimento, status, data de envio e resposta do paciente.'
     )
 
     # =========================================================================
-    # LEMBRETES AUTOMATICOS
+    # LEMBRETES AUTOMÁTICOS
     # =========================================================================
-    pdf.titulo_secao('7', 'Lembretes Automaticos (Follow-up)')
-
+    pdf.titulo_secao('7', 'Lembretes Automáticos (Follow-up)')
     pdf.paragrafo(
-        'Se o paciente NAO responder a primeira mensagem, o sistema envia lembretes '
-        'automaticamente:'
+        'Se o paciente NÃO responder à primeira mensagem, o sistema envia lembretes:'
     )
-
-    pdf.ln(2)
-    col_fu = [50, 140]
-    pdf.set_fill_color(52, 58, 64)
-    pdf.set_text_color(255, 255, 255)
-    pdf.celula_tabela(col_fu[0], row_h2, ' Quando', fill=True, bold=True)
-    pdf.celula_tabela(col_fu[1], row_h2, ' O que acontece', fill=True, bold=True, ln=1)
-    pdf.set_text_color(0, 0, 0)
-
+    cw4 = [45, 145]
+    pdf.th(cw4, ['Quando', 'O que acontece'])
     followups = [
-        ['Apos 24 horas', '1o lembrete: "Ainda nao recebemos sua confirmacao..."'],
-        ['Apos 48 horas', '2o lembrete (ULTIMO): "ULTIMA TENTATIVA DE CONTATO..."'],
-        ['Apos 72 horas', 'Encerramento: vaga disponibilizada por falta de resposta'],
+        ['Após 24 horas', '1.º lembrete: "Ainda não recebemos sua confirmação…"'],
+        ['Após 48 horas', '2.º lembrete (ÚLTIMO): "ÚLTIMA TENTATIVA DE CONTATO…"'],
+        ['Após 72 horas', 'Encerramento: vaga disponibilizada por falta de resposta'],
     ]
     for i, f in enumerate(followups):
-        fill = i % 2 == 0
-        if fill:
-            pdf.set_fill_color(240, 240, 240)
-        pdf.celula_tabela(col_fu[0], row_h2, f' {f[0]}', fill=fill)
-        pdf.celula_tabela(col_fu[1], row_h2, f' {f[1]}', fill=fill, ln=1)
-
+        pdf.tr(cw4, f, fill=(i % 2 == 0))
     pdf.ln(4)
     pdf.dica(
-        'Os lembretes sao enviados automaticamente. Voce nao precisa fazer nada. '
+        'Os lembretes são enviados automaticamente. Você não precisa fazer nada. '
         'O sistema cuida de tudo!'
     )
 
     # =========================================================================
-    # MOTIVOS DE REJEICAO
+    # MOTIVOS DE REJEIÇÃO
     # =========================================================================
-    pdf.add_page()
-    pdf.titulo_secao('8', 'Motivos de Rejeicao')
-
+    pdf.titulo_secao('8', 'Motivos de Rejeição')
     pdf.paragrafo(
-        'Quando o paciente responde NAO, o sistema pergunta o motivo antes de finalizar. '
-        'As opcoes sao:'
+        'Quando o paciente responde NÃO, o sistema pergunta o motivo antes de finalizar:'
     )
-
-    pdf.item_lista('1 - Ja realizei em outro hospital')
-    pdf.item_lista('2 - Problemas de saude / Nao tenho condicoes')
-    pdf.item_lista('3 - Nao quero mais a cirurgia')
-    pdf.item_lista('4 - Outro motivo')
-
+    pdf.item_lista('1 – Já realizei em outro hospital')
+    pdf.item_lista('2 – Problemas de saúde / Não tenho condições')
+    pdf.item_lista('3 – Não quero mais a cirurgia')
+    pdf.item_lista('4 – Outro motivo')
     pdf.paragrafo(
-        'O paciente tambem pode digitar o motivo com suas proprias palavras. '
-        'Tudo e registrado e aparece no relatorio.'
+        'O paciente também pode digitar o motivo com suas próprias palavras. '
+        'Tudo é registrado e aparece no relatório.'
     )
 
     # =========================================================================
     # TICKETS
     # =========================================================================
-    pdf.titulo_secao('9', 'Atendimento de Duvidas (Tickets)')
-
+    pdf.add_page()
+    pdf.titulo_secao('9', 'Atendimento de Dúvidas (Tickets)')
     pdf.paragrafo(
-        'Quando o paciente envia uma mensagem que o sistema nao consegue responder automaticamente '
-        '(por exemplo: "quero saber quando vai ser minha cirurgia"), um ticket de atendimento '
-        'e criado para voce responder manualmente.'
+        'Quando o paciente envia uma mensagem que o sistema não consegue responder '
+        'automaticamente, um ticket é criado para você responder manualmente.'
     )
-
     pdf.subtitulo('Como funciona:')
     pdf.item_lista('Acesse o menu "Atendimento" ou "Tickets" no painel')
-    pdf.item_lista('Veja as duvidas pendentes dos pacientes')
+    pdf.item_lista('Veja as dúvidas pendentes dos pacientes')
     pdf.item_lista('Responda diretamente pelo sistema')
     pdf.item_lista('O paciente recebe a resposta pelo WhatsApp')
-
     pdf.dica(
-        'Duvidas frequentes como "onde fica o hospital?" ou "preciso de jejum?" '
-        'sao respondidas automaticamente pelo FAQ. So chegam como ticket as perguntas '
-        'que o sistema nao reconhece.'
+        'Dúvidas frequentes como "onde fica o hospital?" ou "preciso de jejum?" '
+        'são respondidas automaticamente pelo FAQ. Só chegam como ticket as perguntas '
+        'que o sistema não reconhece.'
     )
 
     # =========================================================================
     # ERROS COMUNS
     # =========================================================================
-    pdf.add_page()
     pdf.titulo_secao('10', 'Erros Comuns e Como Resolver')
-
     erros = [
-        (
-            'Planilha nao foi aceita',
-            'Verifique se o arquivo e .xlsx (Excel). Verifique se tem as colunas "Nome" e "Telefone" '
-            'na primeira linha. O nome das colunas deve ser exatamente como indicado na secao 2.'
-        ),
-        (
-            'Numeros invalidos',
-            'O telefone deve ter 10 ou 11 digitos (com DDD). Nao use espacos, tracos ou parenteses. '
-            'Exemplo correto: 85999001122'
-        ),
-        (
-            'WhatsApp desconectado',
-            'Acesse Configuracoes > WhatsApp e verifique se o indicador esta verde. '
-            'Se estiver vermelho, clique em "Conectar" e escaneie o QR Code novamente.'
-        ),
-        (
-            'Mensagens nao estao sendo enviadas',
-            'Verifique: 1) WhatsApp conectado; 2) Campanha iniciada; 3) Horario atual dentro do '
-            'intervalo configurado (ex: se configurou 08-18h e sao 20h, so enviara amanha).'
-        ),
-        (
-            'Paciente diz que nao recebeu',
-            'Verifique o status do contato na campanha. Se mostra "ENVIADO", a mensagem foi enviada. '
-            'O paciente pode ter bloqueado mensagens de desconhecidos no WhatsApp.'
-        ),
+        ('Planilha não foi aceita',
+         'Verifique se o arquivo é .xlsx (Excel). Verifique se tem as colunas "Nome" e "Telefone" '
+         'na primeira linha, escritas exatamente assim.'),
+        ('Números inválidos',
+         'O telefone deve ter 10 ou 11 dígitos (com DDD). Não use espaços, traços ou parênteses. '
+         'Exemplo correto: 85999001122. Para dois números na mesma célula: 85999001122 85988776655'),
+        ('WhatsApp desconectado',
+         'Acesse Configurações > WhatsApp. Se o indicador estiver vermelho, clique em "Conectar" '
+         'e escaneie o QR Code novamente.'),
+        ('Mensagens não estão sendo enviadas',
+         'Verifique: 1) WhatsApp conectado; 2) Campanha iniciada; '
+         '3) Horário atual dentro do intervalo configurado (ex: se configurou 08–18h e são 20h, '
+         'enviará amanhã).'),
+        ('Paciente diz que não recebeu',
+         'Verifique o status do contato na campanha. Se mostra "ENVIADO", a mensagem foi enviada. '
+         'O paciente pode ter bloqueado mensagens de desconhecidos no WhatsApp.'),
     ]
-
     for titulo_erro, solucao in erros:
-        pdf.set_font('Helvetica', 'B', 10)
-        pdf.set_text_color(200, 0, 0)
-        pdf.cell(0, 7, f'Problema: {titulo_erro}', 0, 1)
-        pdf.set_text_color(0, 0, 0)
-        pdf.set_font('Helvetica', '', 10)
-        pdf.multi_cell(0, 5.5, f'Solucao: {solucao}')
+        pdf.set_font('dvb', '', 10)
+        pdf.set_text_color(*VERMELHO)
+        pdf.cell(0, 7, f'Problema: {titulo_erro}', new_x='LMARGIN', new_y='NEXT')
+        pdf.set_text_color(*PRETO)
+        pdf.set_font('dv', '', 10)
+        pdf.multi_cell(0, 5.5, f'Solução: {solucao}')
         pdf.ln(4)
 
     # =========================================================================
-    # RESUMO RAPIDO
+    # RESUMO RÁPIDO
     # =========================================================================
     pdf.add_page()
-    pdf.titulo_secao('11', 'Resumo Rapido - Passo a Passo')
-
+    pdf.titulo_secao('11', 'Resumo Rápido – Passo a Passo')
     pdf.ln(3)
     passos = [
-        ('1', 'PREPARE A PLANILHA', 'Crie um arquivo Excel com colunas: Nome, Telefone, Procedimento'),
-        ('2', 'ACESSE O SISTEMA', 'Faca login com seu email e senha'),
-        ('3', 'CRIE A CAMPANHA', 'Clique em "Nova Campanha", de um nome e faca upload da planilha'),
-        ('4', 'CONFIGURE', 'Defina meta diaria (50), horarios (08:00-18:00) e clique em criar'),
-        ('5', 'AGUARDE', 'O sistema processa a planilha e normaliza os procedimentos'),
-        ('6', 'INICIE OS ENVIOS', 'Clique em "Iniciar Envios" na pagina da campanha'),
-        ('7', 'ACOMPANHE', 'Veja os resultados em tempo real no Dashboard'),
-        ('8', 'ATENDA TICKETS', 'Responda duvidas que o FAQ nao conseguiu resolver'),
-        ('9', 'EXPORTE', 'Baixe o relatorio completo em Excel quando precisar'),
+        ('1', 'PREPARE A PLANILHA',
+         'Crie um Excel com colunas: Nome, Telefone, Procedimento'),
+        ('2', 'ACESSE O SISTEMA',
+         'Faça login com seu e-mail e senha'),
+        ('3', 'CRIE A CAMPANHA',
+         'Clique em "Nova Campanha", dê um nome e faça upload da planilha'),
+        ('4', 'CONFIGURE',
+         'Defina meta diária (50), horários (08:00–18:00) e clique em criar'),
+        ('5', 'AGUARDE',
+         'O sistema processa a planilha e normaliza os procedimentos'),
+        ('6', 'INICIE OS ENVIOS',
+         'Clique em "Iniciar Envios" na página da campanha'),
+        ('7', 'ACOMPANHE',
+         'Veja os resultados em tempo real no Dashboard'),
+        ('8', 'ATENDA TICKETS',
+         'Responda dúvidas que o FAQ não conseguiu resolver'),
+        ('9', 'EXPORTE',
+         'Baixe o relatório completo em Excel quando precisar'),
     ]
-
     for num, titulo_p, desc in passos:
-        pdf.set_fill_color(0, 123, 255)
-        pdf.set_text_color(255, 255, 255)
-        pdf.set_font('Helvetica', 'B', 12)
-        pdf.cell(10, 8, f' {num}', 0, 0, 'C', fill=True)
-        pdf.set_text_color(0, 0, 0)
-        pdf.set_font('Helvetica', 'B', 10)
-        pdf.cell(55, 8, f'  {titulo_p}')
-        pdf.set_font('Helvetica', '', 10)
-        pdf.cell(0, 8, desc, 0, 1)
+        pdf.set_fill_color(*AZUL)
+        pdf.set_text_color(*BRANCO)
+        pdf.set_font('dvb', '', 12)
+        pdf.cell(10, 9, f' {num}', border=0, new_x='RIGHT', new_y='TOP', fill=True, align='C')
+        pdf.set_text_color(*PRETO)
+        pdf.set_font('dvb', '', 10)
+        pdf.cell(55, 9, f'  {titulo_p}')
+        pdf.set_font('dv', '', 10)
+        pdf.cell(0, 9, desc, new_x='LMARGIN', new_y='NEXT')
         pdf.ln(2)
 
     pdf.ln(10)
-    pdf.set_draw_color(0, 123, 255)
+    pdf.set_draw_color(*AZUL)
     pdf.set_line_width(0.5)
     pdf.line(40, pdf.get_y(), 170, pdf.get_y())
     pdf.ln(8)
-    pdf.set_font('Helvetica', 'I', 11)
+    pdf.set_font('dvi', '', 11)
     pdf.set_text_color(100, 100, 100)
-    pdf.cell(0, 8, 'Em caso de duvidas, entre em contato com o suporte tecnico.', 0, 1, 'C')
-    pdf.cell(0, 8, 'Hospital Universitario Walter Cantidio - HUWC', 0, 1, 'C')
+    pdf.cell(0, 8, 'Em caso de dúvidas, entre em contato com o suporte técnico.',
+             new_x='LMARGIN', new_y='NEXT', align='C')
+    pdf.cell(0, 8, 'Hospital Universitário Walter Cantídio – HUWC',
+             new_x='LMARGIN', new_y='NEXT', align='C')
 
-    # Salvar
     output_path = '/home/user/git3/tutorial_fila_cirurgica.pdf'
     pdf.output(output_path)
-    print(f'PDF gerado com sucesso: {output_path}')
+    print(f'PDF gerado: {output_path}')
     return output_path
 
 

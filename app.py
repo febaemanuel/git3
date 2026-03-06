@@ -7334,7 +7334,7 @@ def webhook():
                                             base_url = request.host_url.rstrip('/')
                                             t = threading.Thread(
                                                 target=send_fn,
-                                                args=(consulta.campanha.usuario_id, consulta.id, comp_ant.filepath, numero_resposta, base_url),
+                                                args=(consulta.campanha.criador_id, consulta.id, comp_ant.filepath, numero_resposta, base_url),
                                                 daemon=True
                                             )
                                             t.start()
@@ -7527,7 +7527,7 @@ _Hospital Universitário Walter Cantídio_""", consulta)
                                     base_url = request.host_url.rstrip('/')
                                     t = threading.Thread(
                                         target=send_fn,
-                                        args=(consulta.campanha.usuario_id, consulta.id, comp_ant_reag.filepath, numero_resposta, base_url),
+                                        args=(consulta.campanha.criador_id, consulta.id, comp_ant_reag.filepath, numero_resposta, base_url),
                                         daemon=True
                                     )
                                     t.start()

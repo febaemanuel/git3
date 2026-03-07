@@ -7060,9 +7060,40 @@ def webhook():
                         # É uma consulta
                         item.status = 'AGUARDANDO_COMPROVANTE'
                         item.data_confirmacao = datetime.utcnow()
+                        item.telefone_confirmacao = tel_numero
                         db.session.commit()
                         item.campanha.atualizar_stats()
                         confirmados += 1
+
+                        # [COMPROVANTE ANTECIPADO] Verificar se existe arquivo pré-carregado
+                        comp_ant_todos = buscar_comprovante_antecipado(item.campanha_id, item.paciente)
+                        if comp_ant_todos:
+                            try:
+                                from sqlalchemy import update as sa_update
+                                rows_todos = db.session.execute(
+                                    sa_update(ComprovanteAntecipado)
+                                    .where(ComprovanteAntecipado.id == comp_ant_todos.id, ComprovanteAntecipado.usado == False)
+                                    .values(usado=True, consulta_id=item.id)
+                                ).rowcount
+                                db.session.commit()
+                                if rows_todos > 0:
+                                    db.session.refresh(comp_ant_todos)
+                                    item.comprovante_path = comp_ant_todos.filepath
+                                    item.comprovante_nome = comp_ant_todos.filename
+                                    item.status = 'CONFIRMADO'
+                                    db.session.commit()
+                                    item.campanha.atualizar_stats()
+                                    db.session.commit()
+                                    send_fn_todos = app.extensions.get('enviar_comprovante_background')
+                                    if send_fn_todos:
+                                        base_url_todos = request.host_url.rstrip('/')
+                                        threading.Thread(
+                                            target=send_fn_todos,
+                                            args=(item.campanha.criador_id, item.id, comp_ant_todos.filepath, tel_numero, base_url_todos),
+                                            daemon=True
+                                        ).start()
+                            except Exception as e_todos:
+                                logger.error(f"[AUTO] Erro ao processar comprovante antecipado (TODOS) para {item.paciente}: {e_todos}")
                     else:
                         # É uma cirurgia - iniciar fluxo de data de nascimento
                         item.status = 'aguardando_nascimento'
@@ -7088,9 +7119,40 @@ def webhook():
                         # É uma consulta
                         item.status = 'AGUARDANDO_COMPROVANTE'
                         item.data_confirmacao = datetime.utcnow()
+                        item.telefone_confirmacao = tel_numero
                         db.session.commit()
                         item.campanha.atualizar_stats()
                         db.session.commit()
+
+                        # [COMPROVANTE ANTECIPADO] Verificar se existe arquivo pré-carregado
+                        comp_ant_menu = buscar_comprovante_antecipado(item.campanha_id, item.paciente)
+                        if comp_ant_menu:
+                            try:
+                                from sqlalchemy import update as sa_update
+                                rows_menu = db.session.execute(
+                                    sa_update(ComprovanteAntecipado)
+                                    .where(ComprovanteAntecipado.id == comp_ant_menu.id, ComprovanteAntecipado.usado == False)
+                                    .values(usado=True, consulta_id=item.id)
+                                ).rowcount
+                                db.session.commit()
+                                if rows_menu > 0:
+                                    db.session.refresh(comp_ant_menu)
+                                    item.comprovante_path = comp_ant_menu.filepath
+                                    item.comprovante_nome = comp_ant_menu.filename
+                                    item.status = 'CONFIRMADO'
+                                    db.session.commit()
+                                    item.campanha.atualizar_stats()
+                                    db.session.commit()
+                                    send_fn_menu = app.extensions.get('enviar_comprovante_background')
+                                    if send_fn_menu:
+                                        base_url_menu = request.host_url.rstrip('/')
+                                        threading.Thread(
+                                            target=send_fn_menu,
+                                            args=(item.campanha.criador_id, item.id, comp_ant_menu.filepath, tel_numero, base_url_menu),
+                                            daemon=True
+                                        ).start()
+                            except Exception as e_menu:
+                                logger.error(f"[AUTO] Erro ao processar comprovante antecipado (menu) para {item.paciente}: {e_menu}")
 
                         ws.enviar(numero, f"✅ *Consulta confirmada!*\n\n📅 {formatar_data_consulta(item.data_aghu) if item.data_aghu else 'Data não informada'}\n👨‍⚕️ {item.especialidade or 'Especialidade'}\n\nAguarde o envio do comprovante.")
                         logger.info(f"Consulta {item.id} confirmada via menu por {item.paciente}")
@@ -7334,7 +7396,7 @@ def webhook():
                                             base_url = request.host_url.rstrip('/')
                                             t = threading.Thread(
                                                 target=send_fn,
-                                                args=(consulta.campanha.usuario_id, consulta.id, comp_ant.filepath, numero_resposta, base_url),
+                                                args=(consulta.campanha.criador_id, consulta.id, comp_ant.filepath, numero_resposta, base_url),
                                                 daemon=True
                                             )
                                             t.start()
@@ -7527,7 +7589,7 @@ _Hospital Universitário Walter Cantídio_""", consulta)
                                     base_url = request.host_url.rstrip('/')
                                     t = threading.Thread(
                                         target=send_fn,
-                                        args=(consulta.campanha.usuario_id, consulta.id, comp_ant_reag.filepath, numero_resposta, base_url),
+                                        args=(consulta.campanha.criador_id, consulta.id, comp_ant_reag.filepath, numero_resposta, base_url),
                                         daemon=True
                                     )
                                     t.start()

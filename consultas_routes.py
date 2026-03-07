@@ -340,13 +340,31 @@ _(Digite um número de 1 a 10, ou "pular" para não responder)_"""
                         usado=False
                     ).order_by(ComprovanteAntecipado.id.desc()).first()
                     if comp_enviado and comp_rec and comp_enviado.status == 'AGUARDANDO_COMPROVANTE' and send_fn:
-                        tel = next((t.telefone for t in comp_enviado.telefones if t.ativo), None)
+                        tel = comp_enviado.telefone_confirmacao or next((t.numero for t in comp_enviado.telefones if t.enviado and not t.invalido), None)
                         if tel:
-                            threading.Thread(
-                                target=send_fn,
-                                args=(current_user.id, comp_enviado.id, comp_rec.filepath, tel, base_url),
-                                daemon=True
-                            ).start()
+                            try:
+                                from sqlalchemy import update as sa_update
+                                rows_up = db.session.execute(
+                                    sa_update(ComprovanteAntecipado)
+                                    .where(ComprovanteAntecipado.id == comp_rec.id, ComprovanteAntecipado.usado == False)
+                                    .values(usado=True, consulta_id=comp_enviado.id)
+                                ).rowcount
+                                db.session.commit()
+                                if rows_up > 0:
+                                    comp_enviado.comprovante_path = comp_rec.filepath
+                                    comp_enviado.comprovante_nome = comp_rec.filename
+                                    comp_enviado.status = 'CONFIRMADO'
+                                    db.session.commit()
+                                    campanha.atualizar_stats()
+                                    db.session.commit()
+                                    threading.Thread(
+                                        target=send_fn,
+                                        args=(current_user.id, comp_enviado.id, comp_rec.filepath, tel, base_url),
+                                        daemon=True
+                                    ).start()
+                            except Exception as e_up:
+                                logger.error(f"[UPLOAD] Erro ao auto-enviar comprovante para {comp_enviado.paciente}: {e_up}")
+                                db.session.rollback()
 
         return jsonify({'sucesso': True, 'salvos': salvos, 'erros': erros})
 

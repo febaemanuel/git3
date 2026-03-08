@@ -594,6 +594,10 @@ class Telefone(db.Model):
     data_envio = db.Column(db.DateTime)
     msg_id = db.Column(db.String(100))
 
+    # Status do telefone
+    invalido = db.Column(db.Boolean, default=False)  # True se número inválido (erro de envio)
+    erro_envio = db.Column(db.String(200))            # Mensagem de erro do envio
+
     # Response tracking per phone number
     resposta = db.Column(db.Text)
     data_resposta = db.Column(db.DateTime)
@@ -8066,8 +8070,8 @@ _(Responda com o número ou descreva o motivo)_""")
 
                 db.session.commit()
 
-                # Verificar se TODOS os telefones válidos (enviados) foram marcados como nao_pertence
-                telefones_validos = [t for t in c.telefones if t.enviado]
+                # Verificar se TODOS os telefones válidos (enviados e não inválidos) foram marcados como nao_pertence
+                telefones_validos = [t for t in c.telefones if t.enviado and not t.invalido]
                 todos_nao_pertencem = (
                     len(telefones_validos) > 0 and
                     all(t.nao_pertence for t in telefones_validos)

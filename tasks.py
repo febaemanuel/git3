@@ -333,6 +333,8 @@ def enviar_campanha_task(self, campanha_id):
                         t.enviado = True
                         t.data_envio = datetime.utcnow()
                         t.msg_id = result
+                        t.invalido = False
+                        t.erro_envio = None
                         sucesso_pessoa = True
 
                         log = LogMsg(
@@ -345,6 +347,9 @@ def enviar_campanha_task(self, campanha_id):
                         )
                         db.session.add(log)
                     else:
+                        t.invalido = True
+                        t.erro_envio = str(result)[:200]
+
                         log = LogMsg(
                             campanha_id=camp.id,
                             contato_id=c.id,
@@ -1553,10 +1558,10 @@ def retry_fila_sem_resposta():
             envio_inicial = primeiro_envio.data_envio
             horas_desde_envio = (agora - envio_inicial).total_seconds() / 3600
 
-            # Buscar telefone já enviado para reenviar
+            # Buscar telefone já enviado para reenviar (excluir inválidos e não pertencentes)
             telefone_envio = None
             for tel in contato.telefones.filter_by(whatsapp_valido=True).all():
-                if tel.enviado:
+                if tel.enviado and not tel.invalido and not tel.nao_pertence:
                     telefone_envio = tel.numero_fmt
                     break
 

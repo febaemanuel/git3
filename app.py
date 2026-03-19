@@ -1645,7 +1645,9 @@ Caso falte, procurar o ambulatório para ser colocado novamente no pré-agendame
 
 Você sabia que pode verificar sua consulta no app HU Digital? https://play.google.com/store/apps/details?id=br.gov.ebserh.hudigital&pcampaignid=web_share . Após 5 horas dessa mensagem, verifique sua consulta agendada no app.
 
-Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital."""
+Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital.
+
+📊 *Pesquisa de Satisfação* (opcional): Sua opinião é muito importante! Responda nosso formulário: https://docs.google.com/forms/d/1TEpVEaJYTxG7Jz5o-tU1FJ988XRT0A8GJ7y3X40S18Q/viewform"""
     else:
         # Mensagem para CONSULTA
         return f"""O Hospital Walter Cantídio agradece seu contato. *CONSULTA CONFIRMADA!*
@@ -1667,7 +1669,9 @@ Caso falte, procurar o ambulatório para ser colocado novamente no pré-agendame
 
 Você sabia que pode verificar sua consulta no app HU Digital? https://play.google.com/store/apps/details?id=br.gov.ebserh.hudigital&pcampaignid=web_share . Após 5 horas dessa mensagem, verifique sua consulta agendada no app.
 
-Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital."""
+Reagendamentos estarão presentes no app HU Digital. Verifique sempre o app HU Digital.
+
+📊 *Pesquisa de Satisfação* (opcional): Sua opinião é muito importante! Responda nosso formulário: https://docs.google.com/forms/d/1TEpVEaJYTxG7Jz5o-tU1FJ988XRT0A8GJ7y3X40S18Q/viewform"""
 
 
 def formatar_mensagem_perguntar_motivo():
@@ -7472,7 +7476,40 @@ Este número foi marcado como não pertencente ao paciente.
 Desculpe pelo transtorno.
 
 _Hospital Universitário Walter Cantídio_""", consulta)
-                            logger.info(f"Consulta {consulta.id}: telefone {numero_resposta} marcado como 'não pertence ao paciente'. Aguardando outros telefones.")
+                            logger.info(f"Consulta {consulta.id}: telefone {numero_resposta} marcado como 'não pertence ao paciente'. Tentando próximo número...")
+
+                            # Enviar IMEDIATAMENTE para o próximo telefone não enviado
+                            telefones_pendentes = sorted(
+                                [t for t in consulta.telefones if not t.enviado and not t.invalido],
+                                key=lambda t: t.prioridade
+                            )
+                            if telefones_pendentes:
+                                proximo = telefones_pendentes[0]
+                                msg_proximo = formatar_mensagem_consulta_inicial(consulta)
+                                ok_prox, result_prox = ws.enviar(proximo.numero, msg_proximo)
+                                if ok_prox:
+                                    proximo.enviado = True
+                                    proximo.data_envio = datetime.utcnow()
+                                    proximo.msg_id = result_prox
+                                    proximo.invalido = False
+                                    proximo.erro_envio = None
+                                    log_prox = LogMsgConsulta(
+                                        campanha_id=consulta.campanha_id,
+                                        consulta_id=consulta.id,
+                                        direcao='enviada',
+                                        telefone=proximo.numero,
+                                        mensagem=msg_proximo[:500],
+                                        status='sucesso',
+                                        msg_id=result_prox
+                                    )
+                                    db.session.add(log_prox)
+                                    db.session.commit()
+                                    logger.info(f"Consulta {consulta.id}: enviado para próximo número {proximo.numero} (prioridade {proximo.prioridade})")
+                                else:
+                                    proximo.invalido = True
+                                    proximo.erro_envio = str(result_prox)[:200]
+                                    db.session.commit()
+                                    logger.warning(f"Consulta {consulta.id}: erro ao enviar para {proximo.numero}: {result_prox}")
 
                     else:
                         # Resposta não reconhecida

@@ -1198,12 +1198,13 @@ def enviar_campanha_consultas_task(self, campanha_id):
                 db.session.commit()
                 db.session.refresh(consulta)
 
-            # Enviar MSG 1 (confirmação inicial) para TODOS os telefones
+            # Enviar MSG 1 (confirmação inicial) apenas para o 1º telefone (prioridade 1)
+            # Os demais serão tentados após 2h sem resposta ou DESCONHEÇO (via retry task)
             msg = formatar_mensagem_consulta_inicial(consulta)
-            telefones = consulta.telefones
+            telefones_ordenados = sorted(consulta.telefones, key=lambda t: t.prioridade)
             sucesso_envio = False
 
-            for telefone in telefones:
+            for telefone in telefones_ordenados:
                 if telefone.enviado:
                     continue
 
@@ -1228,10 +1229,10 @@ def enviar_campanha_consultas_task(self, campanha_id):
                         msg_id=result
                     )
                     db.session.add(log)
-                    logger.info(f"Mensagem enviada para {telefone.numero}")
-                    # NÃO usar break - continua enviando para TODOS os telefones
+                    logger.info(f"Mensagem enviada para {telefone.numero} (prioridade {telefone.prioridade})")
+                    break  # Envia apenas para o 1º telefone disponível; os próximos serão tentados após 2h
                 else:
-                    # Marcar telefone como inválido/com erro
+                    # Marcar telefone como inválido/com erro e tentar próximo
                     telefone.invalido = True
                     telefone.erro_envio = str(result)[:200]
 
@@ -1246,7 +1247,7 @@ def enviar_campanha_consultas_task(self, campanha_id):
                         erro=str(result)[:200]
                     )
                     db.session.add(log)
-                    logger.warning(f"Erro ao enviar para {telefone.numero}: {result}")
+                    logger.warning(f"Erro ao enviar para {telefone.numero}: {result} - tentando próximo")
 
             # Atualizar status da consulta
             if sucesso_envio:
@@ -1325,8 +1326,8 @@ def retry_consultas_sem_resposta():
     - Cancelamento: 24h após envio inicial (se não responder)
     """
     from app import (
-        db, AgendamentoConsulta, WhatsApp, 
-        formatar_mensagem_consulta_inicial, formatar_mensagem_consulta_retry1, 
+        db, AgendamentoConsulta, WhatsApp, LogMsgConsulta,
+        formatar_mensagem_consulta_inicial, formatar_mensagem_consulta_retry1,
         formatar_mensagem_consulta_retry2, formatar_mensagem_cancelamento_sem_resposta,
         enviar_e_registrar_consulta
     )
@@ -1363,7 +1364,61 @@ def retry_consultas_sem_resposta():
             # Inicializar contador se necessário
             if consulta.tentativas_contato is None:
                 consulta.tentativas_contato = 0
-            
+
+            # ---------------------------------------------------------------
+            # ROTAÇÃO DE TELEFONE: Se o telefone atual ficou 2h sem resposta
+            # ou respondeu DESCONHEÇO, enviar para o próximo número
+            # ---------------------------------------------------------------
+            telefones_enviados = sorted(
+                [t for t in consulta.telefones if t.enviado],
+                key=lambda t: t.data_envio,
+                reverse=True
+            )
+            if telefones_enviados:
+                ultimo_tel = telefones_enviados[0]
+                horas_desde_ultimo = (agora - ultimo_tel.data_envio).total_seconds() / 3600
+                deve_trocar = ultimo_tel.nao_pertence or horas_desde_ultimo >= 2
+
+                if deve_trocar:
+                    # Buscar próximo telefone ainda não enviado e não inválido
+                    telefones_pendentes = sorted(
+                        [t for t in consulta.telefones if not t.enviado and not t.invalido],
+                        key=lambda t: t.prioridade
+                    )
+                    if telefones_pendentes:
+                        proximo = telefones_pendentes[0]
+                        ws_rot = WhatsApp(consulta.campanha.criador_id)
+                        if ws_rot.ok():
+                            msg_rot = formatar_mensagem_consulta_inicial(consulta)
+                            ok_rot, result_rot = ws_rot.enviar(proximo.numero, msg_rot)
+                            if ok_rot:
+                                proximo.enviado = True
+                                proximo.data_envio = agora
+                                proximo.msg_id = result_rot
+                                proximo.invalido = False
+                                proximo.erro_envio = None
+                                log_rot = LogMsgConsulta(
+                                    campanha_id=consulta.campanha_id,
+                                    consulta_id=consulta.id,
+                                    direcao='enviada',
+                                    telefone=proximo.numero,
+                                    mensagem=msg_rot[:500],
+                                    status='sucesso',
+                                    msg_id=result_rot
+                                )
+                                db.session.add(log_rot)
+                                db.session.commit()
+                                logger.info(
+                                    f"[ROTAÇÃO] Consulta {consulta.id}: sem resposta em {ultimo_tel.numero} "
+                                    f"após {horas_desde_ultimo:.1f}h, enviando para próximo número {proximo.numero}"
+                                )
+                                processadas += 1
+                            else:
+                                proximo.invalido = True
+                                proximo.erro_envio = str(result_rot)[:200]
+                                db.session.commit()
+                                logger.warning(f"[ROTAÇÃO] Erro ao enviar para {proximo.numero}: {result_rot}")
+
             # Determinar qual ação tomar baseado no tempo e tentativas
             # Retry 1: Entre 16h e 17h após envio inicial
             if 16 <= horas_desde_envio < 17 and consulta.tentativas_contato == 0:

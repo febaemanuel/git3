@@ -7,6 +7,7 @@ Tasks assíncronas do sistema (migradas de threading para Celery)
 
 from celery_app import celery
 from celery import Task
+from celery.exceptions import SoftTimeLimitExceeded
 from celery.utils.log import get_task_logger
 import time
 
@@ -400,6 +401,18 @@ def enviar_campanha_task(self, campanha_id):
             'erros': erros
         }
 
+    except SoftTimeLimitExceeded:
+        logger.warning(f"Campanha {campanha_id} atingiu o limite de tempo, pausando para retomada automática")
+        try:
+            db.session.refresh(camp)
+            if camp.status == 'em_andamento':
+                camp.status = 'pausada'
+                camp.status_msg = 'Pausada automaticamente (limite de tempo da tarefa)'
+                db.session.commit()
+        except Exception:
+            pass
+        return {'pausada': True, 'motivo': 'soft_time_limit'}
+
     except Exception as e:
         logger.exception(f"Erro no envio: {e}")
         camp.status = 'erro'
@@ -623,11 +636,12 @@ def retomar_campanhas_automaticas():
         retomadas = 0
 
         for camp in campanhas_pausadas:
-            # Verificar se foi pausada por horário ou meta diária
+            # Verificar se foi pausada por horário, meta diária ou limite de tempo da task
             motivo_horario = 'Fora do horário' in (camp.status_msg or '')
             motivo_meta = 'Meta diária atingida' in (camp.status_msg or '')
+            motivo_tempo_limite = 'limite de tempo da tarefa' in (camp.status_msg or '')
 
-            if not (motivo_horario or motivo_meta):
+            if not (motivo_horario or motivo_meta or motivo_tempo_limite):
                 # Foi pausada manualmente pelo usuário, não retomar
                 continue
 
@@ -1004,11 +1018,12 @@ def retomar_campanhas_consultas_automaticas():
         retomadas = 0
 
         for camp in campanhas_pausadas:
-            # Verificar se foi pausada por horário ou meta diária
+            # Verificar se foi pausada por horário, meta diária ou limite de tempo da task
             motivo_horario = 'Fora do horário' in (camp.status_msg or '')
             motivo_meta = 'Meta diária atingida' in (camp.status_msg or '')
+            motivo_tempo_limite = 'limite de tempo da tarefa' in (camp.status_msg or '')
 
-            if not (motivo_horario or motivo_meta):
+            if not (motivo_horario or motivo_meta or motivo_tempo_limite):
                 # Foi pausada manualmente pelo usuário, não retomar
                 logger.debug(f"Campanha consulta {camp.id} pausada manualmente, não retomando")
                 continue
@@ -1301,6 +1316,19 @@ def enviar_campanha_consultas_task(self, campanha_id):
             'enviados': enviados,
             'erros': erros
         }
+
+    except SoftTimeLimitExceeded:
+        logger.warning(f"Campanha consultas {campanha_id} atingiu o limite de tempo, pausando para retomada automática")
+        try:
+            if camp:
+                db.session.refresh(camp)
+                if camp.status == 'enviando':
+                    camp.status = 'pausado'
+                    camp.status_msg = 'Pausada automaticamente (limite de tempo da tarefa)'
+                    db.session.commit()
+        except Exception:
+            pass
+        return {'pausada': True, 'motivo': 'soft_time_limit'}
 
     except Exception as e:
         logger.exception(f"Erro no envio de consultas: {e}")

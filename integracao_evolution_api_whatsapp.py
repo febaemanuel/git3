@@ -889,3 +889,447 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+
+# =============================================================================
+# DOCUMENTAÇÃO COMPLETA DA INTEGRAÇÃO
+# =============================================================================
+#
+# ÍNDICE
+# ------
+#   1. O que é a Evolution API
+#   2. Pré-requisitos
+#   3. Instalação e configuração
+#   4. Fluxo completo de uso
+#   5. Referência de métodos
+#   6. Referência de endpoints HTTP
+#   7. Eventos do Webhook (recebimento de mensagens)
+#   8. Tratamento de erros
+#   9. Exemplos de uso
+#  10. FAQ
+#
+# =============================================================================
+#
+# 1. O QUE É A EVOLUTION API
+# ---------------------------
+# A Evolution API é um gateway self-hosted para o WhatsApp Web. Ela roda
+# como um serviço separado (Docker ou Node.js) e expõe uma API REST que
+# permite enviar/receber mensagens, gerenciar instâncias e configurar
+# webhooks. Internamente usa a biblioteca open-source "Baileys".
+#
+# Repositório oficial: https://github.com/EvolutionAPI/evolution-api
+# Versão compatível com este arquivo: v2.x
+#
+# ARQUITETURA:
+#
+#   Seu sistema  ──POST──►  Evolution API  ──►  WhatsApp Web
+#   Seu sistema  ◄──POST──  Evolution API  (via webhook)
+#
+# Cada "instância" na Evolution API representa um número WhatsApp pareado.
+# Um único servidor Evolution API pode hospedar múltiplas instâncias
+# (múltiplos números WhatsApp).
+#
+# =============================================================================
+#
+# 2. PRÉ-REQUISITOS
+# -----------------
+# a) Evolution API v2.x rodando e acessível via HTTP/HTTPS
+# b) API Key da Evolution API (definida na configuração do servidor)
+# c) Um nome de instância (você escolhe; ex: "minha-empresa")
+# d) Python 3.7+ com a biblioteca `requests` instalada:
+#       pip install requests
+#
+# =============================================================================
+#
+# 3. INSTALAÇÃO E CONFIGURAÇÃO
+# -----------------------------
+# Copie a classe EvolutionAPIClient para o seu projeto e instancie-a:
+#
+#   from integracao_evolution_api_whatsapp import EvolutionAPIClient
+#
+#   client = EvolutionAPIClient(
+#       url      = "https://evolution-api.meusite.com",
+#       api_key  = "minha_api_key_secreta",
+#       instance = "minha-instancia"
+#   )
+#
+# Variáveis de ambiente recomendadas (não colocar credenciais no código):
+#
+#   EVOLUTION_API_URL      URL base do servidor Evolution API
+#   EVOLUTION_API_KEY      Chave de autenticação global
+#   EVOLUTION_INSTANCE     Nome da instância WhatsApp
+#   NUMERO_TESTE           Número para testes (formato: 5511999999999)
+#
+# =============================================================================
+#
+# 4. FLUXO COMPLETO DE USO
+# -------------------------
+# Primeira vez (instância nova):
+#
+#   1. Criar instância      →  client.criar_instancia()
+#   2. Obter QR Code        →  client.qrcode()
+#   3. Escanear QR no app   →  usuário escaneia com o WhatsApp
+#   4. Verificar conexão    →  client.conectado()  (aguardar state == 'open')
+#   5. Configurar webhook   →  client.configurar_webhook("https://meusite.com/webhook")
+#   6. Enviar mensagem      →  client.enviar("5511999999999", "Olá!")
+#
+# Uso recorrente (instância já conectada):
+#
+#   1. Verificar conexão    →  client.conectado()
+#   2. Enviar mensagem      →  client.enviar(numero, texto)
+#   3. Verificar número     →  client.verificar_numeros([numero])
+#   4. Enviar arquivo       →  client.enviar_arquivo(numero, "/path/doc.pdf")
+#
+# Recebimento de mensagens:
+#
+#   - A Evolution API chama via POST o seu webhook configurado
+#   - O payload chega com event="MESSAGES_UPSERT" e os dados da mensagem
+#   - Veja a seção 7 para o schema completo do webhook
+#
+# =============================================================================
+#
+# 5. REFERÊNCIA DE MÉTODOS
+# -------------------------
+#
+# client.ok() → bool
+#   Retorna True se URL, API Key e instância estão preenchidos.
+#   Use antes de qualquer operação para validar a configuração.
+#
+# client.listar_instancias() → (bool, list | str)
+#   Lista todas as instâncias no servidor.
+#   Útil para checar se sua instância já existe.
+#   Retorna: (True, [lista de instâncias]) ou (False, "mensagem de erro")
+#
+# client.criar_instancia() → (bool, str)
+#   Cria uma nova instância. Idempotente: não falha se já existir.
+#   Retorna: (True, "Instância criada") ou (False, "mensagem de erro")
+#
+# client.conectado() → (bool, str)
+#   Verifica o estado da conexão WhatsApp da instância.
+#   Retorna: (True, "open") se conectado, (False, estado) se desconectado
+#   Estados possíveis: "open", "close", "connecting"
+#
+# client.qrcode() → (bool, str)
+#   Obtém o QR Code para parear o WhatsApp.
+#   Cria a instância automaticamente se não existir.
+#   Retorna: (True, "data:image/png;base64,...") ou (False, "erro")
+#   O base64 pode ser usado diretamente em <img src="...">
+#
+# client.obter_webhook_config() → (bool, dict | str)
+#   Retorna a configuração atual do webhook.
+#   Retorna: (True, {config}) ou (False, "erro")
+#
+# client.configurar_webhook(url) → (bool, str)
+#   Configura o endpoint que receberá os eventos da Evolution API.
+#   Tenta configurar com todos os eventos; usa eventos essenciais como fallback.
+#   Args: url — URL pública completa (ex: "https://meusite.com/webhook/wpp")
+#   Retorna: (True, "Webhook configurado...") ou (False, "erro")
+#
+# client.verificar_numeros(lista) → dict
+#   Verifica em lote quais números têm WhatsApp ativo.
+#   Args: lista — ex: ["5511999999999", "5521888888888"]
+#   Retorna: { "5511999999999": {"exists": True, "jid": "...@s.whatsapp.net"}, ... }
+#   JID é o identificador interno do WhatsApp (usado para envios avançados).
+#
+# client.enviar(numero, texto) → (bool, str)
+#   Envia mensagem de texto simples.
+#   Args: numero — formato internacional sem + (ex: "5511999999999")
+#         texto  — conteúdo da mensagem
+#   Retorna: (True, "message_id") ou (False, "erro")
+#
+# client.enviar_arquivo(numero, caminho, caption=None) → (bool, str)
+#   Envia arquivo (PDF, JPG, PNG, MP4, MP3) via WhatsApp.
+#   O arquivo é lido do disco e transmitido como base64.
+#   Args: numero         — destinatário
+#         caminho        — caminho absoluto do arquivo no servidor
+#         caption        — legenda opcional exibida abaixo do arquivo
+#   Retorna: (True, "message_id") ou (False, "erro")
+#   Tipos suportados: .pdf .jpg .jpeg .png .mp4 .mp3
+#
+# =============================================================================
+#
+# 6. REFERÊNCIA DE ENDPOINTS HTTP
+# --------------------------------
+# Todos os endpoints usam:
+#   Base URL: EVOLUTION_API_URL
+#   Header:   apikey: EVOLUTION_API_KEY
+#   Header:   Content-Type: application/json
+#
+# ┌─────────────────────────────────────────────────────────────────────────┐
+# │ Endpoint                              │ Método │ Descrição              │
+# ├─────────────────────────────────────────────────────────────────────────┤
+# │ /instance/fetchInstances              │ GET    │ Listar instâncias      │
+# │ /instance/create                      │ POST   │ Criar instância        │
+# │ /instance/connectionState/{instance}  │ GET    │ Estado da conexão      │
+# │ /instance/connect/{instance}          │ GET    │ Conectar / obter QR    │
+# │ /webhook/set/{instance}               │ POST   │ Configurar webhook     │
+# │ /webhook/find/{instance}              │ GET    │ Obter config webhook   │
+# │ /chat/whatsappNumbers/{instance}      │ POST   │ Verificar números      │
+# │ /message/sendText/{instance}          │ POST   │ Enviar texto           │
+# │ /message/sendMedia/{instance}         │ POST   │ Enviar arquivo/mídia   │
+# └─────────────────────────────────────────────────────────────────────────┘
+#
+# POST /instance/create — body:
+#   {
+#     "instanceName": "nome-da-instancia",
+#     "token":        "api_key",
+#     "qrcode":       true,
+#     "integration":  "WHATSAPP-BAILEYS"
+#   }
+#
+# POST /webhook/set/{instance} — body:
+#   {
+#     "webhook": {
+#       "enabled":         true,
+#       "url":             "https://meusite.com/webhook/whatsapp",
+#       "webhookByEvents": false,
+#       "webhookBase64":   false,
+#       "events": [
+#         "MESSAGES_UPSERT", "MESSAGES_UPDATE",
+#         "SEND_MESSAGE",    "CONNECTION_UPDATE"
+#       ]
+#     }
+#   }
+#
+# POST /chat/whatsappNumbers/{instance} — body:
+#   { "numbers": ["5511999999999", "5521888888888"] }
+#
+# POST /message/sendText/{instance} — body:
+#   {
+#     "number":      "5511999999999",
+#     "text":        "Sua mensagem aqui",
+#     "linkPreview": false
+#   }
+#
+# POST /message/sendMedia/{instance} — body (imagem):
+#   {
+#     "number":    "5511999999999",
+#     "mediatype": "image",
+#     "mimetype":  "image/jpeg",
+#     "media":     "<base64>",
+#     "fileName":  "foto.jpg",
+#     "caption":   "Legenda opcional"
+#   }
+#
+# POST /message/sendMedia/{instance} — body (PDF):
+#   {
+#     "number":    "5511999999999",
+#     "mediatype": "document",
+#     "mimetype":  "application/pdf",
+#     "media":     "<base64>",
+#     "fileName":  "documento.pdf",
+#     "caption":   "Legenda opcional"
+#   }
+#
+# Resposta padrão de envio (200/201):
+#   { "key": { "id": "MESSAGE_ID", "remoteJid": "...", "fromMe": true }, ... }
+#
+# =============================================================================
+#
+# 7. EVENTOS DO WEBHOOK (RECEBIMENTO DE MENSAGENS)
+# -------------------------------------------------
+# A Evolution API envia um POST para a URL configurada a cada evento.
+# Seu endpoint deve responder 200 OK rapidamente (antes de processar).
+#
+# Schema geral do payload recebido:
+#   {
+#     "event":    "MESSAGES_UPSERT",
+#     "instance": "nome-da-instancia",
+#     "data": { ... }         ← conteúdo depende do tipo de evento
+#   }
+#
+# EVENTO: MESSAGES_UPSERT (nova mensagem)
+#   {
+#     "event": "MESSAGES_UPSERT",
+#     "instance": "minha-instancia",
+#     "data": {
+#       "key": {
+#         "remoteJid": "5511999999999@s.whatsapp.net",
+#         "fromMe":    false,
+#         "id":        "ABCD1234"
+#       },
+#       "message": {
+#         "conversation": "Texto da mensagem"
+#         // OU "extendedTextMessage": { "text": "Texto com formatação" }
+#         // OU "imageMessage":    { "caption": "...", "url": "..." }
+#         // OU "documentMessage": { "title": "doc.pdf", "url": "..." }
+#         // OU "audioMessage":    { "url": "..." }
+#       },
+#       "messageTimestamp": 1700000000,
+#       "pushName": "Nome do Contato"
+#     }
+#   }
+#
+# Como extrair o texto de uma mensagem recebida:
+#   data     = payload["data"]
+#   msg      = data.get("message", {})
+#   texto    = (msg.get("conversation")
+#               or msg.get("extendedTextMessage", {}).get("text")
+#               or "")
+#   numero   = data["key"]["remoteJid"].split("@")[0]  # ex: "5511999999999"
+#   de_mim   = data["key"]["fromMe"]                   # True = mensagem enviada por nós
+#
+# EVENTO: CONNECTION_UPDATE (mudança de estado)
+#   {
+#     "event": "CONNECTION_UPDATE",
+#     "instance": "minha-instancia",
+#     "data": {
+#       "state": "open" | "close" | "connecting"
+#     }
+#   }
+#
+# EVENTO: QRCODE_UPDATED (novo QR gerado)
+#   {
+#     "event": "QRCODE_UPDATED",
+#     "instance": "minha-instancia",
+#     "data": {
+#       "qrcode": {
+#         "base64": "data:image/png;base64,...",
+#         "code":   "2@ABC..."
+#       }
+#     }
+#   }
+#
+# Lista completa de eventos disponíveis:
+#   APPLICATION_STARTUP, CALL, CHATS_DELETE, CHATS_SET, CHATS_UPDATE,
+#   CHATS_UPSERT, CONNECTION_UPDATE, CONTACTS_SET, CONTACTS_UPDATE,
+#   CONTACTS_UPSERT, GROUP_PARTICIPANTS_UPDATE, GROUP_UPDATE, GROUPS_UPSERT,
+#   LABELS_ASSOCIATION, LABELS_EDIT, MESSAGES_DELETE, MESSAGES_SET,
+#   MESSAGES_UPDATE, MESSAGES_UPSERT, PRESENCE_UPDATE, QRCODE_UPDATED,
+#   SEND_MESSAGE
+#
+# =============================================================================
+#
+# 8. TRATAMENTO DE ERROS
+# ----------------------
+# Todos os métodos retornam (bool, valor):
+#   (True,  resultado) → operação bem-sucedida
+#   (False, "mensagem de erro") → falha
+#
+# Erros comuns e causas:
+#
+#   "Não configurado"        → url, api_key ou instance vazios
+#   "API Key inválida"       → HTTP 401 ou 403; verificar EVOLUTION_API_KEY
+#   "Instância não encontrada" → HTTP 404; verificar EVOLUTION_INSTANCE
+#   "Instância já existe"    → HTTP 409 ou 403; não é um erro real, pode ignorar
+#   "Erro de conexão: ..."   → servidor inacessível; verificar URL e rede
+#   "QR Code não disponível" → instância ainda inicializando; tentar novamente
+#   "WhatsApp já conectado!" → não precisa de QR; instância já está ativa
+#
+# Estratégia recomendada para verificar antes de enviar:
+#   if not client.ok():
+#       # configuração incompleta
+#   conectado, estado = client.conectado()
+#   if not conectado:
+#       # instância desconectada; gerar QR ou notificar administrador
+#   ok, mid = client.enviar(numero, texto)
+#   if not ok:
+#       # logar o erro (mid contém a mensagem de erro)
+#
+# =============================================================================
+#
+# 9. EXEMPLOS DE USO
+# ------------------
+#
+# Exemplo 1 — Envio simples:
+#
+#   client = EvolutionAPIClient(url, key, instance)
+#   conectado, _ = client.conectado()
+#   if conectado:
+#       ok, mid = client.enviar("5511999999999", "Olá! Sua consulta é amanhã às 14h.")
+#       if ok:
+#           print(f"Mensagem enviada. ID: {mid}")
+#
+# Exemplo 2 — Verificar antes de enviar em massa:
+#
+#   numeros = ["5511999999999", "5521888888888", "5531777777777"]
+#   resultado = client.verificar_numeros(numeros)
+#   validos = [n for n, info in resultado.items() if info["exists"]]
+#   for numero in validos:
+#       client.enviar(numero, "Campanha: confira nossa promoção!")
+#
+# Exemplo 3 — Enviar PDF:
+#
+#   ok, mid = client.enviar_arquivo(
+#       numero          = "5511999999999",
+#       caminho_arquivo = "/var/uploads/comprovante_joao.pdf",
+#       caption         = "Segue seu comprovante de agendamento."
+#   )
+#
+# Exemplo 4 — Configurar webhook em Flask:
+#
+#   # Rota que recebe os eventos da Evolution API
+#   @app.route("/webhook/whatsapp", methods=["POST"])
+#   def webhook_whatsapp():
+#       payload  = request.get_json()
+#       evento   = payload.get("event", "")
+#       instancia = payload.get("instance", "")
+#
+#       if evento == "MESSAGES_UPSERT":
+#           data   = payload["data"]
+#           msg    = data.get("message", {})
+#           texto  = (msg.get("conversation")
+#                     or msg.get("extendedTextMessage", {}).get("text", ""))
+#           numero = data["key"]["remoteJid"].split("@")[0]
+#           de_mim = data["key"]["fromMe"]
+#
+#           if not de_mim and texto:
+#               # processar mensagem recebida
+#               processar_resposta(instancia, numero, texto)
+#
+#       return "OK", 200
+#
+# Exemplo 5 — Primeira configuração completa:
+#
+#   client = EvolutionAPIClient(url, key, instance)
+#
+#   # Verificar se já existe e está conectada
+#   conectado, estado = client.conectado()
+#   if not conectado:
+#       # Obter QR Code (cria instância automaticamente se não existir)
+#       ok, qr_base64 = client.qrcode()
+#       if ok:
+#           # Exibir para o usuário escanear
+#           # Ex: salvar qr_base64 e renderizar em <img src="...">
+#           pass
+#
+#   # Após escanear, configurar webhook
+#   client.configurar_webhook("https://meusite.com/webhook/whatsapp")
+#
+# =============================================================================
+#
+# 10. FAQ
+# -------
+# P: Preciso de um servidor dedicado para a Evolution API?
+# R: Sim. A Evolution API é self-hosted (Docker ou Node.js). Não é um
+#    serviço de terceiros — você hospeda no seu próprio servidor.
+#
+# P: Qual a diferença entre "instance" e "connection"?
+# R: A instância é o objeto que representa seu número no servidor.
+#    A conexão é o estado atual do pareamento com o WhatsApp Web.
+#    Uma instância pode existir sem estar conectada.
+#
+# P: O QR Code expira?
+# R: Sim, em aproximadamente 60 segundos. Se expirar, chame qrcode()
+#    novamente. O evento QRCODE_UPDATED no webhook avisa quando um novo
+#    QR é gerado automaticamente.
+#
+# P: Posso ter múltiplos números WhatsApp no mesmo servidor?
+# R: Sim. Cada número é uma instância separada com nome único.
+#    Use um EvolutionAPIClient diferente para cada instância.
+#
+# P: O que é o JID retornado em verificar_numeros()?
+# R: JID (Jabber ID) é o identificador interno do WhatsApp no protocolo
+#    usado pela Baileys. Formato: "5511999999999@s.whatsapp.net".
+#    Para grupos: "XXXXXXXXXX@g.us".
+#
+# P: Como evitar bloqueio do WhatsApp por spam?
+# R: Use intervalos entre envios (15+ segundos recomendado), limite
+#    diário de mensagens (500/dia é seguro), e sempre verifique se o
+#    número existe antes de enviar (verificar_numeros).
+#
+# P: O que fazer se a instância cair (state != 'open')?
+# R: Chame qrcode() novamente para gerar um novo QR e parear novamente.
+#    Implemente um monitoramento via evento CONNECTION_UPDATE no webhook.
+#
+# =============================================================================

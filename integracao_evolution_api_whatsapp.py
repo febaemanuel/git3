@@ -1,13 +1,41 @@
 """
-Testes funcionais da Evolution API (WhatsApp)
-=============================================
-Arquivo standalone para testar a integração com a Evolution API v2.x
-sem dependências do Flask, banco de dados ou Celery.
+INTEGRAÇÃO EVOLUTION API — WHATSAPP
+====================================
+Arquivo: integracao_evolution_api_whatsapp.py
 
-Este arquivo serve também como especificação completa da integração:
-contém todos os endpoints utilizados, os payloads enviados, os formatos
-de resposta esperados e os casos de erro tratados. Uma IA pode ler este
-arquivo e reimplementar a integração em qualquer linguagem ou framework.
+O QUE É ESTE ARQUIVO?
+----------------------
+Este arquivo contém tudo o que é necessário para integrar qualquer sistema
+com a Evolution API (gateway WhatsApp self-hosted). Ele é completamente
+independente: não precisa de Flask, banco de dados ou Celery para rodar.
+
+PARA QUEM FOR IMPLEMENTAR EM OUTRO SERVIÇO:
+--------------------------------------------
+Basta copiar a classe `EvolutionAPIClient` para o seu projeto e instanciá-la
+com as credenciais da Evolution API. Todos os endpoints, payloads e formatos
+de resposta estão documentados nos comentários de cada método e na seção
+"ENDPOINTS UTILIZADOS" abaixo.
+
+PARA TESTAR A INTEGRAÇÃO:
+--------------------------
+Configure as variáveis de ambiente e execute diretamente:
+
+    export EVOLUTION_API_URL=https://sua-evolution-api.com
+    export EVOLUTION_API_KEY=sua_api_key
+    export EVOLUTION_INSTANCE=nome_da_instancia
+    export NUMERO_TESTE=5511999999999   # opcional — para testar envio real
+
+    python integracao_evolution_api_whatsapp.py
+
+O script roda todos os testes automaticamente e exibe [OK] ou [FALHOU]
+para cada operação.
+
+TECNOLOGIA:
+-----------
+- Evolution API v2.x (self-hosted, open-source)
+- Conexão via WhatsApp Web (biblioteca Baileys internamente)
+- Autenticação por API Key no header de cada requisição
+- Comunicação 100% REST/JSON
 
 --------------------------------------------------------------------
 VISÃO GERAL DA EVOLUTION API v2

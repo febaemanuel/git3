@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - Geral{% endblock %}
+
+{% block content %}
+{% set canais = {
+    'LINK_INTERNO': 'Link interno (formulário web)',
+    'WHATSAPP_LINK_EXTERNO': 'WhatsApp + link externo',
+    'WHATSAPP_INTERATIVO': 'WhatsApp interativo',
+} %}
+{% set tipos_label = {
+    'CONFIRMACAO': 'Confirmações',
+    'PESQUISA': 'Pesquisas',
+    'ENQUETE': 'Enquetes',
+} %}
+
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2><i class="bi bi-grid"></i> Sistema Geral</h2>
+                <p class="text-muted mb-0">Pesquisas, enquetes e confirmações configuráveis.</p>
+            </div>
+            <a href="{{ url_for('geral_wizard') }}" class="btn btn-outline-secondary">
+                <i class="bi bi-gear"></i> Refazer wizard
+            </a>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-8 mb-4">
+        <div class="card">
+            <div class="card-header"><strong>Sua configuração</strong></div>
+            <div class="card-body">
+                <p class="mb-2">
+                    <strong>Tipos de uso:</strong>
+                    {% if tipos_uso %}
+                        {% for t in tipos_uso %}
+                            <span class="badge bg-info">{{ tipos_label.get(t, t) }}</span>
+                        {% endfor %}
+                    {% else %}
+                        <span class="text-muted">nenhum</span>
+                    {% endif %}
+                </p>
+                <p class="mb-0">
+                    <strong>Canal de resposta:</strong>
+                    <span class="badge bg-secondary">{{ canais.get(config.canal_resposta, config.canal_resposta or '—') }}</span>
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-4 mb-4">
+        <div class="card border-warning">
+            <div class="card-body">
+                <h6 class="text-warning"><i class="bi bi-tools"></i> Em construção</h6>
+                <p class="small mb-0">
+                    A criação de pesquisas, envio em massa, link público com formulário
+                    e gráficos serão liberados na próxima onda. Por enquanto, suas
+                    preferências já ficam salvas.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

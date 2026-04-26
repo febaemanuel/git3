@@ -165,7 +165,7 @@ class Usuario(UserMixin, db.Model):
     senha_hash = db.Column(db.String(255), nullable=False)
     ativo = db.Column(db.Boolean, default=True)
     is_admin = db.Column(db.Boolean, default=False)  # Flag de administrador
-    tipo_sistema = db.Column(db.String(50), default='BUSCA_ATIVA')  # BUSCA_ATIVA ou AGENDAMENTO_CONSULTA
+    tipo_sistema = db.Column(db.String(50), default='BUSCA_ATIVA')  # BUSCA_ATIVA, AGENDAMENTO_CONSULTA ou GERAL
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     ultimo_acesso = db.Column(db.DateTime)
 
@@ -1074,6 +1074,40 @@ class PesquisaSatisfacao(db.Model):
     # Relationships
     consulta = db.relationship('AgendamentoConsulta', backref='pesquisa_satisfacao')
     usuario = db.relationship('Usuario', backref='pesquisas_satisfacao')
+
+
+class ConfigUsuarioGeral(db.Model):
+    """Preferências configuradas via wizard pelo usuário do tipo GERAL.
+
+    Onda 1: só armazena o que o usuário escolheu no wizard. Nenhuma rotina
+    de envio consome essas preferências ainda — isso entra na Onda 2.
+    """
+    __tablename__ = 'config_usuario_geral'
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), unique=True, nullable=False)
+
+    # Multi-select: lista JSON de strings em {'CONFIRMACAO','PESQUISA','ENQUETE'}
+    tipos_uso = db.Column(db.Text)
+
+    # Um único valor: 'WHATSAPP_LINK_EXTERNO' | 'WHATSAPP_INTERATIVO' | 'LINK_INTERNO'
+    canal_resposta = db.Column(db.String(40))
+
+    wizard_concluido = db.Column(db.Boolean, default=False, nullable=False)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    data_atualizacao = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    usuario = db.relationship('Usuario', backref=db.backref('config_geral', uselist=False))
+
+    def tipos_uso_lista(self):
+        import json
+        try:
+            return json.loads(self.tipos_uso) if self.tipos_uso else []
+        except (ValueError, TypeError):
+            return []
+
+    def set_tipos_uso(self, lista):
+        import json
+        self.tipos_uso = json.dumps(list(lista or []))
 
 
 class Paciente(db.Model):
@@ -2846,6 +2880,8 @@ def get_dashboard_route():
         tipo = getattr(current_user, 'tipo_sistema', 'BUSCA_ATIVA')
         if tipo == 'AGENDAMENTO_CONSULTA':
             return 'consultas_dashboard'
+        if tipo == 'GERAL':
+            return 'geral_dashboard'
         # Aceita tanto BUSCA_ATIVA quanto FILA_CIRURGICA (compatibilidade)
         return 'dashboard'
     return 'login'
@@ -8754,7 +8790,7 @@ def cadastro_publico():
             return render_template('cadastro.html')
 
         # Validar tipo_sistema
-        if tipo_sistema not in ['BUSCA_ATIVA', 'AGENDAMENTO_CONSULTA']:
+        if tipo_sistema not in ['BUSCA_ATIVA', 'AGENDAMENTO_CONSULTA', 'GERAL']:
             tipo_sistema = 'BUSCA_ATIVA'
 
         # Verificar se email já existe
@@ -8772,6 +8808,82 @@ def cadastro_publico():
         return redirect(url_for('login'))
 
     return render_template('cadastro.html')
+
+
+# =============================================================================
+# ROTAS - USUÁRIO GERAL (wizard de configuração + dashboard placeholder)
+# =============================================================================
+
+TIPOS_USO_GERAL = ['CONFIRMACAO', 'PESQUISA', 'ENQUETE']
+CANAIS_RESPOSTA_GERAL = ['WHATSAPP_LINK_EXTERNO', 'WHATSAPP_INTERATIVO', 'LINK_INTERNO']
+
+
+def _exigir_usuario_geral():
+    """Bloqueia acesso a quem não é tipo_sistema='GERAL'. Retorna a config (criando se necessário)."""
+    if getattr(current_user, 'tipo_sistema', None) != 'GERAL':
+        flash('Esta área é exclusiva de usuários do tipo Geral.', 'warning')
+        return None, redirect(url_for(get_dashboard_route()))
+
+    config = ConfigUsuarioGeral.query.filter_by(usuario_id=current_user.id).first()
+    if not config:
+        config = ConfigUsuarioGeral(usuario_id=current_user.id, wizard_concluido=False)
+        db.session.add(config)
+        db.session.commit()
+    return config, None
+
+
+@app.route('/geral/dashboard')
+@login_required
+def geral_dashboard():
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+
+    if not config.wizard_concluido:
+        return redirect(url_for('geral_wizard'))
+
+    return render_template(
+        'geral_dashboard.html',
+        config=config,
+        tipos_uso=config.tipos_uso_lista(),
+    )
+
+
+@app.route('/geral/wizard', methods=['GET', 'POST'])
+@login_required
+def geral_wizard():
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+
+    if request.method == 'POST':
+        tipos_selecionados = [t for t in request.form.getlist('tipos_uso') if t in TIPOS_USO_GERAL]
+        canal = request.form.get('canal_resposta', '').strip()
+
+        if not tipos_selecionados:
+            flash('Selecione ao menos um tipo de uso.', 'danger')
+            return render_template('geral_wizard.html', config=config,
+                                   tipos_uso=tipos_selecionados, canal_resposta=canal)
+
+        if canal not in CANAIS_RESPOSTA_GERAL:
+            flash('Selecione um canal de resposta válido.', 'danger')
+            return render_template('geral_wizard.html', config=config,
+                                   tipos_uso=tipos_selecionados, canal_resposta=canal)
+
+        config.set_tipos_uso(tipos_selecionados)
+        config.canal_resposta = canal
+        config.wizard_concluido = True
+        db.session.commit()
+
+        flash('Configuração salva! Você já pode usar o sistema.', 'success')
+        return redirect(url_for('geral_dashboard'))
+
+    return render_template(
+        'geral_wizard.html',
+        config=config,
+        tipos_uso=config.tipos_uso_lista(),
+        canal_resposta=config.canal_resposta or '',
+    )
 
 
 # =============================================================================

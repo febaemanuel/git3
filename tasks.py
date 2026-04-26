@@ -1896,3 +1896,51 @@ def processar_envio_pesquisa(self, envio_id):
         except Exception:
             pass
         raise
+
+
+@celery.task(
+    base=DatabaseTask,
+    name='tasks.retomar_envios_pesquisa_automaticos',
+)
+def retomar_envios_pesquisa_automaticos():
+    """Retoma envios de pesquisa pausados por horário ou meta diária.
+
+    Executada a cada hora pelo Celery Beat. Espelha
+    retomar_campanhas_consultas_automaticas: só retoma quem foi pausado
+    por motivo automático (não pelo usuário).
+    """
+    from app import db, EnvioPesquisa, EnvioPesquisaTelefone
+
+    logger.info("Verificando envios de pesquisa pausados para retomada")
+
+    try:
+        pausados = EnvioPesquisa.query.filter_by(status='pausado').all()
+        if not pausados:
+            return {'sucesso': True, 'retomadas': 0}
+
+        retomadas = 0
+        for envio in pausados:
+            motivo_horario = 'Fora do horário' in (envio.status_msg or '')
+            motivo_meta = 'Meta diária' in (envio.status_msg or '')
+            if not (motivo_horario or motivo_meta):
+                # Pausa manual — não tocar.
+                continue
+
+            pendentes = EnvioPesquisaTelefone.query.filter_by(
+                envio_id=envio.id, status='pendente',
+            ).count()
+            if pendentes == 0:
+                envio.status = 'concluido'
+                envio.status_msg = 'Todos os destinatários processados'
+                db.session.commit()
+                continue
+
+            if envio.pode_enviar_agora() and envio.pode_enviar_hoje():
+                logger.info(f"Retomando envio de pesquisa {envio.id} ({envio.nome or '-'})")
+                processar_envio_pesquisa.delay(envio.id)
+                retomadas += 1
+
+        return {'sucesso': True, 'retomadas': retomadas, 'verificadas': len(pausados)}
+    except Exception as e:
+        logger.exception(f"Erro na retomada de envios de pesquisa: {e}")
+        return {'sucesso': False, 'erro': str(e)}

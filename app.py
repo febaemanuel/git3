@@ -1110,6 +1110,104 @@ class ConfigUsuarioGeral(db.Model):
         self.tipos_uso = json.dumps(list(lista or []))
 
 
+# Tipos de pergunta suportados na pesquisa do tipo GERAL.
+TIPOS_PERGUNTA = ['TEXTO_CURTO', 'TEXTO_LONGO', 'SIM_NAO', 'MULTI_ESCOLHA', 'ESCALA_1_10']
+
+
+class Pesquisa(db.Model):
+    """Pesquisa/enquete avulsa criada por um usuário GERAL."""
+    __tablename__ = 'pesquisas'
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, index=True)
+
+    titulo = db.Column(db.String(200), nullable=False)
+    descricao = db.Column(db.Text)
+    # Texto que o usuário pode copiar pra mandar pelo WhatsApp manualmente.
+    mensagem_whatsapp = db.Column(db.Text)
+
+    # Token público que aparece em /p/<token>. URL-safe, fixo por pesquisa.
+    token_publico = db.Column(db.String(40), unique=True, nullable=False, index=True)
+
+    ativa = db.Column(db.Boolean, default=True, nullable=False)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+
+    usuario = db.relationship('Usuario', backref='pesquisas_geral')
+    perguntas = db.relationship(
+        'PerguntaPesquisa',
+        backref='pesquisa',
+        cascade='all, delete-orphan',
+        order_by='PerguntaPesquisa.ordem',
+    )
+    respostas = db.relationship(
+        'RespostaPesquisa',
+        backref='pesquisa',
+        cascade='all, delete-orphan',
+    )
+
+    @staticmethod
+    def gerar_token():
+        import secrets
+        return secrets.token_urlsafe(12)
+
+
+class PerguntaPesquisa(db.Model):
+    __tablename__ = 'perguntas_pesquisa'
+    id = db.Column(db.Integer, primary_key=True)
+    pesquisa_id = db.Column(db.Integer, db.ForeignKey('pesquisas.id', ondelete='CASCADE'), nullable=False, index=True)
+    ordem = db.Column(db.Integer, default=0, nullable=False)
+    texto = db.Column(db.String(500), nullable=False)
+    tipo = db.Column(db.String(30), nullable=False, default='TEXTO_CURTO')
+    # JSON com lista de opções (só usado em MULTI_ESCOLHA).
+    opcoes = db.Column(db.Text)
+    obrigatoria = db.Column(db.Boolean, default=True, nullable=False)
+
+    def opcoes_lista(self):
+        import json
+        try:
+            return json.loads(self.opcoes) if self.opcoes else []
+        except (ValueError, TypeError):
+            return []
+
+    def set_opcoes(self, lista):
+        import json
+        self.opcoes = json.dumps(list(lista or []))
+
+
+class RespostaPesquisa(db.Model):
+    """Cada submissão do formulário público gera uma RespostaPesquisa."""
+    __tablename__ = 'respostas_pesquisa'
+    id = db.Column(db.Integer, primary_key=True)
+    pesquisa_id = db.Column(db.Integer, db.ForeignKey('pesquisas.id', ondelete='CASCADE'), nullable=False, index=True)
+    iniciada_em = db.Column(db.DateTime, default=datetime.utcnow)
+    concluida_em = db.Column(db.DateTime)
+    ip_origem = db.Column(db.String(45))
+    user_agent = db.Column(db.String(255))
+
+    itens = db.relationship(
+        'RespostaItem',
+        backref='resposta',
+        cascade='all, delete-orphan',
+    )
+
+
+class RespostaItem(db.Model):
+    __tablename__ = 'respostas_itens'
+    id = db.Column(db.Integer, primary_key=True)
+    resposta_id = db.Column(db.Integer, db.ForeignKey('respostas_pesquisa.id', ondelete='CASCADE'), nullable=False, index=True)
+    pergunta_id = db.Column(db.Integer, db.ForeignKey('perguntas_pesquisa.id', ondelete='CASCADE'), nullable=False, index=True)
+    # Para MULTI_ESCOLHA, valor é JSON com lista de opções selecionadas.
+    valor = db.Column(db.Text)
+
+    pergunta = db.relationship('PerguntaPesquisa')
+
+    def valor_lista(self):
+        import json
+        try:
+            return json.loads(self.valor) if self.valor else []
+        except (ValueError, TypeError):
+            return []
+
+
 class Paciente(db.Model):
     """Cadastro de pacientes para histórico de consultas"""
     __tablename__ = 'pacientes'
@@ -8884,6 +8982,367 @@ def geral_wizard():
         tipos_uso=config.tipos_uso_lista(),
         canal_resposta=config.canal_resposta or '',
     )
+
+
+# -----------------------------------------------------------------------------
+# Pesquisas (CRUD para o usuário GERAL)
+# -----------------------------------------------------------------------------
+
+def _get_pesquisa_do_usuario(pesquisa_id):
+    """Carrega a pesquisa garantindo que pertence ao usuário logado (ou admin)."""
+    from flask import abort
+    pesquisa = Pesquisa.query.get_or_404(pesquisa_id)
+    if pesquisa.usuario_id != current_user.id and not current_user.is_admin:
+        abort(403)
+    return pesquisa
+
+
+@app.route('/geral/pesquisas')
+@login_required
+def geral_pesquisas_lista():
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+
+    pesquisas = Pesquisa.query.filter_by(usuario_id=current_user.id) \
+        .order_by(Pesquisa.data_criacao.desc()).all()
+
+    # Pré-calcular contagem de respostas concluídas pra evitar N+1 no template.
+    contagens = {}
+    for p in pesquisas:
+        contagens[p.id] = RespostaPesquisa.query.filter(
+            RespostaPesquisa.pesquisa_id == p.id,
+            RespostaPesquisa.concluida_em.isnot(None),
+        ).count()
+
+    return render_template(
+        'geral_pesquisas_lista.html',
+        pesquisas=pesquisas,
+        contagens=contagens,
+    )
+
+
+@app.route('/geral/pesquisas/nova', methods=['GET', 'POST'])
+@login_required
+def geral_pesquisa_nova():
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+
+    if request.method == 'POST':
+        titulo = (request.form.get('titulo') or '').strip()
+        descricao = (request.form.get('descricao') or '').strip()
+        mensagem_whatsapp = (request.form.get('mensagem_whatsapp') or '').strip()
+
+        if not titulo:
+            flash('Informe o título da pesquisa.', 'danger')
+            return render_template('geral_pesquisa_form.html', pesquisa=None,
+                                   titulo=titulo, descricao=descricao,
+                                   mensagem_whatsapp=mensagem_whatsapp)
+
+        pesquisa = Pesquisa(
+            usuario_id=current_user.id,
+            titulo=titulo,
+            descricao=descricao or None,
+            mensagem_whatsapp=mensagem_whatsapp or None,
+            token_publico=Pesquisa.gerar_token(),
+        )
+        db.session.add(pesquisa)
+        db.session.commit()
+        flash('Pesquisa criada. Agora cadastre as perguntas.', 'success')
+        return redirect(url_for('geral_pesquisa_detalhe', id=pesquisa.id))
+
+    return render_template('geral_pesquisa_form.html', pesquisa=None,
+                           titulo='', descricao='', mensagem_whatsapp='')
+
+
+@app.route('/geral/pesquisas/<int:id>', methods=['GET', 'POST'])
+@login_required
+def geral_pesquisa_detalhe(id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    pesquisa = _get_pesquisa_do_usuario(id)
+
+    if request.method == 'POST':
+        pesquisa.titulo = (request.form.get('titulo') or pesquisa.titulo).strip()
+        pesquisa.descricao = (request.form.get('descricao') or '').strip() or None
+        pesquisa.mensagem_whatsapp = (request.form.get('mensagem_whatsapp') or '').strip() or None
+        pesquisa.ativa = request.form.get('ativa') == 'on'
+        db.session.commit()
+        flash('Pesquisa atualizada.', 'success')
+        return redirect(url_for('geral_pesquisa_detalhe', id=pesquisa.id))
+
+    link_publico = url_for('pesquisa_publica', token=pesquisa.token_publico, _external=True)
+    return render_template(
+        'geral_pesquisa_form.html',
+        pesquisa=pesquisa,
+        titulo=pesquisa.titulo,
+        descricao=pesquisa.descricao or '',
+        mensagem_whatsapp=pesquisa.mensagem_whatsapp or '',
+        link_publico=link_publico,
+        tipos_pergunta=TIPOS_PERGUNTA,
+    )
+
+
+@app.route('/geral/pesquisas/<int:id>/excluir', methods=['POST'])
+@login_required
+def geral_pesquisa_excluir(id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    pesquisa = _get_pesquisa_do_usuario(id)
+    db.session.delete(pesquisa)
+    db.session.commit()
+    flash('Pesquisa removida.', 'info')
+    return redirect(url_for('geral_pesquisas_lista'))
+
+
+@app.route('/geral/pesquisas/<int:id>/perguntas', methods=['POST'])
+@login_required
+def geral_pesquisa_pergunta_criar(id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    pesquisa = _get_pesquisa_do_usuario(id)
+
+    texto = (request.form.get('texto') or '').strip()
+    tipo = (request.form.get('tipo') or 'TEXTO_CURTO').strip()
+    opcoes_raw = (request.form.get('opcoes') or '').strip()
+    obrigatoria = request.form.get('obrigatoria') == 'on'
+
+    if not texto:
+        flash('Digite o texto da pergunta.', 'danger')
+        return redirect(url_for('geral_pesquisa_detalhe', id=pesquisa.id))
+    if tipo not in TIPOS_PERGUNTA:
+        flash('Tipo de pergunta inválido.', 'danger')
+        return redirect(url_for('geral_pesquisa_detalhe', id=pesquisa.id))
+
+    opcoes = []
+    if tipo == 'MULTI_ESCOLHA':
+        opcoes = [o.strip() for o in opcoes_raw.split('\n') if o.strip()]
+        if len(opcoes) < 2:
+            flash('Múltipla escolha precisa de pelo menos 2 opções (uma por linha).', 'danger')
+            return redirect(url_for('geral_pesquisa_detalhe', id=pesquisa.id))
+
+    proxima_ordem = (db.session.query(db.func.max(PerguntaPesquisa.ordem))
+                     .filter_by(pesquisa_id=pesquisa.id).scalar() or 0) + 1
+
+    pergunta = PerguntaPesquisa(
+        pesquisa_id=pesquisa.id,
+        ordem=proxima_ordem,
+        texto=texto,
+        tipo=tipo,
+        obrigatoria=obrigatoria,
+    )
+    if opcoes:
+        pergunta.set_opcoes(opcoes)
+    db.session.add(pergunta)
+    db.session.commit()
+    flash('Pergunta adicionada.', 'success')
+    return redirect(url_for('geral_pesquisa_detalhe', id=pesquisa.id))
+
+
+@app.route('/geral/pesquisas/<int:id>/perguntas/<int:pid>/excluir', methods=['POST'])
+@login_required
+def geral_pesquisa_pergunta_excluir(id, pid):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    pesquisa = _get_pesquisa_do_usuario(id)
+    pergunta = PerguntaPesquisa.query.filter_by(id=pid, pesquisa_id=pesquisa.id).first_or_404()
+    db.session.delete(pergunta)
+    db.session.commit()
+    flash('Pergunta removida.', 'info')
+    return redirect(url_for('geral_pesquisa_detalhe', id=pesquisa.id))
+
+
+@app.route('/geral/pesquisas/<int:id>/stats')
+@login_required
+def geral_pesquisa_stats(id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    pesquisa = _get_pesquisa_do_usuario(id)
+
+    total_iniciadas = RespostaPesquisa.query.filter_by(pesquisa_id=pesquisa.id).count()
+    total_concluidas = RespostaPesquisa.query.filter(
+        RespostaPesquisa.pesquisa_id == pesquisa.id,
+        RespostaPesquisa.concluida_em.isnot(None),
+    ).count()
+
+    # Para cada pergunta, monta os dados que viram gráfico.
+    # SIM_NAO e MULTI_ESCOLHA → pizza/barra com contagem por opção.
+    # ESCALA_1_10 → distribuição 1..10.
+    # TEXTO_* → lista as últimas 50 respostas.
+    respostas_concluidas_ids = [r.id for r in RespostaPesquisa.query.filter(
+        RespostaPesquisa.pesquisa_id == pesquisa.id,
+        RespostaPesquisa.concluida_em.isnot(None),
+    ).all()]
+
+    perguntas_dados = []
+    for p in pesquisa.perguntas:
+        itens = RespostaItem.query.filter(
+            RespostaItem.pergunta_id == p.id,
+            RespostaItem.resposta_id.in_(respostas_concluidas_ids) if respostas_concluidas_ids else False,
+        ).all() if respostas_concluidas_ids else []
+
+        dado = {'pergunta': p, 'total': len(itens)}
+
+        if p.tipo == 'SIM_NAO':
+            sim = sum(1 for i in itens if (i.valor or '').strip().upper() in ('SIM', 'S', 'TRUE', '1'))
+            nao = len(itens) - sim
+            dado['labels'] = ['Sim', 'Não']
+            dado['data'] = [sim, nao]
+        elif p.tipo == 'MULTI_ESCOLHA':
+            contagem = {}
+            for opt in p.opcoes_lista():
+                contagem[opt] = 0
+            for i in itens:
+                for sel in i.valor_lista():
+                    if sel in contagem:
+                        contagem[sel] += 1
+                    else:
+                        contagem[sel] = 1
+            dado['labels'] = list(contagem.keys())
+            dado['data'] = list(contagem.values())
+        elif p.tipo == 'ESCALA_1_10':
+            buckets = [0] * 10
+            for i in itens:
+                try:
+                    n = int((i.valor or '0').strip())
+                    if 1 <= n <= 10:
+                        buckets[n - 1] += 1
+                except ValueError:
+                    pass
+            dado['labels'] = [str(n) for n in range(1, 11)]
+            dado['data'] = buckets
+        else:  # TEXTO_CURTO / TEXTO_LONGO
+            dado['amostras'] = [(i.valor or '') for i in itens[-50:]]
+
+        perguntas_dados.append(dado)
+
+    return render_template(
+        'geral_pesquisa_stats.html',
+        pesquisa=pesquisa,
+        total_iniciadas=total_iniciadas,
+        total_concluidas=total_concluidas,
+        perguntas_dados=perguntas_dados,
+    )
+
+
+@app.route('/geral/pesquisas/<int:id>/exportar')
+@login_required
+def geral_pesquisa_exportar(id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    pesquisa = _get_pesquisa_do_usuario(id)
+
+    perguntas = pesquisa.perguntas
+    respostas = RespostaPesquisa.query.filter_by(pesquisa_id=pesquisa.id) \
+        .order_by(RespostaPesquisa.iniciada_em).all()
+
+    # Constrói um DataFrame com uma linha por resposta e uma coluna por pergunta.
+    linhas = []
+    for r in respostas:
+        linha = {
+            'iniciada_em': r.iniciada_em.strftime('%Y-%m-%d %H:%M') if r.iniciada_em else '',
+            'concluida_em': r.concluida_em.strftime('%Y-%m-%d %H:%M') if r.concluida_em else '',
+        }
+        valores = {i.pergunta_id: i for i in r.itens}
+        for p in perguntas:
+            item = valores.get(p.id)
+            if not item:
+                linha[p.texto] = ''
+            elif p.tipo == 'MULTI_ESCOLHA':
+                linha[p.texto] = ', '.join(item.valor_lista())
+            else:
+                linha[p.texto] = item.valor or ''
+        linhas.append(linha)
+
+    df = pd.DataFrame(linhas) if linhas else pd.DataFrame(
+        columns=['iniciada_em', 'concluida_em'] + [p.texto for p in perguntas]
+    )
+
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+        df.to_excel(writer, sheet_name='Respostas', index=False)
+    buf.seek(0)
+
+    nome_arquivo = f"pesquisa_{pesquisa.id}_{datetime.utcnow().strftime('%Y%m%d_%H%M')}.xlsx"
+    return send_file(buf,
+                     as_attachment=True,
+                     download_name=nome_arquivo,
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+
+# -----------------------------------------------------------------------------
+# Pesquisa pública (formulário web acessado pelo paciente via link)
+# -----------------------------------------------------------------------------
+
+@app.route('/p/<token>', methods=['GET', 'POST'])
+@csrf.exempt  # link é compartilhado externamente; usa token na URL como autorização
+def pesquisa_publica(token):
+    pesquisa = Pesquisa.query.filter_by(token_publico=token).first_or_404()
+
+    if not pesquisa.ativa:
+        return render_template('pesquisa_publica_indisponivel.html', pesquisa=pesquisa), 410
+
+    if not pesquisa.perguntas:
+        return render_template('pesquisa_publica_indisponivel.html', pesquisa=pesquisa,
+                               motivo='Esta pesquisa ainda não possui perguntas configuradas.'), 410
+
+    if request.method == 'POST':
+        resposta = RespostaPesquisa(
+            pesquisa_id=pesquisa.id,
+            ip_origem=request.headers.get('X-Forwarded-For', request.remote_addr or '')[:45],
+            user_agent=(request.headers.get('User-Agent') or '')[:255],
+        )
+        db.session.add(resposta)
+        db.session.flush()  # garante resposta.id pra usar nos itens
+
+        faltando_obrigatoria = False
+
+        for p in pesquisa.perguntas:
+            campo = f'p_{p.id}'
+
+            if p.tipo == 'MULTI_ESCOLHA':
+                valores = [v for v in request.form.getlist(campo) if v in p.opcoes_lista()]
+                if p.obrigatoria and not valores:
+                    faltando_obrigatoria = True
+                    break
+                item = RespostaItem(resposta_id=resposta.id, pergunta_id=p.id)
+                if valores:
+                    import json
+                    item.valor = json.dumps(valores)
+                db.session.add(item)
+            else:
+                valor = (request.form.get(campo) or '').strip()
+                if p.tipo == 'ESCALA_1_10' and valor:
+                    try:
+                        n = int(valor)
+                        if not (1 <= n <= 10):
+                            valor = ''
+                    except ValueError:
+                        valor = ''
+                if p.obrigatoria and not valor:
+                    faltando_obrigatoria = True
+                    break
+                item = RespostaItem(resposta_id=resposta.id, pergunta_id=p.id, valor=valor or None)
+                db.session.add(item)
+
+        if faltando_obrigatoria:
+            db.session.rollback()
+            flash('Por favor, responda todas as perguntas obrigatórias.', 'danger')
+            return render_template('pesquisa_publica.html', pesquisa=pesquisa,
+                                   form_data=request.form)
+
+        resposta.concluida_em = datetime.utcnow()
+        db.session.commit()
+        return render_template('pesquisa_publica_obrigado.html', pesquisa=pesquisa)
+
+    return render_template('pesquisa_publica.html', pesquisa=pesquisa, form_data={})
 
 
 # =============================================================================

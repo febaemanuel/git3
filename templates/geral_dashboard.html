@@ -21,9 +21,14 @@
                 <h2><i class="bi bi-grid"></i> Sistema Geral</h2>
                 <p class="text-muted mb-0">Pesquisas, enquetes e confirmações configuráveis.</p>
             </div>
-            <a href="{{ url_for('geral_wizard') }}" class="btn btn-outline-secondary">
-                <i class="bi bi-gear"></i> Refazer wizard
-            </a>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('geral_pesquisas_lista') }}" class="btn btn-primary">
+                    <i class="bi bi-clipboard-data"></i> Pesquisas
+                </a>
+                <a href="{{ url_for('geral_wizard') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-gear"></i> Refazer wizard
+                </a>
+            </div>
         </div>
     </div>
 
@@ -50,13 +55,23 @@
     </div>
 
     <div class="col-12 col-lg-4 mb-4">
-        <div class="card border-warning">
+        <div class="card border-info">
+            <div class="card-body">
+                <h6 class="text-info"><i class="bi bi-lightbulb"></i> Próximos passos</h6>
+                <ul class="small mb-0 ps-3">
+                    <li>Crie uma pesquisa com perguntas customizadas</li>
+                    <li>Compartilhe o link público com seus pacientes</li>
+                    <li>Veja respostas, gráficos e exporte para Excel</li>
+                </ul>
+            </div>
+        </div>
+        <div class="card border-warning mt-3">
             <div class="card-body">
                 <h6 class="text-warning"><i class="bi bi-tools"></i> Em construção</h6>
                 <p class="small mb-0">
-                    A criação de pesquisas, envio em massa, link público com formulário
-                    e gráficos serão liberados na próxima onda. Por enquanto, suas
-                    preferências já ficam salvas.
+                    Envio em massa pelo WhatsApp com controle de intervalo e
+                    fila será liberado em uma onda futura. Por enquanto, mande
+                    o link manualmente para evitar bloqueio.
                 </p>
             </div>
         </div>

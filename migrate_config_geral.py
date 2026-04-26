@@ -85,6 +85,53 @@ TABELAS = [
     ("respostas_itens_idx_pergunta", """
         CREATE INDEX IF NOT EXISTS ix_respostas_itens_pergunta_id ON respostas_itens (pergunta_id)
     """),
+    ("envios_pesquisa", """
+        CREATE TABLE IF NOT EXISTS envios_pesquisa (
+            id SERIAL PRIMARY KEY,
+            pesquisa_id INTEGER NOT NULL,
+            usuario_id INTEGER NOT NULL,
+            nome VARCHAR(120),
+            mensagem_template TEXT NOT NULL,
+            intervalo_segundos INTEGER NOT NULL DEFAULT 60,
+            hora_inicio INTEGER NOT NULL DEFAULT 8,
+            hora_fim INTEGER NOT NULL DEFAULT 18,
+            meta_diaria INTEGER NOT NULL DEFAULT 50,
+            enviados_hoje INTEGER NOT NULL DEFAULT 0,
+            data_ultimo_envio DATE,
+            status VARCHAR(20) NOT NULL DEFAULT 'pendente',
+            status_msg VARCHAR(200),
+            total INTEGER NOT NULL DEFAULT 0,
+            enviados INTEGER NOT NULL DEFAULT 0,
+            falhas INTEGER NOT NULL DEFAULT 0,
+            data_criacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            data_inicio TIMESTAMP,
+            data_fim TIMESTAMP,
+            celery_task_id VARCHAR(100),
+            FOREIGN KEY (pesquisa_id) REFERENCES pesquisas(id) ON DELETE CASCADE,
+            FOREIGN KEY (usuario_id) REFERENCES usuarios(id)
+        )
+    """),
+    ("envios_pesquisa_idx", """
+        CREATE INDEX IF NOT EXISTS ix_envios_pesquisa_pesquisa_id ON envios_pesquisa (pesquisa_id)
+    """),
+    ("envios_pesquisa_idx_user", """
+        CREATE INDEX IF NOT EXISTS ix_envios_pesquisa_usuario_id ON envios_pesquisa (usuario_id)
+    """),
+    ("envios_pesquisa_telefones", """
+        CREATE TABLE IF NOT EXISTS envios_pesquisa_telefones (
+            id SERIAL PRIMARY KEY,
+            envio_id INTEGER NOT NULL,
+            numero VARCHAR(20) NOT NULL,
+            nome VARCHAR(120),
+            status VARCHAR(20) NOT NULL DEFAULT 'pendente',
+            erro VARCHAR(300),
+            data_envio TIMESTAMP,
+            FOREIGN KEY (envio_id) REFERENCES envios_pesquisa(id) ON DELETE CASCADE
+        )
+    """),
+    ("envios_pesquisa_telefones_idx", """
+        CREATE INDEX IF NOT EXISTS ix_envios_pesquisa_telefones_envio_id ON envios_pesquisa_telefones (envio_id)
+    """),
 ]
 
 

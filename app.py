@@ -1208,6 +1208,88 @@ class RespostaItem(db.Model):
             return []
 
 
+# Status possíveis para um lote de envio em massa do link da pesquisa.
+STATUS_ENVIO_PESQUISA = ['pendente', 'enviando', 'pausado', 'concluido', 'erro']
+STATUS_ENVIO_TELEFONE = ['pendente', 'enviado', 'falhou']
+
+
+class EnvioPesquisa(db.Model):
+    """Lote de envio em massa do link da pesquisa via WhatsApp.
+
+    Um EnvioPesquisa = uma "campanha" simples: o usuário cola lista de
+    telefones, define intervalo/horário/meta diária e o sistema dispara
+    a mensagem (com o link público) para cada um. Sem retry, sem chat
+    de volta — é uma única mensagem por destinatário.
+    """
+    __tablename__ = 'envios_pesquisa'
+    id = db.Column(db.Integer, primary_key=True)
+    pesquisa_id = db.Column(db.Integer, db.ForeignKey('pesquisas.id', ondelete='CASCADE'), nullable=False, index=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, index=True)
+
+    nome = db.Column(db.String(120))  # rótulo do lote, ex.: "Cesáreas semana 17/04"
+    mensagem_template = db.Column(db.Text, nullable=False)  # texto que vai pra cada paciente
+
+    # Configurações de envio (mesmos defaults dos outros sistemas).
+    intervalo_segundos = db.Column(db.Integer, default=60, nullable=False)
+    hora_inicio = db.Column(db.Integer, default=8, nullable=False)
+    hora_fim = db.Column(db.Integer, default=18, nullable=False)
+    meta_diaria = db.Column(db.Integer, default=50, nullable=False)
+    enviados_hoje = db.Column(db.Integer, default=0, nullable=False)
+    data_ultimo_envio = db.Column(db.Date)
+
+    status = db.Column(db.String(20), default='pendente', nullable=False)
+    status_msg = db.Column(db.String(200))
+
+    total = db.Column(db.Integer, default=0, nullable=False)
+    enviados = db.Column(db.Integer, default=0, nullable=False)
+    falhas = db.Column(db.Integer, default=0, nullable=False)
+
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    data_inicio = db.Column(db.DateTime)
+    data_fim = db.Column(db.DateTime)
+    celery_task_id = db.Column(db.String(100))
+
+    pesquisa = db.relationship('Pesquisa', backref='envios')
+    usuario = db.relationship('Usuario')
+    telefones = db.relationship(
+        'EnvioPesquisaTelefone',
+        backref='envio',
+        cascade='all, delete-orphan',
+    )
+
+    def pode_enviar_agora(self):
+        # Reusa fuso de Fortaleza pra consistência com Campanha/CampanhaConsulta.
+        hora_atual = obter_hora_fortaleza()
+        if self.hora_inicio <= self.hora_fim:
+            return self.hora_inicio <= hora_atual < self.hora_fim
+        return hora_atual >= self.hora_inicio or hora_atual < self.hora_fim
+
+    def pode_enviar_hoje(self):
+        hoje = obter_hoje_fortaleza()
+        if self.data_ultimo_envio != hoje:
+            self.enviados_hoje = 0
+            self.data_ultimo_envio = hoje
+        return self.enviados_hoje < self.meta_diaria
+
+    def registrar_envio(self):
+        hoje = obter_hoje_fortaleza()
+        if self.data_ultimo_envio != hoje:
+            self.enviados_hoje = 0
+            self.data_ultimo_envio = hoje
+        self.enviados_hoje += 1
+
+
+class EnvioPesquisaTelefone(db.Model):
+    __tablename__ = 'envios_pesquisa_telefones'
+    id = db.Column(db.Integer, primary_key=True)
+    envio_id = db.Column(db.Integer, db.ForeignKey('envios_pesquisa.id', ondelete='CASCADE'), nullable=False, index=True)
+    numero = db.Column(db.String(20), nullable=False)
+    nome = db.Column(db.String(120))
+    status = db.Column(db.String(20), default='pendente', nullable=False)
+    erro = db.Column(db.String(300))
+    data_envio = db.Column(db.DateTime)
+
+
 class Paciente(db.Model):
     """Cadastro de pacientes para histórico de consultas"""
     __tablename__ = 'pacientes'
@@ -9275,6 +9357,209 @@ def geral_pesquisa_exportar(id):
                      as_attachment=True,
                      download_name=nome_arquivo,
                      mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+
+# -----------------------------------------------------------------------------
+# Envio em massa do link da pesquisa via WhatsApp
+# -----------------------------------------------------------------------------
+
+def _normalizar_telefones_textarea(texto):
+    """Recebe texto (uma linha por telefone, opcional 'nome | numero') e devolve
+    lista [(numero_formatado, nome_or_None), ...] sem duplicatas, com numero válido.
+    """
+    seen = set()
+    saida = []
+    for linha in (texto or '').splitlines():
+        linha = linha.strip()
+        if not linha:
+            continue
+        nome = None
+        if '|' in linha:
+            partes = linha.split('|', 1)
+            nome = partes[0].strip() or None
+            numero_raw = partes[1].strip()
+        else:
+            numero_raw = linha
+        numero_fmt = formatar_numero(numero_raw)
+        if not numero_fmt or numero_fmt in seen:
+            continue
+        seen.add(numero_fmt)
+        saida.append((numero_fmt, nome))
+    return saida
+
+
+def _renderizar_mensagem_envio(mensagem_template, link_publico, nome_destinatario=None):
+    """Substitui placeholders na mensagem; se {LINK} ausente, anexa no fim."""
+    texto = mensagem_template or ''
+    if '{NOME}' in texto:
+        texto = texto.replace('{NOME}', nome_destinatario or '')
+    if '{LINK}' in texto:
+        texto = texto.replace('{LINK}', link_publico)
+    else:
+        texto = (texto.rstrip() + '\n\n' + link_publico).strip()
+    return texto
+
+
+@app.route('/geral/pesquisas/<int:id>/enviar', methods=['GET', 'POST'])
+@login_required
+def geral_pesquisa_enviar(id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    pesquisa = _get_pesquisa_do_usuario(id)
+
+    if not pesquisa.perguntas:
+        flash('Cadastre ao menos uma pergunta antes de enviar.', 'warning')
+        return redirect(url_for('geral_pesquisa_detalhe', id=pesquisa.id))
+
+    if not pesquisa.ativa:
+        flash('Reative a pesquisa antes de enviar o link.', 'warning')
+        return redirect(url_for('geral_pesquisa_detalhe', id=pesquisa.id))
+
+    link_publico = url_for('pesquisa_publica', token=pesquisa.token_publico, _external=True)
+    mensagem_padrao = pesquisa.mensagem_whatsapp or (
+        f'Olá {{NOME}}! Por favor, responda nossa pesquisa: {{LINK}}'
+    )
+
+    if request.method == 'POST':
+        nome = (request.form.get('nome') or '').strip() or None
+        mensagem_template = (request.form.get('mensagem') or '').strip() or mensagem_padrao
+        telefones_raw = request.form.get('telefones') or ''
+        try:
+            intervalo = max(5, int(request.form.get('intervalo', '60')))
+            hora_inicio = max(0, min(23, int(request.form.get('hora_inicio', '8'))))
+            hora_fim = max(0, min(23, int(request.form.get('hora_fim', '18'))))
+            meta_diaria = max(1, int(request.form.get('meta_diaria', '50')))
+        except ValueError:
+            flash('Valores numéricos inválidos.', 'danger')
+            return render_template('geral_envio_form.html', pesquisa=pesquisa,
+                                   link_publico=link_publico, mensagem=mensagem_template,
+                                   telefones=telefones_raw, nome=nome)
+
+        telefones = _normalizar_telefones_textarea(telefones_raw)
+        if not telefones:
+            flash('Nenhum telefone válido. Use formato (85) 99999-9999, um por linha.', 'danger')
+            return render_template('geral_envio_form.html', pesquisa=pesquisa,
+                                   link_publico=link_publico, mensagem=mensagem_template,
+                                   telefones=telefones_raw, nome=nome)
+
+        envio = EnvioPesquisa(
+            pesquisa_id=pesquisa.id,
+            usuario_id=current_user.id,
+            nome=nome,
+            mensagem_template=mensagem_template,
+            intervalo_segundos=intervalo,
+            hora_inicio=hora_inicio,
+            hora_fim=hora_fim,
+            meta_diaria=meta_diaria,
+            total=len(telefones),
+        )
+        db.session.add(envio)
+        db.session.flush()
+
+        for numero, nome_dest in telefones:
+            db.session.add(EnvioPesquisaTelefone(
+                envio_id=envio.id,
+                numero=numero,
+                nome=nome_dest,
+            ))
+        db.session.commit()
+
+        # Disparar a task em background.
+        try:
+            from celery_app import celery
+            res = celery.send_task('tasks.processar_envio_pesquisa', args=[envio.id])
+            envio.celery_task_id = res.id
+            db.session.commit()
+        except Exception as e:
+            envio.status = 'erro'
+            envio.status_msg = f'Falha ao agendar task: {e}'
+            db.session.commit()
+            flash(f'Envio criado, mas o disparo falhou: {e}', 'danger')
+
+        flash(f'Envio iniciado: {len(telefones)} destinatários.', 'success')
+        return redirect(url_for('geral_envio_progresso', envio_id=envio.id))
+
+    return render_template('geral_envio_form.html', pesquisa=pesquisa,
+                           link_publico=link_publico, mensagem=mensagem_padrao,
+                           telefones='', nome='')
+
+
+def _get_envio_do_usuario(envio_id):
+    from flask import abort
+    envio = EnvioPesquisa.query.get_or_404(envio_id)
+    if envio.usuario_id != current_user.id and not current_user.is_admin:
+        abort(403)
+    return envio
+
+
+@app.route('/geral/envios/<int:envio_id>')
+@login_required
+def geral_envio_progresso(envio_id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    envio = _get_envio_do_usuario(envio_id)
+
+    pendentes = sum(1 for t in envio.telefones if t.status == 'pendente')
+    return render_template('geral_envio_progresso.html', envio=envio, pendentes=pendentes)
+
+
+@app.route('/geral/envios/<int:envio_id>/status.json')
+@login_required
+def geral_envio_status(envio_id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return jsonify({'erro': 'forbidden'}), 403
+    envio = _get_envio_do_usuario(envio_id)
+    return jsonify({
+        'status': envio.status,
+        'status_msg': envio.status_msg,
+        'total': envio.total,
+        'enviados': envio.enviados,
+        'falhas': envio.falhas,
+        'pendentes': envio.total - envio.enviados - envio.falhas,
+    })
+
+
+@app.route('/geral/envios/<int:envio_id>/pausar', methods=['POST'])
+@login_required
+def geral_envio_pausar(envio_id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    envio = _get_envio_do_usuario(envio_id)
+    if envio.status == 'enviando':
+        envio.status = 'pausado'
+        envio.status_msg = 'Pausado pelo usuário'
+        db.session.commit()
+        flash('Envio pausado.', 'info')
+    return redirect(url_for('geral_envio_progresso', envio_id=envio.id))
+
+
+@app.route('/geral/envios/<int:envio_id>/continuar', methods=['POST'])
+@login_required
+def geral_envio_continuar(envio_id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    envio = _get_envio_do_usuario(envio_id)
+    if envio.status in ('pausado', 'erro'):
+        envio.status = 'pendente'
+        envio.status_msg = None
+        db.session.commit()
+        try:
+            from celery_app import celery
+            res = celery.send_task('tasks.processar_envio_pesquisa', args=[envio.id])
+            envio.celery_task_id = res.id
+            db.session.commit()
+            flash('Envio retomado.', 'success')
+        except Exception as e:
+            envio.status = 'erro'
+            envio.status_msg = f'Falha ao retomar: {e}'
+            db.session.commit()
+            flash(f'Falha ao retomar: {e}', 'danger')
+    return redirect(url_for('geral_envio_progresso', envio_id=envio.id))
 
 
 # -----------------------------------------------------------------------------

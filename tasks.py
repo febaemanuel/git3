@@ -1751,3 +1751,148 @@ def retry_fila_sem_resposta():
     except Exception as e:
         logger.exception(f"Erro no retry automático da fila: {e}")
         return {'sucesso': False, 'erro': str(e)}
+
+
+@celery.task(
+    base=DatabaseTask,
+    bind=True,
+    name='tasks.processar_envio_pesquisa',
+    max_retries=3,
+    default_retry_delay=120,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=900,
+    retry_jitter=True,
+    time_limit=7200,
+    soft_time_limit=7000,
+)
+def processar_envio_pesquisa(self, envio_id):
+    """Envia o link da pesquisa para cada destinatário do lote, respeitando
+    intervalo, horário e meta diária.
+
+    Sem retry automático em caso de falha por destinatário — quem falhar fica
+    com status='falhou' e o usuário pode criar outro envio com a lista filtrada.
+    """
+    from app import (
+        db, EnvioPesquisa, EnvioPesquisaTelefone, Pesquisa, WhatsApp,
+        _renderizar_mensagem_envio,
+    )
+    from datetime import datetime
+    from flask import url_for
+
+    logger.info(f"Iniciando envio de pesquisa {envio_id}")
+
+    try:
+        envio = db.session.get(EnvioPesquisa, envio_id)
+        if not envio:
+            return {'erro': 'envio não encontrado'}
+
+        if envio.status in ('concluido', 'pausado'):
+            logger.info(f"Envio {envio_id} já está em {envio.status}, abortando")
+            return {'sucesso': True, 'status': envio.status}
+
+        pesquisa = db.session.get(Pesquisa, envio.pesquisa_id)
+        if not pesquisa or not pesquisa.ativa:
+            envio.status = 'erro'
+            envio.status_msg = 'Pesquisa inativa ou removida'
+            db.session.commit()
+            return {'erro': envio.status_msg}
+
+        ws = WhatsApp(envio.usuario_id)
+        if not ws.ok():
+            envio.status = 'erro'
+            envio.status_msg = 'WhatsApp não configurado'
+            db.session.commit()
+            return {'erro': envio.status_msg}
+
+        conn, _ = ws.conectado()
+        if not conn:
+            envio.status = 'erro'
+            envio.status_msg = 'WhatsApp desconectado'
+            db.session.commit()
+            return {'erro': envio.status_msg}
+
+        # Construir o link público sem precisar de request context.
+        from app import app as flask_app
+        with flask_app.app_context():
+            with flask_app.test_request_context():
+                link_publico = url_for('pesquisa_publica',
+                                       token=pesquisa.token_publico,
+                                       _external=True)
+
+        envio.status = 'enviando'
+        envio.status_msg = None
+        if not envio.data_inicio:
+            envio.data_inicio = datetime.utcnow()
+        db.session.commit()
+
+        pendentes = EnvioPesquisaTelefone.query.filter_by(
+            envio_id=envio.id, status='pendente',
+        ).order_by(EnvioPesquisaTelefone.id).all()
+
+        for tel in pendentes:
+            db.session.refresh(envio)
+            if envio.status == 'pausado':
+                logger.info(f"Envio {envio_id} pausado, parando")
+                break
+
+            if not envio.pode_enviar_agora():
+                envio.status = 'pausado'
+                envio.status_msg = f'Fora do horário ({envio.hora_inicio}h-{envio.hora_fim}h)'
+                db.session.commit()
+                logger.info(envio.status_msg)
+                break
+
+            if not envio.pode_enviar_hoje():
+                envio.status = 'pausado'
+                envio.status_msg = f'Meta diária atingida ({envio.meta_diaria})'
+                db.session.commit()
+                logger.info(envio.status_msg)
+                break
+
+            mensagem = _renderizar_mensagem_envio(
+                envio.mensagem_template, link_publico, tel.nome,
+            )
+            ok, result = ws.enviar(tel.numero, mensagem)
+            if ok:
+                tel.status = 'enviado'
+                tel.data_envio = datetime.utcnow()
+                envio.enviados += 1
+                envio.registrar_envio()
+            else:
+                tel.status = 'falhou'
+                tel.erro = str(result)[:300]
+                envio.falhas += 1
+
+            db.session.commit()
+            time.sleep(envio.intervalo_segundos)
+
+        # Conclui se não há mais pendentes.
+        ainda_pendentes = EnvioPesquisaTelefone.query.filter_by(
+            envio_id=envio.id, status='pendente',
+        ).count()
+
+        if ainda_pendentes == 0:
+            envio.status = 'concluido'
+            envio.data_fim = datetime.utcnow()
+            envio.status_msg = f'{envio.enviados} enviados, {envio.falhas} falhas'
+            db.session.commit()
+
+        return {
+            'sucesso': True,
+            'enviados': envio.enviados,
+            'falhas': envio.falhas,
+            'pendentes': ainda_pendentes,
+            'status': envio.status,
+        }
+    except Exception as e:
+        logger.exception(f"Erro no envio de pesquisa {envio_id}: {e}")
+        try:
+            envio = db.session.get(EnvioPesquisa, envio_id)
+            if envio:
+                envio.status = 'erro'
+                envio.status_msg = str(e)[:200]
+                db.session.commit()
+        except Exception:
+            pass
+        raise

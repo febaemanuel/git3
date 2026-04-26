@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Enviar pesquisa - {{ pesquisa.titulo }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-3">
+        <a href="{{ url_for('geral_pesquisa_detalhe', id=pesquisa.id) }}" class="btn btn-link p-0">
+            <i class="bi bi-arrow-left"></i> Voltar à pesquisa
+        </a>
+        <h2 class="mt-2 mb-0"><i class="bi bi-send"></i> Enviar pesquisa em massa</h2>
+        <p class="text-muted">{{ pesquisa.titulo }}</p>
+    </div>
+
+    <div class="col-12">
+        <div class="alert alert-warning border-warning" role="alert">
+            <h5 class="alert-heading"><i class="bi bi-exclamation-triangle-fill"></i> Atenção: risco de bloqueio do WhatsApp</h5>
+            <p class="mb-2">
+                Envio em massa pelo WhatsApp <strong>aumenta significativamente o risco</strong>
+                de o número ficar bloqueado por suspeita de spam. Se a sua conta for bloqueada,
+                você perde o acesso ao WhatsApp Business até regularização.
+            </p>
+            <p class="mb-0">
+                <strong>Recomendado:</strong> use intervalo de <strong>60+ segundos</strong>,
+                meta diária baixa (50-100), e prefira enviar em horário comercial.
+                Para volumes grandes, considere mandar o link manualmente para cada paciente.
+            </p>
+        </div>
+    </div>
+
+    <div class="col-12 col-lg-8">
+        <form method="POST">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <div class="card mb-3">
+                <div class="card-header"><strong>1. Identificação do lote</strong></div>
+                <div class="card-body">
+                    <label class="form-label">Nome do lote (opcional)</label>
+                    <input type="text" name="nome" class="form-control" maxlength="120"
+                           value="{{ nome or '' }}" placeholder="ex.: Cesáreas 17/04 a 24/04">
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header"><strong>2. Mensagem</strong></div>
+                <div class="card-body">
+                    <p class="small text-muted mb-2">
+                        Use <code>{NOME}</code> para o nome do destinatário (se informado) e
+                        <code>{LINK}</code> para o link da pesquisa. Se omitir <code>{LINK}</code>,
+                        ele é anexado ao final automaticamente.
+                    </p>
+                    <textarea name="mensagem" class="form-control" rows="6">{{ mensagem }}</textarea>
+                    <small class="text-muted">
+                        Link público que será enviado: <code>{{ link_publico }}</code>
+                    </small>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header"><strong>3. Destinatários</strong></div>
+                <div class="card-body">
+                    <label class="form-label">Telefones (um por linha)</label>
+                    <textarea name="telefones" class="form-control font-monospace" rows="8" required
+                              placeholder="(85) 99999-1234&#10;Maria | 85988887777&#10;5585977776666">{{ telefones }}</textarea>
+                    <small class="text-muted">
+                        Formatos aceitos: <code>(85) 99999-9999</code>, <code>85988887777</code>,
+                        <code>5585988887777</code>. Para incluir o nome:
+                        <code>Maria | 85988887777</code>. Duplicatas são ignoradas.
+                    </small>
+                </div>
+            </div>
+
+            <div class="card mb-3">
+                <div class="card-header"><strong>4. Configuração de envio</strong></div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3">
+                            <label class="form-label">Intervalo (s)</label>
+                            <input type="number" name="intervalo" class="form-control" min="5" value="60">
+                            <small class="text-muted">Mín. 5s</small>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Hora início</label>
+                            <input type="number" name="hora_inicio" class="form-control" min="0" max="23" value="8">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Hora fim</label>
+                            <input type="number" name="hora_fim" class="form-control" min="0" max="23" value="18">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Meta/dia</label>
+                            <input type="number" name="meta_diaria" class="form-control" min="1" value="50">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-danger btn-lg" onclick="return confirm('Confirma o envio em massa? Lembre-se do risco de bloqueio do WhatsApp.');">
+                <i class="bi bi-send"></i> Iniciar envio em massa
+            </button>
+            <a href="{{ url_for('geral_pesquisa_detalhe', id=pesquisa.id) }}" class="btn btn-link">Cancelar</a>
+        </form>
+    </div>
+
+    <div class="col-12 col-lg-4">
+        <div class="card border-info">
+            <div class="card-body">
+                <h6 class="text-info"><i class="bi bi-info-circle"></i> Como funciona</h6>
+                <ol class="small ps-3 mb-0">
+                    <li>O sistema envia 1 mensagem por destinatário, com o intervalo definido.</li>
+                    <li>Cada paciente abre o link e responde no formulário web.</li>
+                    <li>As respostas vão direto para a aba de estatísticas.</li>
+                    <li>Você pode pausar e retomar o envio a qualquer momento.</li>
+                </ol>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,174 @@
+{% extends "base.html" %}
+{% block title %}Progresso do envio - {{ envio.pesquisa.titulo }}{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-3">
+        <a href="{{ url_for('geral_pesquisa_detalhe', id=envio.pesquisa_id) }}" class="btn btn-link p-0">
+            <i class="bi bi-arrow-left"></i> Voltar à pesquisa
+        </a>
+        <div class="d-flex justify-content-between align-items-end mt-2">
+            <div>
+                <h2 class="mb-0"><i class="bi bi-broadcast"></i> {{ envio.nome or ('Lote #' ~ envio.id) }}</h2>
+                <p class="text-muted mb-0">
+                    {{ envio.pesquisa.titulo }} · criado em
+                    {{ envio.data_criacao.strftime('%d/%m/%Y %H:%M') if envio.data_criacao else '-' }}
+                </p>
+            </div>
+            <div>
+                {% if envio.status == 'enviando' %}
+                    <form method="POST" action="{{ url_for('geral_envio_pausar', envio_id=envio.id) }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="btn btn-warning"><i class="bi bi-pause-circle"></i> Pausar</button>
+                    </form>
+                {% elif envio.status in ('pausado', 'erro') %}
+                    <form method="POST" action="{{ url_for('geral_envio_continuar', envio_id=envio.id) }}" class="d-inline">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button class="btn btn-success"><i class="bi bi-play-circle"></i> Retomar</button>
+                    </form>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card total">
+            <div class="card-body">
+                <small class="text-muted">Total</small>
+                <h3 class="mb-0">{{ envio.total }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card enviados">
+            <div class="card-body">
+                <small class="text-muted">Enviados</small>
+                <h3 class="mb-0" data-counter="enviados">{{ envio.enviados }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card rejeitados">
+            <div class="card-body">
+                <small class="text-muted">Falhas</small>
+                <h3 class="mb-0" data-counter="falhas">{{ envio.falhas }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card stat-card confirmados">
+            <div class="card-body">
+                <small class="text-muted">Pendentes</small>
+                <h3 class="mb-0" data-counter="pendentes">{{ pendentes }}</h3>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 mb-3">
+        <div class="d-flex align-items-center mb-2">
+            <strong class="me-2">Status:</strong>
+            <span class="badge bg-{% if envio.status == 'concluido' %}success{% elif envio.status == 'enviando' %}primary{% elif envio.status == 'pausado' %}warning{% elif envio.status == 'erro' %}danger{% else %}secondary{% endif %}"
+                  data-status>{{ envio.status }}</span>
+            {% if envio.status_msg %}
+            <small class="text-muted ms-2" data-status-msg>{{ envio.status_msg }}</small>
+            {% endif %}
+        </div>
+        <div class="progress" style="height: 22px;">
+            {% set percentual = ((envio.enviados + envio.falhas) / envio.total * 100) if envio.total else 0 %}
+            <div class="progress-bar progress-bar-striped progress-bar-animated"
+                 role="progressbar"
+                 style="width: {{ percentual }}%"
+                 data-progress>{{ percentual | round(0) | int }}%</div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header"><strong>Destinatários</strong></div>
+            <div class="card-body p-0">
+                <div class="table-responsive" style="max-height: 500px; overflow-y: auto;">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead class="table-light sticky-top">
+                            <tr>
+                                <th>#</th>
+                                <th>Nome</th>
+                                <th>Telefone</th>
+                                <th>Status</th>
+                                <th>Enviado em</th>
+                                <th>Erro</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for t in envio.telefones %}
+                            <tr>
+                                <td>{{ loop.index }}</td>
+                                <td>{{ t.nome or '-' }}</td>
+                                <td><code>{{ t.numero }}</code></td>
+                                <td>
+                                    {% if t.status == 'enviado' %}
+                                    <span class="badge bg-success">Enviado</span>
+                                    {% elif t.status == 'falhou' %}
+                                    <span class="badge bg-danger">Falhou</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Pendente</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ t.data_envio.strftime('%d/%m %H:%M:%S') if t.data_envio else '-' }}</td>
+                                <td><small class="text-muted">{{ t.erro or '' }}</small></td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    var statusUrl = "{{ url_for('geral_envio_status', envio_id=envio.id) }}";
+    var statusEl = document.querySelector('[data-status]');
+    var statusMsgEl = document.querySelector('[data-status-msg]');
+    var progressEl = document.querySelector('[data-progress]');
+    var counters = {
+        enviados: document.querySelector('[data-counter="enviados"]'),
+        falhas: document.querySelector('[data-counter="falhas"]'),
+        pendentes: document.querySelector('[data-counter="pendentes"]'),
+    };
+
+    function tick() {
+        fetch(statusUrl, { credentials: 'same-origin' })
+            .then(function (r) { return r.json(); })
+            .then(function (d) {
+                if (d.erro) return;
+                if (counters.enviados) counters.enviados.textContent = d.enviados;
+                if (counters.falhas) counters.falhas.textContent = d.falhas;
+                if (counters.pendentes) counters.pendentes.textContent = d.pendentes;
+
+                var total = d.total || 1;
+                var pct = Math.round(((d.enviados + d.falhas) / total) * 100);
+                if (progressEl) {
+                    progressEl.style.width = pct + '%';
+                    progressEl.textContent = pct + '%';
+                }
+                if (statusEl) statusEl.textContent = d.status;
+                if (statusMsgEl) statusMsgEl.textContent = d.status_msg || '';
+
+                if (d.status === 'enviando' || d.status === 'pendente') {
+                    setTimeout(tick, 4000);
+                } else {
+                    // Recarrega a página para mostrar a tabela atualizada.
+                    setTimeout(function () { window.location.reload(); }, 2000);
+                }
+            })
+            .catch(function () { setTimeout(tick, 8000); });
+    }
+
+    if (statusEl && (statusEl.textContent.trim() === 'enviando' ||
+                     statusEl.textContent.trim() === 'pendente')) {
+        setTimeout(tick, 3000);
+    }
+})();
+</script>
+{% endblock %}

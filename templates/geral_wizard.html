@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block title %}Configuração inicial - Geral{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-12 col-lg-9">
+        <div class="d-flex align-items-center mb-4">
+            <h2 class="mb-0"><i class="bi bi-magic"></i> Configuração inicial</h2>
+        </div>
+
+        <p class="text-muted">
+            Vamos personalizar como você quer usar o sistema. Você pode refazer
+            esse passo a qualquer momento pelo dashboard.
+        </p>
+
+        <form method="POST" id="wizardForm">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+            <!-- Passo 1: tipos de uso -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <strong>1. O que você quer fazer?</strong>
+                    <small class="text-muted ms-2">Pode marcar mais de uma</small>
+                </div>
+                <div class="card-body">
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="tipos_uso"
+                               value="CONFIRMACAO" id="uso_conf"
+                               {% if 'CONFIRMACAO' in tipos_uso %}checked{% endif %}>
+                        <label class="form-check-label" for="uso_conf">
+                            <strong>Confirmações</strong>
+                            <br><small class="text-muted">Ex.: confirmar presença em consulta, exame, procedimento.</small>
+                        </label>
+                    </div>
+                    <div class="form-check mb-2">
+                        <input class="form-check-input" type="checkbox" name="tipos_uso"
+                               value="PESQUISA" id="uso_pesq"
+                               {% if 'PESQUISA' in tipos_uso %}checked{% endif %}>
+                        <label class="form-check-label" for="uso_pesq">
+                            <strong>Pesquisas</strong>
+                            <br><small class="text-muted">Ex.: questionário pós-cirúrgico (busca fonada de cesárea, mastologia, etc).</small>
+                        </label>
+                    </div>
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="tipos_uso"
+                               value="ENQUETE" id="uso_enq"
+                               {% if 'ENQUETE' in tipos_uso %}checked{% endif %}>
+                        <label class="form-check-label" for="uso_enq">
+                            <strong>Enquetes</strong>
+                            <br><small class="text-muted">Ex.: pergunta única com opções fechadas.</small>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Passo 2: canal de resposta -->
+            <div class="card mb-4">
+                <div class="card-header">
+                    <strong>2. Como o paciente vai responder?</strong>
+                </div>
+                <div class="card-body">
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="radio" name="canal_resposta"
+                               value="LINK_INTERNO" id="canal_interno"
+                               {% if canal_resposta == 'LINK_INTERNO' %}checked{% endif %}>
+                        <label class="form-check-label" for="canal_interno">
+                            <strong>Link interno (formulário web no nosso servidor)</strong>
+                            <span class="badge bg-success ms-1">recomendado</span>
+                            <br><small class="text-muted">
+                                Você manda um link, o paciente abre, responde no navegador.
+                                Gera gráficos e estatísticas direto no dashboard.
+                                <br>Menor risco de bloqueio do WhatsApp.
+                            </small>
+                        </label>
+                    </div>
+
+                    <div class="form-check mb-3">
+                        <input class="form-check-input" type="radio" name="canal_resposta"
+                               value="WHATSAPP_LINK_EXTERNO" id="canal_externo"
+                               {% if canal_resposta == 'WHATSAPP_LINK_EXTERNO' %}checked{% endif %}>
+                        <label class="form-check-label" for="canal_externo">
+                            <strong>WhatsApp + link externo (Google Forms etc)</strong>
+                            <br><small class="text-muted">
+                                Mensagem com link para um formulário fora do sistema.
+                                Não há gráficos automáticos aqui — você verá os resultados na ferramenta externa.
+                            </small>
+                        </label>
+                    </div>
+
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="canal_resposta"
+                               value="WHATSAPP_INTERATIVO" id="canal_interativo"
+                               {% if canal_resposta == 'WHATSAPP_INTERATIVO' %}checked{% endif %}>
+                        <label class="form-check-label" for="canal_interativo">
+                            <strong>WhatsApp interativo (paciente responde por mensagem)</strong>
+                            <br><small class="text-muted">
+                                Pergunta vai e volta no chat (1/2/3, SIM/NÃO).
+                                Gera gráficos no dashboard.
+                            </small>
+                        </label>
+                    </div>
+
+                    <div id="aviso_bloqueio" class="alert alert-warning mt-3 d-none">
+                        <i class="bi bi-exclamation-triangle"></i>
+                        <strong>Atenção:</strong> usar o WhatsApp para coletar respostas
+                        (especialmente envio em massa) <strong>aumenta o risco de bloqueio
+                        por suspeita de spam</strong>. Se possível, prefira o link interno.
+                    </div>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-between">
+                <a href="{{ url_for('logout') }}" class="btn btn-link text-muted">Sair</a>
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check-circle"></i> Salvar configuração
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+(function () {
+    function toggleAviso() {
+        var ext = document.getElementById('canal_externo');
+        var inter = document.getElementById('canal_interativo');
+        var aviso = document.getElementById('aviso_bloqueio');
+        if ((ext && ext.checked) || (inter && inter.checked)) {
+            aviso.classList.remove('d-none');
+        } else {
+            aviso.classList.add('d-none');
+        }
+    }
+    document.querySelectorAll('input[name="canal_resposta"]').forEach(function (el) {
+        el.addEventListener('change', toggleAviso);
+    });
+    toggleAviso();
+})();
+</script>
+{% endblock %}

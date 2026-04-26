@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ pesquisa.titulo }}</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #f0f4f8; min-height: 100vh; padding: 16px 0; }
+        .card { border: none; border-radius: 14px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); }
+        .pergunta { padding: 14px 0; border-bottom: 1px solid #eee; }
+        .pergunta:last-child { border-bottom: none; }
+        .obrig { color: #c0392b; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-12 col-md-9 col-lg-7">
+            <div class="card">
+                <div class="card-body p-4">
+                    <h3 class="mb-1">{{ pesquisa.titulo }}</h3>
+                    {% if pesquisa.descricao %}
+                    <p class="text-muted">{{ pesquisa.descricao }}</p>
+                    {% endif %}
+
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}">{{ message }}</div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    <form method="POST">
+                        {% for p in pesquisa.perguntas %}
+                        <div class="pergunta">
+                            <label class="form-label fw-bold">
+                                {{ loop.index }}. {{ p.texto }}
+                                {% if p.obrigatoria %}<span class="obrig">*</span>{% endif %}
+                            </label>
+
+                            {% set name = 'p_' ~ p.id %}
+                            {% set valor_anterior = form_data.get(name) if form_data else '' %}
+
+                            {% if p.tipo == 'TEXTO_LONGO' %}
+                                <textarea name="{{ name }}" class="form-control" rows="3"
+                                          {% if p.obrigatoria %}required{% endif %}>{{ valor_anterior }}</textarea>
+
+                            {% elif p.tipo == 'SIM_NAO' %}
+                                <div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="{{ name }}" id="{{ name }}_s" value="SIM"
+                                               {% if valor_anterior == 'SIM' %}checked{% endif %}
+                                               {% if p.obrigatoria %}required{% endif %}>
+                                        <label class="form-check-label" for="{{ name }}_s">Sim</label>
+                                    </div>
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="{{ name }}" id="{{ name }}_n" value="NAO"
+                                               {% if valor_anterior == 'NAO' %}checked{% endif %}
+                                               {% if p.obrigatoria %}required{% endif %}>
+                                        <label class="form-check-label" for="{{ name }}_n">Não</label>
+                                    </div>
+                                </div>
+
+                            {% elif p.tipo == 'MULTI_ESCOLHA' %}
+                                {% set selecionadas = form_data.getlist(name) if form_data else [] %}
+                                {% for opt in p.opcoes_lista() %}
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="{{ name }}"
+                                           id="{{ name }}_{{ loop.index }}" value="{{ opt }}"
+                                           {% if opt in selecionadas %}checked{% endif %}>
+                                    <label class="form-check-label" for="{{ name }}_{{ loop.index }}">{{ opt }}</label>
+                                </div>
+                                {% endfor %}
+
+                            {% elif p.tipo == 'ESCALA_1_10' %}
+                                <select name="{{ name }}" class="form-select" {% if p.obrigatoria %}required{% endif %}>
+                                    <option value="">Selecione...</option>
+                                    {% for n in range(1, 11) %}
+                                    <option value="{{ n }}" {% if valor_anterior == n|string %}selected{% endif %}>{{ n }}</option>
+                                    {% endfor %}
+                                </select>
+
+                            {% else %}
+                                <input type="text" name="{{ name }}" class="form-control" maxlength="500"
+                                       value="{{ valor_anterior }}" {% if p.obrigatoria %}required{% endif %}>
+                            {% endif %}
+                        </div>
+                        {% endfor %}
+
+                        <div class="mt-4">
+                            <button type="submit" class="btn btn-primary btn-lg w-100">
+                                Enviar resposta
+                            </button>
+                        </div>
+                        <p class="text-muted small mt-3 mb-0 text-center">
+                            Suas respostas são confidenciais e usadas apenas para fins do serviço.
+                        </p>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

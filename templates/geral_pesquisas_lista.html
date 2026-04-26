@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Pesquisas - Geral{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12 mb-4">
+        <div class="d-flex justify-content-between align-items-center">
+            <div>
+                <h2><i class="bi bi-clipboard-data"></i> Pesquisas</h2>
+                <p class="text-muted mb-0">Crie pesquisas/enquetes e compartilhe um link para o paciente responder.</p>
+            </div>
+            <div class="d-flex gap-2">
+                <a href="{{ url_for('geral_dashboard') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-arrow-left"></i> Dashboard
+                </a>
+                <a href="{{ url_for('geral_pesquisa_nova') }}" class="btn btn-primary">
+                    <i class="bi bi-plus-lg"></i> Nova pesquisa
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12">
+        {% if pesquisas %}
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Título</th>
+                        <th class="text-center">Perguntas</th>
+                        <th class="text-center">Respostas</th>
+                        <th class="text-center">Status</th>
+                        <th>Criada</th>
+                        <th class="text-end">Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in pesquisas %}
+                    <tr>
+                        <td>
+                            <strong>{{ p.titulo }}</strong>
+                            {% if p.descricao %}
+                            <br><small class="text-muted">{{ p.descricao | truncate(80) }}</small>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">{{ p.perguntas | length }}</td>
+                        <td class="text-center">
+                            <span class="badge bg-info">{{ contagens.get(p.id, 0) }}</span>
+                        </td>
+                        <td class="text-center">
+                            {% if p.ativa %}
+                            <span class="badge bg-success">Ativa</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Pausada</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ p.data_criacao.strftime('%d/%m/%Y') if p.data_criacao else '-' }}</td>
+                        <td class="text-end">
+                            <a href="{{ url_for('geral_pesquisa_stats', id=p.id) }}" class="btn btn-sm btn-outline-success" title="Estatísticas">
+                                <i class="bi bi-bar-chart"></i>
+                            </a>
+                            <a href="{{ url_for('geral_pesquisa_detalhe', id=p.id) }}" class="btn btn-sm btn-primary">
+                                <i class="bi bi-pencil"></i> Editar
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i>
+            <strong>Nenhuma pesquisa criada ainda.</strong>
+            <p class="mb-0">Clique em "Nova pesquisa" para começar.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

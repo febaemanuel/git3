@@ -165,7 +165,7 @@ class Usuario(UserMixin, db.Model):
     senha_hash = db.Column(db.String(255), nullable=False)
     ativo = db.Column(db.Boolean, default=True)
     is_admin = db.Column(db.Boolean, default=False)  # Flag de administrador
-    tipo_sistema = db.Column(db.String(50), default='BUSCA_ATIVA')  # BUSCA_ATIVA ou AGENDAMENTO_CONSULTA
+    tipo_sistema = db.Column(db.String(50), default='BUSCA_ATIVA')  # BUSCA_ATIVA, AGENDAMENTO_CONSULTA ou GERAL
     data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
     ultimo_acesso = db.Column(db.DateTime)
 
@@ -1074,6 +1074,220 @@ class PesquisaSatisfacao(db.Model):
     # Relationships
     consulta = db.relationship('AgendamentoConsulta', backref='pesquisa_satisfacao')
     usuario = db.relationship('Usuario', backref='pesquisas_satisfacao')
+
+
+class ConfigUsuarioGeral(db.Model):
+    """Preferências configuradas via wizard pelo usuário do tipo GERAL.
+
+    Onda 1: só armazena o que o usuário escolheu no wizard. Nenhuma rotina
+    de envio consome essas preferências ainda — isso entra na Onda 2.
+    """
+    __tablename__ = 'config_usuario_geral'
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), unique=True, nullable=False)
+
+    # Multi-select: lista JSON de strings em {'CONFIRMACAO','PESQUISA','ENQUETE'}
+    tipos_uso = db.Column(db.Text)
+
+    # Um único valor: 'WHATSAPP_LINK_EXTERNO' | 'WHATSAPP_INTERATIVO' | 'LINK_INTERNO'
+    canal_resposta = db.Column(db.String(40))
+
+    wizard_concluido = db.Column(db.Boolean, default=False, nullable=False)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    data_atualizacao = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    usuario = db.relationship('Usuario', backref=db.backref('config_geral', uselist=False))
+
+    def tipos_uso_lista(self):
+        import json
+        try:
+            return json.loads(self.tipos_uso) if self.tipos_uso else []
+        except (ValueError, TypeError):
+            return []
+
+    def set_tipos_uso(self, lista):
+        import json
+        self.tipos_uso = json.dumps(list(lista or []))
+
+
+# Tipos de pergunta suportados na pesquisa do tipo GERAL.
+TIPOS_PERGUNTA = ['TEXTO_CURTO', 'TEXTO_LONGO', 'SIM_NAO', 'MULTI_ESCOLHA', 'ESCALA_1_10']
+
+
+class Pesquisa(db.Model):
+    """Pesquisa/enquete avulsa criada por um usuário GERAL."""
+    __tablename__ = 'pesquisas'
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, index=True)
+
+    titulo = db.Column(db.String(200), nullable=False)
+    descricao = db.Column(db.Text)
+    # Texto que o usuário pode copiar pra mandar pelo WhatsApp manualmente.
+    mensagem_whatsapp = db.Column(db.Text)
+
+    # Token público que aparece em /p/<token>. URL-safe, fixo por pesquisa.
+    token_publico = db.Column(db.String(40), unique=True, nullable=False, index=True)
+
+    ativa = db.Column(db.Boolean, default=True, nullable=False)
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+
+    usuario = db.relationship('Usuario', backref='pesquisas_geral')
+    perguntas = db.relationship(
+        'PerguntaPesquisa',
+        backref='pesquisa',
+        cascade='all, delete-orphan',
+        order_by='PerguntaPesquisa.ordem',
+    )
+    respostas = db.relationship(
+        'RespostaPesquisa',
+        backref='pesquisa',
+        cascade='all, delete-orphan',
+    )
+
+    @staticmethod
+    def gerar_token():
+        import secrets
+        return secrets.token_urlsafe(12)
+
+
+class PerguntaPesquisa(db.Model):
+    __tablename__ = 'perguntas_pesquisa'
+    id = db.Column(db.Integer, primary_key=True)
+    pesquisa_id = db.Column(db.Integer, db.ForeignKey('pesquisas.id', ondelete='CASCADE'), nullable=False, index=True)
+    ordem = db.Column(db.Integer, default=0, nullable=False)
+    texto = db.Column(db.String(500), nullable=False)
+    tipo = db.Column(db.String(30), nullable=False, default='TEXTO_CURTO')
+    # JSON com lista de opções (só usado em MULTI_ESCOLHA).
+    opcoes = db.Column(db.Text)
+    obrigatoria = db.Column(db.Boolean, default=True, nullable=False)
+
+    def opcoes_lista(self):
+        import json
+        try:
+            return json.loads(self.opcoes) if self.opcoes else []
+        except (ValueError, TypeError):
+            return []
+
+    def set_opcoes(self, lista):
+        import json
+        self.opcoes = json.dumps(list(lista or []))
+
+
+class RespostaPesquisa(db.Model):
+    """Cada submissão do formulário público gera uma RespostaPesquisa."""
+    __tablename__ = 'respostas_pesquisa'
+    id = db.Column(db.Integer, primary_key=True)
+    pesquisa_id = db.Column(db.Integer, db.ForeignKey('pesquisas.id', ondelete='CASCADE'), nullable=False, index=True)
+    iniciada_em = db.Column(db.DateTime, default=datetime.utcnow)
+    concluida_em = db.Column(db.DateTime)
+    ip_origem = db.Column(db.String(45))
+    user_agent = db.Column(db.String(255))
+
+    itens = db.relationship(
+        'RespostaItem',
+        backref='resposta',
+        cascade='all, delete-orphan',
+    )
+
+
+class RespostaItem(db.Model):
+    __tablename__ = 'respostas_itens'
+    id = db.Column(db.Integer, primary_key=True)
+    resposta_id = db.Column(db.Integer, db.ForeignKey('respostas_pesquisa.id', ondelete='CASCADE'), nullable=False, index=True)
+    pergunta_id = db.Column(db.Integer, db.ForeignKey('perguntas_pesquisa.id', ondelete='CASCADE'), nullable=False, index=True)
+    # Para MULTI_ESCOLHA, valor é JSON com lista de opções selecionadas.
+    valor = db.Column(db.Text)
+
+    pergunta = db.relationship('PerguntaPesquisa')
+
+    def valor_lista(self):
+        import json
+        try:
+            return json.loads(self.valor) if self.valor else []
+        except (ValueError, TypeError):
+            return []
+
+
+# Status possíveis para um lote de envio em massa do link da pesquisa.
+STATUS_ENVIO_PESQUISA = ['pendente', 'enviando', 'pausado', 'concluido', 'erro']
+STATUS_ENVIO_TELEFONE = ['pendente', 'enviado', 'falhou']
+
+
+class EnvioPesquisa(db.Model):
+    """Lote de envio em massa do link da pesquisa via WhatsApp.
+
+    Um EnvioPesquisa = uma "campanha" simples: o usuário cola lista de
+    telefones, define intervalo/horário/meta diária e o sistema dispara
+    a mensagem (com o link público) para cada um. Sem retry, sem chat
+    de volta — é uma única mensagem por destinatário.
+    """
+    __tablename__ = 'envios_pesquisa'
+    id = db.Column(db.Integer, primary_key=True)
+    pesquisa_id = db.Column(db.Integer, db.ForeignKey('pesquisas.id', ondelete='CASCADE'), nullable=False, index=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False, index=True)
+
+    nome = db.Column(db.String(120))  # rótulo do lote, ex.: "Cesáreas semana 17/04"
+    mensagem_template = db.Column(db.Text, nullable=False)  # texto que vai pra cada paciente
+
+    # Configurações de envio (mesmos defaults dos outros sistemas).
+    intervalo_segundos = db.Column(db.Integer, default=60, nullable=False)
+    hora_inicio = db.Column(db.Integer, default=8, nullable=False)
+    hora_fim = db.Column(db.Integer, default=18, nullable=False)
+    meta_diaria = db.Column(db.Integer, default=50, nullable=False)
+    enviados_hoje = db.Column(db.Integer, default=0, nullable=False)
+    data_ultimo_envio = db.Column(db.Date)
+
+    status = db.Column(db.String(20), default='pendente', nullable=False)
+    status_msg = db.Column(db.String(200))
+
+    total = db.Column(db.Integer, default=0, nullable=False)
+    enviados = db.Column(db.Integer, default=0, nullable=False)
+    falhas = db.Column(db.Integer, default=0, nullable=False)
+
+    data_criacao = db.Column(db.DateTime, default=datetime.utcnow)
+    data_inicio = db.Column(db.DateTime)
+    data_fim = db.Column(db.DateTime)
+    celery_task_id = db.Column(db.String(100))
+
+    pesquisa = db.relationship('Pesquisa', backref='envios')
+    usuario = db.relationship('Usuario')
+    telefones = db.relationship(
+        'EnvioPesquisaTelefone',
+        backref='envio',
+        cascade='all, delete-orphan',
+    )
+
+    def pode_enviar_agora(self):
+        # Reusa fuso de Fortaleza pra consistência com Campanha/CampanhaConsulta.
+        hora_atual = obter_hora_fortaleza()
+        if self.hora_inicio <= self.hora_fim:
+            return self.hora_inicio <= hora_atual < self.hora_fim
+        return hora_atual >= self.hora_inicio or hora_atual < self.hora_fim
+
+    def pode_enviar_hoje(self):
+        hoje = obter_hoje_fortaleza()
+        if self.data_ultimo_envio != hoje:
+            self.enviados_hoje = 0
+            self.data_ultimo_envio = hoje
+        return self.enviados_hoje < self.meta_diaria
+
+    def registrar_envio(self):
+        hoje = obter_hoje_fortaleza()
+        if self.data_ultimo_envio != hoje:
+            self.enviados_hoje = 0
+            self.data_ultimo_envio = hoje
+        self.enviados_hoje += 1
+
+
+class EnvioPesquisaTelefone(db.Model):
+    __tablename__ = 'envios_pesquisa_telefones'
+    id = db.Column(db.Integer, primary_key=True)
+    envio_id = db.Column(db.Integer, db.ForeignKey('envios_pesquisa.id', ondelete='CASCADE'), nullable=False, index=True)
+    numero = db.Column(db.String(20), nullable=False)
+    nome = db.Column(db.String(120))
+    status = db.Column(db.String(20), default='pendente', nullable=False)
+    erro = db.Column(db.String(300))
+    data_envio = db.Column(db.DateTime)
 
 
 class Paciente(db.Model):
@@ -2846,6 +3060,8 @@ def get_dashboard_route():
         tipo = getattr(current_user, 'tipo_sistema', 'BUSCA_ATIVA')
         if tipo == 'AGENDAMENTO_CONSULTA':
             return 'consultas_dashboard'
+        if tipo == 'GERAL':
+            return 'geral_dashboard'
         # Aceita tanto BUSCA_ATIVA quanto FILA_CIRURGICA (compatibilidade)
         return 'dashboard'
     return 'login'
@@ -6913,21 +7129,34 @@ def webhook():
         resposta_rejeicao = verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO)
 
         if resposta_confirmacao or resposta_rejeicao:
-            # Buscar TODAS as consultas pendentes deste telefone (de QUALQUER usuário)
+            # Só consideramos pendências do MESMO usuário/instância e cuja mensagem
+            # de confirmação foi enviada nas últimas 24h (consultas mais antigas
+            # não são fluxo ativo, mesmo que tenham ficado em AGUARDANDO_CONFIRMACAO).
+            vinte_quatro_horas_atras = datetime.utcnow() - timedelta(hours=24)
+
             consultas_pendentes = []
             for num in numeros_buscar:
                 tels = TelefoneConsulta.query.filter_by(numero=num).all()
                 for tel in tels:
-                    if tel.consulta and tel.consulta.status == 'AGUARDANDO_CONFIRMACAO':
-                        consultas_pendentes.append(tel.consulta)
+                    consulta = tel.consulta
+                    if not consulta or consulta.status != 'AGUARDANDO_CONFIRMACAO':
+                        continue
+                    if not consulta.campanha or consulta.campanha.criador_id != usuario_id:
+                        continue
+                    if not consulta.data_envio_mensagem or consulta.data_envio_mensagem < vinte_quatro_horas_atras:
+                        continue
+                    consultas_pendentes.append(consulta)
 
-            # Buscar TODAS as cirurgias pendentes deste telefone (de QUALQUER usuário)
             cirurgias_pendentes = []
             for num in numeros_buscar:
                 tels_fila = Telefone.query.filter_by(numero_fmt=num).all()
                 for tel in tels_fila:
-                    if tel.contato and tel.contato.status in ['enviado', 'pronto_envio']:
-                        cirurgias_pendentes.append(tel.contato)
+                    contato = tel.contato
+                    if not contato or contato.status not in ['enviado', 'pronto_envio']:
+                        continue
+                    if not contato.campanha or contato.campanha.criador_id != usuario_id:
+                        continue
+                    cirurgias_pendentes.append(contato)
 
             # Remover duplicados (mesmo ID)
             consultas_pendentes = list({c.id: c for c in consultas_pendentes}.values())
@@ -7034,20 +7263,34 @@ def webhook():
             # Paciente está respondendo ao menu - processar escolha
             escolha = texto_up.strip()
 
-            # Buscar novamente as pendências (podem ter mudado)
+            # Buscar novamente as pendências (podem ter mudado).
+            # Mesmos filtros do bloco que envia o menu: usuário da instância +
+            # mensagem enviada nas últimas 24h.
+            vinte_quatro_horas_atras = datetime.utcnow() - timedelta(hours=24)
+
             consultas_pendentes = []
             for num in numeros_buscar:
                 tels = TelefoneConsulta.query.filter_by(numero=num).all()
                 for tel in tels:
-                    if tel.consulta and tel.consulta.status == 'AGUARDANDO_CONFIRMACAO':
-                        consultas_pendentes.append((tel.consulta, tel.numero))
+                    consulta = tel.consulta
+                    if not consulta or consulta.status != 'AGUARDANDO_CONFIRMACAO':
+                        continue
+                    if not consulta.campanha or consulta.campanha.criador_id != usuario_id:
+                        continue
+                    if not consulta.data_envio_mensagem or consulta.data_envio_mensagem < vinte_quatro_horas_atras:
+                        continue
+                    consultas_pendentes.append((consulta, tel.numero))
 
             cirurgias_pendentes = []
             for num in numeros_buscar:
                 tels_fila = Telefone.query.filter_by(numero_fmt=num).all()
                 for tel in tels_fila:
-                    if tel.contato and tel.contato.status in ['enviado', 'pronto_envio']:
-                        cirurgias_pendentes.append((tel.contato, tel.numero_fmt))
+                    contato = tel.contato
+                    if not contato or contato.status not in ['enviado', 'pronto_envio']:
+                        continue
+                    if not contato.campanha or contato.campanha.criador_id != usuario_id:
+                        continue
+                    cirurgias_pendentes.append((contato, tel.numero_fmt))
 
             # Remover duplicados
             consultas_pendentes = list({c[0].id: c for c in consultas_pendentes}.values())
@@ -8727,7 +8970,7 @@ def cadastro_publico():
             return render_template('cadastro.html')
 
         # Validar tipo_sistema
-        if tipo_sistema not in ['BUSCA_ATIVA', 'AGENDAMENTO_CONSULTA']:
+        if tipo_sistema not in ['BUSCA_ATIVA', 'AGENDAMENTO_CONSULTA', 'GERAL']:
             tipo_sistema = 'BUSCA_ATIVA'
 
         # Verificar se email já existe
@@ -8745,6 +8988,646 @@ def cadastro_publico():
         return redirect(url_for('login'))
 
     return render_template('cadastro.html')
+
+
+# =============================================================================
+# ROTAS - USUÁRIO GERAL (wizard de configuração + dashboard placeholder)
+# =============================================================================
+
+TIPOS_USO_GERAL = ['CONFIRMACAO', 'PESQUISA', 'ENQUETE']
+CANAIS_RESPOSTA_GERAL = ['WHATSAPP_LINK_EXTERNO', 'WHATSAPP_INTERATIVO', 'LINK_INTERNO']
+
+
+def _exigir_usuario_geral():
+    """Bloqueia acesso a quem não é tipo_sistema='GERAL'. Retorna a config (criando se necessário)."""
+    if getattr(current_user, 'tipo_sistema', None) != 'GERAL':
+        flash('Esta área é exclusiva de usuários do tipo Geral.', 'warning')
+        return None, redirect(url_for(get_dashboard_route()))
+
+    config = ConfigUsuarioGeral.query.filter_by(usuario_id=current_user.id).first()
+    if not config:
+        config = ConfigUsuarioGeral(usuario_id=current_user.id, wizard_concluido=False)
+        db.session.add(config)
+        db.session.commit()
+    return config, None
+
+
+@app.route('/geral/dashboard')
+@login_required
+def geral_dashboard():
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+
+    if not config.wizard_concluido:
+        return redirect(url_for('geral_wizard'))
+
+    return render_template(
+        'geral_dashboard.html',
+        config=config,
+        tipos_uso=config.tipos_uso_lista(),
+    )
+
+
+@app.route('/geral/wizard', methods=['GET', 'POST'])
+@login_required
+def geral_wizard():
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+
+    if request.method == 'POST':
+        tipos_selecionados = [t for t in request.form.getlist('tipos_uso') if t in TIPOS_USO_GERAL]
+        canal = request.form.get('canal_resposta', '').strip()
+
+        if not tipos_selecionados:
+            flash('Selecione ao menos um tipo de uso.', 'danger')
+            return render_template('geral_wizard.html', config=config,
+                                   tipos_uso=tipos_selecionados, canal_resposta=canal)
+
+        if canal not in CANAIS_RESPOSTA_GERAL:
+            flash('Selecione um canal de resposta válido.', 'danger')
+            return render_template('geral_wizard.html', config=config,
+                                   tipos_uso=tipos_selecionados, canal_resposta=canal)
+
+        config.set_tipos_uso(tipos_selecionados)
+        config.canal_resposta = canal
+        config.wizard_concluido = True
+        db.session.commit()
+
+        flash('Configuração salva! Você já pode usar o sistema.', 'success')
+        return redirect(url_for('geral_dashboard'))
+
+    return render_template(
+        'geral_wizard.html',
+        config=config,
+        tipos_uso=config.tipos_uso_lista(),
+        canal_resposta=config.canal_resposta or '',
+    )
+
+
+# -----------------------------------------------------------------------------
+# Pesquisas (CRUD para o usuário GERAL)
+# -----------------------------------------------------------------------------
+
+def _get_pesquisa_do_usuario(pesquisa_id):
+    """Carrega a pesquisa garantindo que pertence ao usuário logado (ou admin)."""
+    from flask import abort
+    pesquisa = Pesquisa.query.get_or_404(pesquisa_id)
+    if pesquisa.usuario_id != current_user.id and not current_user.is_admin:
+        abort(403)
+    return pesquisa
+
+
+@app.route('/geral/pesquisas')
+@login_required
+def geral_pesquisas_lista():
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+
+    pesquisas = Pesquisa.query.filter_by(usuario_id=current_user.id) \
+        .order_by(Pesquisa.data_criacao.desc()).all()
+
+    # Pré-calcular contagem de respostas concluídas pra evitar N+1 no template.
+    contagens = {}
+    for p in pesquisas:
+        contagens[p.id] = RespostaPesquisa.query.filter(
+            RespostaPesquisa.pesquisa_id == p.id,
+            RespostaPesquisa.concluida_em.isnot(None),
+        ).count()
+
+    return render_template(
+        'geral_pesquisas_lista.html',
+        pesquisas=pesquisas,
+        contagens=contagens,
+    )
+
+
+@app.route('/geral/pesquisas/nova', methods=['GET', 'POST'])
+@login_required
+def geral_pesquisa_nova():
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+
+    if request.method == 'POST':
+        titulo = (request.form.get('titulo') or '').strip()
+        descricao = (request.form.get('descricao') or '').strip()
+        mensagem_whatsapp = (request.form.get('mensagem_whatsapp') or '').strip()
+
+        if not titulo:
+            flash('Informe o título da pesquisa.', 'danger')
+            return render_template('geral_pesquisa_form.html', pesquisa=None,
+                                   titulo=titulo, descricao=descricao,
+                                   mensagem_whatsapp=mensagem_whatsapp)
+
+        pesquisa = Pesquisa(
+            usuario_id=current_user.id,
+            titulo=titulo,
+            descricao=descricao or None,
+            mensagem_whatsapp=mensagem_whatsapp or None,
+            token_publico=Pesquisa.gerar_token(),
+        )
+        db.session.add(pesquisa)
+        db.session.commit()
+        flash('Pesquisa criada. Agora cadastre as perguntas.', 'success')
+        return redirect(url_for('geral_pesquisa_detalhe', id=pesquisa.id))
+
+    return render_template('geral_pesquisa_form.html', pesquisa=None,
+                           titulo='', descricao='', mensagem_whatsapp='')
+
+
+@app.route('/geral/pesquisas/<int:id>', methods=['GET', 'POST'])
+@login_required
+def geral_pesquisa_detalhe(id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    pesquisa = _get_pesquisa_do_usuario(id)
+
+    if request.method == 'POST':
+        pesquisa.titulo = (request.form.get('titulo') or pesquisa.titulo).strip()
+        pesquisa.descricao = (request.form.get('descricao') or '').strip() or None
+        pesquisa.mensagem_whatsapp = (request.form.get('mensagem_whatsapp') or '').strip() or None
+        pesquisa.ativa = request.form.get('ativa') == 'on'
+        db.session.commit()
+        flash('Pesquisa atualizada.', 'success')
+        return redirect(url_for('geral_pesquisa_detalhe', id=pesquisa.id))
+
+    link_publico = url_for('pesquisa_publica', token=pesquisa.token_publico, _external=True)
+    return render_template(
+        'geral_pesquisa_form.html',
+        pesquisa=pesquisa,
+        titulo=pesquisa.titulo,
+        descricao=pesquisa.descricao or '',
+        mensagem_whatsapp=pesquisa.mensagem_whatsapp or '',
+        link_publico=link_publico,
+        tipos_pergunta=TIPOS_PERGUNTA,
+    )
+
+
+@app.route('/geral/pesquisas/<int:id>/excluir', methods=['POST'])
+@login_required
+def geral_pesquisa_excluir(id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    pesquisa = _get_pesquisa_do_usuario(id)
+    db.session.delete(pesquisa)
+    db.session.commit()
+    flash('Pesquisa removida.', 'info')
+    return redirect(url_for('geral_pesquisas_lista'))
+
+
+@app.route('/geral/pesquisas/<int:id>/perguntas', methods=['POST'])
+@login_required
+def geral_pesquisa_pergunta_criar(id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    pesquisa = _get_pesquisa_do_usuario(id)
+
+    texto = (request.form.get('texto') or '').strip()
+    tipo = (request.form.get('tipo') or 'TEXTO_CURTO').strip()
+    opcoes_raw = (request.form.get('opcoes') or '').strip()
+    obrigatoria = request.form.get('obrigatoria') == 'on'
+
+    if not texto:
+        flash('Digite o texto da pergunta.', 'danger')
+        return redirect(url_for('geral_pesquisa_detalhe', id=pesquisa.id))
+    if tipo not in TIPOS_PERGUNTA:
+        flash('Tipo de pergunta inválido.', 'danger')
+        return redirect(url_for('geral_pesquisa_detalhe', id=pesquisa.id))
+
+    opcoes = []
+    if tipo == 'MULTI_ESCOLHA':
+        opcoes = [o.strip() for o in opcoes_raw.split('\n') if o.strip()]
+        if len(opcoes) < 2:
+            flash('Múltipla escolha precisa de pelo menos 2 opções (uma por linha).', 'danger')
+            return redirect(url_for('geral_pesquisa_detalhe', id=pesquisa.id))
+
+    proxima_ordem = (db.session.query(db.func.max(PerguntaPesquisa.ordem))
+                     .filter_by(pesquisa_id=pesquisa.id).scalar() or 0) + 1
+
+    pergunta = PerguntaPesquisa(
+        pesquisa_id=pesquisa.id,
+        ordem=proxima_ordem,
+        texto=texto,
+        tipo=tipo,
+        obrigatoria=obrigatoria,
+    )
+    if opcoes:
+        pergunta.set_opcoes(opcoes)
+    db.session.add(pergunta)
+    db.session.commit()
+    flash('Pergunta adicionada.', 'success')
+    return redirect(url_for('geral_pesquisa_detalhe', id=pesquisa.id))
+
+
+@app.route('/geral/pesquisas/<int:id>/perguntas/<int:pid>/excluir', methods=['POST'])
+@login_required
+def geral_pesquisa_pergunta_excluir(id, pid):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    pesquisa = _get_pesquisa_do_usuario(id)
+    pergunta = PerguntaPesquisa.query.filter_by(id=pid, pesquisa_id=pesquisa.id).first_or_404()
+    db.session.delete(pergunta)
+    db.session.commit()
+    flash('Pergunta removida.', 'info')
+    return redirect(url_for('geral_pesquisa_detalhe', id=pesquisa.id))
+
+
+@app.route('/geral/pesquisas/<int:id>/stats')
+@login_required
+def geral_pesquisa_stats(id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    pesquisa = _get_pesquisa_do_usuario(id)
+
+    total_iniciadas = RespostaPesquisa.query.filter_by(pesquisa_id=pesquisa.id).count()
+    total_concluidas = RespostaPesquisa.query.filter(
+        RespostaPesquisa.pesquisa_id == pesquisa.id,
+        RespostaPesquisa.concluida_em.isnot(None),
+    ).count()
+
+    # Para cada pergunta, monta os dados que viram gráfico.
+    # SIM_NAO e MULTI_ESCOLHA → pizza/barra com contagem por opção.
+    # ESCALA_1_10 → distribuição 1..10.
+    # TEXTO_* → lista as últimas 50 respostas.
+    respostas_concluidas_ids = [r.id for r in RespostaPesquisa.query.filter(
+        RespostaPesquisa.pesquisa_id == pesquisa.id,
+        RespostaPesquisa.concluida_em.isnot(None),
+    ).all()]
+
+    perguntas_dados = []
+    for p in pesquisa.perguntas:
+        itens = RespostaItem.query.filter(
+            RespostaItem.pergunta_id == p.id,
+            RespostaItem.resposta_id.in_(respostas_concluidas_ids) if respostas_concluidas_ids else False,
+        ).all() if respostas_concluidas_ids else []
+
+        dado = {'pergunta': p, 'total': len(itens)}
+
+        if p.tipo == 'SIM_NAO':
+            sim = sum(1 for i in itens if (i.valor or '').strip().upper() in ('SIM', 'S', 'TRUE', '1'))
+            nao = len(itens) - sim
+            dado['labels'] = ['Sim', 'Não']
+            dado['data'] = [sim, nao]
+        elif p.tipo == 'MULTI_ESCOLHA':
+            contagem = {}
+            for opt in p.opcoes_lista():
+                contagem[opt] = 0
+            for i in itens:
+                for sel in i.valor_lista():
+                    if sel in contagem:
+                        contagem[sel] += 1
+                    else:
+                        contagem[sel] = 1
+            dado['labels'] = list(contagem.keys())
+            dado['data'] = list(contagem.values())
+        elif p.tipo == 'ESCALA_1_10':
+            buckets = [0] * 10
+            for i in itens:
+                try:
+                    n = int((i.valor or '0').strip())
+                    if 1 <= n <= 10:
+                        buckets[n - 1] += 1
+                except ValueError:
+                    pass
+            dado['labels'] = [str(n) for n in range(1, 11)]
+            dado['data'] = buckets
+        else:  # TEXTO_CURTO / TEXTO_LONGO
+            dado['amostras'] = [(i.valor or '') for i in itens[-50:]]
+
+        perguntas_dados.append(dado)
+
+    return render_template(
+        'geral_pesquisa_stats.html',
+        pesquisa=pesquisa,
+        total_iniciadas=total_iniciadas,
+        total_concluidas=total_concluidas,
+        perguntas_dados=perguntas_dados,
+    )
+
+
+@app.route('/geral/pesquisas/<int:id>/exportar')
+@login_required
+def geral_pesquisa_exportar(id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    pesquisa = _get_pesquisa_do_usuario(id)
+
+    perguntas = pesquisa.perguntas
+    respostas = RespostaPesquisa.query.filter_by(pesquisa_id=pesquisa.id) \
+        .order_by(RespostaPesquisa.iniciada_em).all()
+
+    # Constrói um DataFrame com uma linha por resposta e uma coluna por pergunta.
+    linhas = []
+    for r in respostas:
+        linha = {
+            'iniciada_em': r.iniciada_em.strftime('%Y-%m-%d %H:%M') if r.iniciada_em else '',
+            'concluida_em': r.concluida_em.strftime('%Y-%m-%d %H:%M') if r.concluida_em else '',
+        }
+        valores = {i.pergunta_id: i for i in r.itens}
+        for p in perguntas:
+            item = valores.get(p.id)
+            if not item:
+                linha[p.texto] = ''
+            elif p.tipo == 'MULTI_ESCOLHA':
+                linha[p.texto] = ', '.join(item.valor_lista())
+            else:
+                linha[p.texto] = item.valor or ''
+        linhas.append(linha)
+
+    df = pd.DataFrame(linhas) if linhas else pd.DataFrame(
+        columns=['iniciada_em', 'concluida_em'] + [p.texto for p in perguntas]
+    )
+
+    buf = BytesIO()
+    with pd.ExcelWriter(buf, engine='openpyxl') as writer:
+        df.to_excel(writer, sheet_name='Respostas', index=False)
+    buf.seek(0)
+
+    nome_arquivo = f"pesquisa_{pesquisa.id}_{datetime.utcnow().strftime('%Y%m%d_%H%M')}.xlsx"
+    return send_file(buf,
+                     as_attachment=True,
+                     download_name=nome_arquivo,
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+
+# -----------------------------------------------------------------------------
+# Envio em massa do link da pesquisa via WhatsApp
+# -----------------------------------------------------------------------------
+
+def _normalizar_telefones_textarea(texto):
+    """Recebe texto (uma linha por telefone, opcional 'nome | numero') e devolve
+    lista [(numero_formatado, nome_or_None), ...] sem duplicatas, com numero válido.
+    """
+    seen = set()
+    saida = []
+    for linha in (texto or '').splitlines():
+        linha = linha.strip()
+        if not linha:
+            continue
+        nome = None
+        if '|' in linha:
+            partes = linha.split('|', 1)
+            nome = partes[0].strip() or None
+            numero_raw = partes[1].strip()
+        else:
+            numero_raw = linha
+        numero_fmt = formatar_numero(numero_raw)
+        if not numero_fmt or numero_fmt in seen:
+            continue
+        seen.add(numero_fmt)
+        saida.append((numero_fmt, nome))
+    return saida
+
+
+def _renderizar_mensagem_envio(mensagem_template, link_publico, nome_destinatario=None):
+    """Substitui placeholders na mensagem; se {LINK} ausente, anexa no fim."""
+    texto = mensagem_template or ''
+    if '{NOME}' in texto:
+        texto = texto.replace('{NOME}', nome_destinatario or '')
+    if '{LINK}' in texto:
+        texto = texto.replace('{LINK}', link_publico)
+    else:
+        texto = (texto.rstrip() + '\n\n' + link_publico).strip()
+    return texto
+
+
+@app.route('/geral/pesquisas/<int:id>/enviar', methods=['GET', 'POST'])
+@login_required
+def geral_pesquisa_enviar(id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    pesquisa = _get_pesquisa_do_usuario(id)
+
+    if not pesquisa.perguntas:
+        flash('Cadastre ao menos uma pergunta antes de enviar.', 'warning')
+        return redirect(url_for('geral_pesquisa_detalhe', id=pesquisa.id))
+
+    if not pesquisa.ativa:
+        flash('Reative a pesquisa antes de enviar o link.', 'warning')
+        return redirect(url_for('geral_pesquisa_detalhe', id=pesquisa.id))
+
+    link_publico = url_for('pesquisa_publica', token=pesquisa.token_publico, _external=True)
+    mensagem_padrao = pesquisa.mensagem_whatsapp or (
+        f'Olá {{NOME}}! Por favor, responda nossa pesquisa: {{LINK}}'
+    )
+
+    if request.method == 'POST':
+        nome = (request.form.get('nome') or '').strip() or None
+        mensagem_template = (request.form.get('mensagem') or '').strip() or mensagem_padrao
+        telefones_raw = request.form.get('telefones') or ''
+        try:
+            intervalo = max(5, int(request.form.get('intervalo', '60')))
+            hora_inicio = max(0, min(23, int(request.form.get('hora_inicio', '8'))))
+            hora_fim = max(0, min(23, int(request.form.get('hora_fim', '18'))))
+            meta_diaria = max(1, int(request.form.get('meta_diaria', '50')))
+        except ValueError:
+            flash('Valores numéricos inválidos.', 'danger')
+            return render_template('geral_envio_form.html', pesquisa=pesquisa,
+                                   link_publico=link_publico, mensagem=mensagem_template,
+                                   telefones=telefones_raw, nome=nome)
+
+        telefones = _normalizar_telefones_textarea(telefones_raw)
+        if not telefones:
+            flash('Nenhum telefone válido. Use formato (85) 99999-9999, um por linha.', 'danger')
+            return render_template('geral_envio_form.html', pesquisa=pesquisa,
+                                   link_publico=link_publico, mensagem=mensagem_template,
+                                   telefones=telefones_raw, nome=nome)
+
+        envio = EnvioPesquisa(
+            pesquisa_id=pesquisa.id,
+            usuario_id=current_user.id,
+            nome=nome,
+            mensagem_template=mensagem_template,
+            intervalo_segundos=intervalo,
+            hora_inicio=hora_inicio,
+            hora_fim=hora_fim,
+            meta_diaria=meta_diaria,
+            total=len(telefones),
+        )
+        db.session.add(envio)
+        db.session.flush()
+
+        for numero, nome_dest in telefones:
+            db.session.add(EnvioPesquisaTelefone(
+                envio_id=envio.id,
+                numero=numero,
+                nome=nome_dest,
+            ))
+        db.session.commit()
+
+        # Disparar a task em background.
+        try:
+            from celery_app import celery
+            res = celery.send_task('tasks.processar_envio_pesquisa', args=[envio.id])
+            envio.celery_task_id = res.id
+            db.session.commit()
+        except Exception as e:
+            envio.status = 'erro'
+            envio.status_msg = f'Falha ao agendar task: {e}'
+            db.session.commit()
+            flash(f'Envio criado, mas o disparo falhou: {e}', 'danger')
+
+        flash(f'Envio iniciado: {len(telefones)} destinatários.', 'success')
+        return redirect(url_for('geral_envio_progresso', envio_id=envio.id))
+
+    return render_template('geral_envio_form.html', pesquisa=pesquisa,
+                           link_publico=link_publico, mensagem=mensagem_padrao,
+                           telefones='', nome='')
+
+
+def _get_envio_do_usuario(envio_id):
+    from flask import abort
+    envio = EnvioPesquisa.query.get_or_404(envio_id)
+    if envio.usuario_id != current_user.id and not current_user.is_admin:
+        abort(403)
+    return envio
+
+
+@app.route('/geral/envios/<int:envio_id>')
+@login_required
+def geral_envio_progresso(envio_id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    envio = _get_envio_do_usuario(envio_id)
+
+    pendentes = sum(1 for t in envio.telefones if t.status == 'pendente')
+    return render_template('geral_envio_progresso.html', envio=envio, pendentes=pendentes)
+
+
+@app.route('/geral/envios/<int:envio_id>/status.json')
+@login_required
+def geral_envio_status(envio_id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return jsonify({'erro': 'forbidden'}), 403
+    envio = _get_envio_do_usuario(envio_id)
+    return jsonify({
+        'status': envio.status,
+        'status_msg': envio.status_msg,
+        'total': envio.total,
+        'enviados': envio.enviados,
+        'falhas': envio.falhas,
+        'pendentes': envio.total - envio.enviados - envio.falhas,
+    })
+
+
+@app.route('/geral/envios/<int:envio_id>/pausar', methods=['POST'])
+@login_required
+def geral_envio_pausar(envio_id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    envio = _get_envio_do_usuario(envio_id)
+    if envio.status == 'enviando':
+        envio.status = 'pausado'
+        envio.status_msg = 'Pausado pelo usuário'
+        db.session.commit()
+        flash('Envio pausado.', 'info')
+    return redirect(url_for('geral_envio_progresso', envio_id=envio.id))
+
+
+@app.route('/geral/envios/<int:envio_id>/continuar', methods=['POST'])
+@login_required
+def geral_envio_continuar(envio_id):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    envio = _get_envio_do_usuario(envio_id)
+    if envio.status in ('pausado', 'erro'):
+        envio.status = 'pendente'
+        envio.status_msg = None
+        db.session.commit()
+        try:
+            from celery_app import celery
+            res = celery.send_task('tasks.processar_envio_pesquisa', args=[envio.id])
+            envio.celery_task_id = res.id
+            db.session.commit()
+            flash('Envio retomado.', 'success')
+        except Exception as e:
+            envio.status = 'erro'
+            envio.status_msg = f'Falha ao retomar: {e}'
+            db.session.commit()
+            flash(f'Falha ao retomar: {e}', 'danger')
+    return redirect(url_for('geral_envio_progresso', envio_id=envio.id))
+
+
+# -----------------------------------------------------------------------------
+# Pesquisa pública (formulário web acessado pelo paciente via link)
+# -----------------------------------------------------------------------------
+
+@app.route('/p/<token>', methods=['GET', 'POST'])
+@csrf.exempt  # link é compartilhado externamente; usa token na URL como autorização
+def pesquisa_publica(token):
+    pesquisa = Pesquisa.query.filter_by(token_publico=token).first_or_404()
+
+    if not pesquisa.ativa:
+        return render_template('pesquisa_publica_indisponivel.html', pesquisa=pesquisa), 410
+
+    if not pesquisa.perguntas:
+        return render_template('pesquisa_publica_indisponivel.html', pesquisa=pesquisa,
+                               motivo='Esta pesquisa ainda não possui perguntas configuradas.'), 410
+
+    if request.method == 'POST':
+        resposta = RespostaPesquisa(
+            pesquisa_id=pesquisa.id,
+            ip_origem=request.headers.get('X-Forwarded-For', request.remote_addr or '')[:45],
+            user_agent=(request.headers.get('User-Agent') or '')[:255],
+        )
+        db.session.add(resposta)
+        db.session.flush()  # garante resposta.id pra usar nos itens
+
+        faltando_obrigatoria = False
+
+        for p in pesquisa.perguntas:
+            campo = f'p_{p.id}'
+
+            if p.tipo == 'MULTI_ESCOLHA':
+                valores = [v for v in request.form.getlist(campo) if v in p.opcoes_lista()]
+                if p.obrigatoria and not valores:
+                    faltando_obrigatoria = True
+                    break
+                item = RespostaItem(resposta_id=resposta.id, pergunta_id=p.id)
+                if valores:
+                    import json
+                    item.valor = json.dumps(valores)
+                db.session.add(item)
+            else:
+                valor = (request.form.get(campo) or '').strip()
+                if p.tipo == 'ESCALA_1_10' and valor:
+                    try:
+                        n = int(valor)
+                        if not (1 <= n <= 10):
+                            valor = ''
+                    except ValueError:
+                        valor = ''
+                if p.obrigatoria and not valor:
+                    faltando_obrigatoria = True
+                    break
+                item = RespostaItem(resposta_id=resposta.id, pergunta_id=p.id, valor=valor or None)
+                db.session.add(item)
+
+        if faltando_obrigatoria:
+            db.session.rollback()
+            flash('Por favor, responda todas as perguntas obrigatórias.', 'danger')
+            return render_template('pesquisa_publica.html', pesquisa=pesquisa,
+                                   form_data=request.form)
+
+        resposta.concluida_em = datetime.utcnow()
+        db.session.commit()
+        return render_template('pesquisa_publica_obrigado.html', pesquisa=pesquisa)
+
+    return render_template('pesquisa_publica.html', pesquisa=pesquisa, form_data={})
 
 
 # =============================================================================

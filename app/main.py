@@ -22,9 +22,10 @@ Versao: 2.0
 """
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
-from flask_sqlalchemy import SQLAlchemy
-from flask_login import LoginManager, UserMixin, login_user, logout_user, login_required, current_user
+from flask_login import UserMixin, login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
+from app.extensions import db, login_manager, csrf
+from app.config import BaseConfig, BASE_DIR
 from datetime import datetime, timedelta, date
 from sqlalchemy.exc import IntegrityError
 import pandas as pd
@@ -73,8 +74,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-from flask_wtf.csrf import CSRFProtect
-
 # Importar Celery app configurado com backend Redis
 try:
     from celery_app import celery as celery_app
@@ -84,28 +83,19 @@ except ImportError as e:
     AsyncResult = None
     logger.warning(f"Celery não disponível - funcionalidades assíncronas desabilitadas: {e}")
 
-app = Flask(__name__)
-csrf = CSRFProtect(app)
-app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'busca-ativa-huwc-2024-secret')
-
-# Database - PostgreSQL (padrao) ou SQLite (fallback)
-DATABASE_URL = os.environ.get('DATABASE_URL', '')
-if DATABASE_URL:
-    # PostgreSQL
-    app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
-else:
-    # Fallback para SQLite (desenvolvimento)
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///busca_ativa.db'
-
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {'pool_pre_ping': True}
-app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024
+_STATIC_DIR = os.path.join(BASE_DIR, 'static')
+app = Flask(
+    __name__,
+    template_folder=os.path.join(BASE_DIR, 'templates'),
+    static_folder=_STATIC_DIR if os.path.isdir(_STATIC_DIR) else None,
+)
+app.config.from_object(BaseConfig)
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
-db = SQLAlchemy(app)
-login_manager = LoginManager(app)
+db.init_app(app)
+csrf.init_app(app)
+login_manager.init_app(app)
 login_manager.login_view = 'login'
 login_manager.login_message = 'Faca login para acessar.'
 login_manager.login_message_category = 'warning'

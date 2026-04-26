@@ -34,7 +34,7 @@ EXPOSE 5000
 
 # Configurar timezone
 ENV TZ=America/Fortaleza
-ENV FLASK_APP=app.py
+ENV FLASK_APP=wsgi.py
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app
 
@@ -42,4 +42,4 @@ ENV PYTHONPATH=/app
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 
 # Comando padrão de produção
-CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "120", "--log-level", "info", "app:app"]
+CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--workers", "4", "--timeout", "120", "--log-level", "info", "wsgi:app"]

@@ -6913,21 +6913,34 @@ def webhook():
         resposta_rejeicao = verificar_resposta_em_lista(texto_up, RESPOSTAS_NAO)
 
         if resposta_confirmacao or resposta_rejeicao:
-            # Buscar TODAS as consultas pendentes deste telefone (de QUALQUER usuário)
+            # Só consideramos pendências do MESMO usuário/instância e cuja mensagem
+            # de confirmação foi enviada nas últimas 24h (consultas mais antigas
+            # não são fluxo ativo, mesmo que tenham ficado em AGUARDANDO_CONFIRMACAO).
+            vinte_quatro_horas_atras = datetime.utcnow() - timedelta(hours=24)
+
             consultas_pendentes = []
             for num in numeros_buscar:
                 tels = TelefoneConsulta.query.filter_by(numero=num).all()
                 for tel in tels:
-                    if tel.consulta and tel.consulta.status == 'AGUARDANDO_CONFIRMACAO':
-                        consultas_pendentes.append(tel.consulta)
+                    consulta = tel.consulta
+                    if not consulta or consulta.status != 'AGUARDANDO_CONFIRMACAO':
+                        continue
+                    if not consulta.campanha or consulta.campanha.criador_id != usuario_id:
+                        continue
+                    if not consulta.data_envio_mensagem or consulta.data_envio_mensagem < vinte_quatro_horas_atras:
+                        continue
+                    consultas_pendentes.append(consulta)
 
-            # Buscar TODAS as cirurgias pendentes deste telefone (de QUALQUER usuário)
             cirurgias_pendentes = []
             for num in numeros_buscar:
                 tels_fila = Telefone.query.filter_by(numero_fmt=num).all()
                 for tel in tels_fila:
-                    if tel.contato and tel.contato.status in ['enviado', 'pronto_envio']:
-                        cirurgias_pendentes.append(tel.contato)
+                    contato = tel.contato
+                    if not contato or contato.status not in ['enviado', 'pronto_envio']:
+                        continue
+                    if not contato.campanha or contato.campanha.criador_id != usuario_id:
+                        continue
+                    cirurgias_pendentes.append(contato)
 
             # Remover duplicados (mesmo ID)
             consultas_pendentes = list({c.id: c for c in consultas_pendentes}.values())
@@ -7034,20 +7047,34 @@ def webhook():
             # Paciente está respondendo ao menu - processar escolha
             escolha = texto_up.strip()
 
-            # Buscar novamente as pendências (podem ter mudado)
+            # Buscar novamente as pendências (podem ter mudado).
+            # Mesmos filtros do bloco que envia o menu: usuário da instância +
+            # mensagem enviada nas últimas 24h.
+            vinte_quatro_horas_atras = datetime.utcnow() - timedelta(hours=24)
+
             consultas_pendentes = []
             for num in numeros_buscar:
                 tels = TelefoneConsulta.query.filter_by(numero=num).all()
                 for tel in tels:
-                    if tel.consulta and tel.consulta.status == 'AGUARDANDO_CONFIRMACAO':
-                        consultas_pendentes.append((tel.consulta, tel.numero))
+                    consulta = tel.consulta
+                    if not consulta or consulta.status != 'AGUARDANDO_CONFIRMACAO':
+                        continue
+                    if not consulta.campanha or consulta.campanha.criador_id != usuario_id:
+                        continue
+                    if not consulta.data_envio_mensagem or consulta.data_envio_mensagem < vinte_quatro_horas_atras:
+                        continue
+                    consultas_pendentes.append((consulta, tel.numero))
 
             cirurgias_pendentes = []
             for num in numeros_buscar:
                 tels_fila = Telefone.query.filter_by(numero_fmt=num).all()
                 for tel in tels_fila:
-                    if tel.contato and tel.contato.status in ['enviado', 'pronto_envio']:
-                        cirurgias_pendentes.append((tel.contato, tel.numero_fmt))
+                    contato = tel.contato
+                    if not contato or contato.status not in ['enviado', 'pronto_envio']:
+                        continue
+                    if not contato.campanha or contato.campanha.criador_id != usuario_id:
+                        continue
+                    cirurgias_pendentes.append((contato, tel.numero_fmt))
 
             # Remover duplicados
             consultas_pendentes = list({c[0].id: c for c in consultas_pendentes}.values())

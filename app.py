@@ -1213,6 +1213,106 @@ STATUS_ENVIO_PESQUISA = ['pendente', 'enviando', 'pausado', 'concluido', 'erro']
 STATUS_ENVIO_TELEFONE = ['pendente', 'enviado', 'falhou']
 
 
+# Templates de pesquisa pré-configurados. Cada chave vira a URL do template.
+# Cada item descreve título, descrição, mensagem padrão e a lista de perguntas
+# a serem criadas automaticamente. Pensado para casos reais (ex.: SCIH/MEAC).
+TEMPLATES_PESQUISA = {
+    'busca_fonada_cesarea': {
+        'titulo': 'Busca fonada pós-cesárea',
+        'descricao': 'Questionário do Serviço de Controle de Infecção Hospitalar para '
+                     'identificar sinais de infecção em pacientes pós-cesárea.',
+        'mensagem_whatsapp': (
+            'Prezada paciente, esperamos que esta mensagem a encontre bem. '
+            'Estamos entrando em contato do Serviço de Controle de Infecção '
+            'Hospitalar para realizar um breve questionário a respeito da sua '
+            'experiência pós-cirúrgica, buscando identificar possíveis sinais '
+            'de infecções relacionadas à sua cirurgia. Sua participação é '
+            'muito importante! Agradecemos sua atenção!\n\n'
+            'Clique no link abaixo e responda:\n{LINK}'
+        ),
+        'perguntas': [
+            {'texto': 'Nome completo', 'tipo': 'TEXTO_CURTO', 'obrigatoria': True},
+            {'texto': 'Idade', 'tipo': 'TEXTO_CURTO', 'obrigatoria': True},
+            {'texto': 'Dia da ligação', 'tipo': 'TEXTO_CURTO', 'obrigatoria': True},
+            {'texto': 'Qual o dia da sua cesárea?', 'tipo': 'TEXTO_CURTO', 'obrigatoria': True},
+            {'texto': 'Você apresentou algum sintoma após a cirurgia?', 'tipo': 'SIM_NAO', 'obrigatoria': True},
+            {
+                'texto': 'Quais sintomas você apresentou? (pode marcar mais de um)',
+                'tipo': 'MULTI_ESCOLHA',
+                'obrigatoria': False,
+                'opcoes': [
+                    'febre',
+                    'ferida cirúrgica avermelhada',
+                    'ferida cirúrgica inchada',
+                    'ferida cirúrgica com dor',
+                    'ferida cirúrgica com secreção',
+                    'ferida cirúrgica com pus',
+                    'ferida cirúrgica com sangramento',
+                    'ferida cirúrgica com mau cheiro',
+                ],
+            },
+            {'texto': 'Você buscou atendimento médico?', 'tipo': 'SIM_NAO', 'obrigatoria': True},
+            {'texto': 'Você utilizou algum remédio?', 'tipo': 'SIM_NAO', 'obrigatoria': True},
+            {'texto': 'Qual remédio?', 'tipo': 'TEXTO_CURTO', 'obrigatoria': False},
+            {'texto': 'Observações', 'tipo': 'TEXTO_LONGO', 'obrigatoria': False},
+        ],
+    },
+    'busca_fonada_mastologia': {
+        'titulo': 'Busca fonada pós-mastologia',
+        'descricao': 'Questionário do Serviço de Controle de Infecção Hospitalar para '
+                     'identificar sinais de infecção em pacientes pós-mastologia.',
+        'mensagem_whatsapp': (
+            'Prezada paciente, esperamos que esta mensagem a encontre bem. '
+            'Estamos entrando em contato do Serviço de Controle de Infecção '
+            'Hospitalar para realizar um breve questionário a respeito da sua '
+            'experiência pós-cirúrgica, buscando identificar possíveis sinais '
+            'de infecções relacionadas à sua cirurgia. Sua participação é '
+            'muito importante! Agradecemos sua atenção!\n\n'
+            'Clique no link abaixo e responda:\n{LINK}'
+        ),
+        'perguntas': [
+            {'texto': 'Nome completo', 'tipo': 'TEXTO_CURTO', 'obrigatoria': True},
+            {'texto': 'Idade', 'tipo': 'TEXTO_CURTO', 'obrigatoria': True},
+            {'texto': 'Dia da ligação', 'tipo': 'TEXTO_CURTO', 'obrigatoria': True},
+            {'texto': 'Qual o dia da sua mastologia?', 'tipo': 'TEXTO_CURTO', 'obrigatoria': True},
+            {'texto': 'Você apresentou algum sintoma após a cirurgia?', 'tipo': 'SIM_NAO', 'obrigatoria': True},
+            {
+                'texto': 'Quais sintomas você apresentou? (pode marcar mais de um)',
+                'tipo': 'MULTI_ESCOLHA',
+                'obrigatoria': False,
+                'opcoes': [
+                    'febre',
+                    'ferida cirúrgica avermelhada',
+                    'ferida cirúrgica inchada',
+                    'ferida cirúrgica com dor',
+                    'ferida cirúrgica com secreção',
+                    'ferida cirúrgica com pus',
+                    'ferida cirúrgica com sangramento',
+                    'ferida cirúrgica com mau cheiro',
+                ],
+            },
+            {'texto': 'Você buscou atendimento médico?', 'tipo': 'SIM_NAO', 'obrigatoria': True},
+            {'texto': 'Você utilizou algum remédio?', 'tipo': 'SIM_NAO', 'obrigatoria': True},
+            {'texto': 'Qual remédio?', 'tipo': 'TEXTO_CURTO', 'obrigatoria': False},
+            {'texto': 'Observações', 'tipo': 'TEXTO_LONGO', 'obrigatoria': False},
+        ],
+    },
+    'satisfacao_simples': {
+        'titulo': 'Pesquisa de satisfação',
+        'descricao': 'Pesquisa rápida de satisfação com nota e comentário livre.',
+        'mensagem_whatsapp': (
+            'Olá! Por favor, ajude-nos a melhorar respondendo a esta pesquisa rápida:\n{LINK}\n'
+            'Leva menos de 1 minuto. Obrigado!'
+        ),
+        'perguntas': [
+            {'texto': 'De 1 a 10, qual sua satisfação com o atendimento?', 'tipo': 'ESCALA_1_10', 'obrigatoria': True},
+            {'texto': 'A equipe foi atenciosa?', 'tipo': 'SIM_NAO', 'obrigatoria': True},
+            {'texto': 'Comentários ou sugestões', 'tipo': 'TEXTO_LONGO', 'obrigatoria': False},
+        ],
+    },
+}
+
+
 class EnvioPesquisa(db.Model):
     """Lote de envio em massa do link da pesquisa via WhatsApp.
 
@@ -9138,6 +9238,55 @@ def geral_pesquisa_nova():
                            titulo='', descricao='', mensagem_whatsapp='')
 
 
+@app.route('/geral/pesquisas/templates')
+@login_required
+def geral_pesquisa_templates():
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    return render_template('geral_pesquisa_templates.html',
+                           templates=TEMPLATES_PESQUISA)
+
+
+@app.route('/geral/pesquisas/templates/<key>/criar', methods=['POST'])
+@login_required
+def geral_pesquisa_criar_de_template(key):
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+
+    template = TEMPLATES_PESQUISA.get(key)
+    if not template:
+        flash('Template não encontrado.', 'danger')
+        return redirect(url_for('geral_pesquisa_templates'))
+
+    pesquisa = Pesquisa(
+        usuario_id=current_user.id,
+        titulo=template['titulo'],
+        descricao=template.get('descricao'),
+        mensagem_whatsapp=template.get('mensagem_whatsapp'),
+        token_publico=Pesquisa.gerar_token(),
+    )
+    db.session.add(pesquisa)
+    db.session.flush()
+
+    for ordem, p in enumerate(template.get('perguntas', []), start=1):
+        pergunta = PerguntaPesquisa(
+            pesquisa_id=pesquisa.id,
+            ordem=ordem,
+            texto=p['texto'],
+            tipo=p['tipo'],
+            obrigatoria=bool(p.get('obrigatoria', True)),
+        )
+        if p.get('opcoes'):
+            pergunta.set_opcoes(p['opcoes'])
+        db.session.add(pergunta)
+
+    db.session.commit()
+    flash(f'Pesquisa "{pesquisa.titulo}" criada a partir do template. Revise e ajuste se quiser.', 'success')
+    return redirect(url_for('geral_pesquisa_detalhe', id=pesquisa.id))
+
+
 @app.route('/geral/pesquisas/<int:id>', methods=['GET', 'POST'])
 @login_required
 def geral_pesquisa_detalhe(id):
@@ -9560,6 +9709,58 @@ def geral_envio_continuar(envio_id):
             db.session.commit()
             flash(f'Falha ao retomar: {e}', 'danger')
     return redirect(url_for('geral_envio_progresso', envio_id=envio.id))
+
+
+@app.route('/geral/envios/<int:envio_id>/reenviar_falhas', methods=['POST'])
+@login_required
+def geral_envio_reenviar_falhas(envio_id):
+    """Cria um novo lote contendo apenas os números que falharam neste envio."""
+    config, redir = _exigir_usuario_geral()
+    if redir:
+        return redir
+    envio = _get_envio_do_usuario(envio_id)
+
+    falhas = [t for t in envio.telefones if t.status == 'falhou']
+    if not falhas:
+        flash('Não há falhas neste envio para reenviar.', 'info')
+        return redirect(url_for('geral_envio_progresso', envio_id=envio.id))
+
+    novo = EnvioPesquisa(
+        pesquisa_id=envio.pesquisa_id,
+        usuario_id=current_user.id,
+        nome=(envio.nome or f'Lote #{envio.id}') + ' (reenvio)',
+        mensagem_template=envio.mensagem_template,
+        intervalo_segundos=envio.intervalo_segundos,
+        hora_inicio=envio.hora_inicio,
+        hora_fim=envio.hora_fim,
+        meta_diaria=envio.meta_diaria,
+        total=len(falhas),
+    )
+    db.session.add(novo)
+    db.session.flush()
+
+    for t in falhas:
+        db.session.add(EnvioPesquisaTelefone(
+            envio_id=novo.id,
+            numero=t.numero,
+            nome=t.nome,
+        ))
+    db.session.commit()
+
+    try:
+        from celery_app import celery
+        res = celery.send_task('tasks.processar_envio_pesquisa', args=[novo.id])
+        novo.celery_task_id = res.id
+        db.session.commit()
+    except Exception as e:
+        novo.status = 'erro'
+        novo.status_msg = f'Falha ao agendar task: {e}'
+        db.session.commit()
+        flash(f'Reenvio criado, mas o disparo falhou: {e}', 'danger')
+        return redirect(url_for('geral_envio_progresso', envio_id=novo.id))
+
+    flash(f'Reenvio iniciado: {len(falhas)} destinatários que haviam falhado.', 'success')
+    return redirect(url_for('geral_envio_progresso', envio_id=novo.id))
 
 
 # -----------------------------------------------------------------------------

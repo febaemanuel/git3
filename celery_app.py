@@ -88,6 +88,13 @@ celery.conf.beat_schedule = {
         'options': {'expires': 1800}  # Task expira em 30min se não executar
     },
 
+    # Retomar envios de pesquisa (módulo GERAL) pausados por horário/meta
+    'retomar-envios-pesquisa-automaticos': {
+        'task': 'tasks.retomar_envios_pesquisa_automaticos',
+        'schedule': crontab(minute=15, hour='8-21'),  # 15 min após a hora, das 8 às 21
+        'options': {'expires': 1800}
+    },
+
     # Limpar tasks antigas a cada 6 horas
     'limpar-tasks-antigas': {
         'task': 'tasks.limpar_tasks_antigas',

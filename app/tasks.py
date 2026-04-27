@@ -5,7 +5,7 @@ CELERY TASKS
 Tasks assíncronas do sistema (migradas de threading para Celery)
 """
 
-from celery_app import celery
+from app.celery_app import celery
 from celery import Task
 from celery.exceptions import SoftTimeLimitExceeded
 from celery.utils.log import get_task_logger

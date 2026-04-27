@@ -17,7 +17,7 @@ celery = Celery(
     'busca_ativa',
     broker=REDIS_URL,
     backend=REDIS_URL,
-    include=['tasks']  # Importar tasks automaticamente
+    include=['app.tasks']  # Importar tasks automaticamente
 )
 
 # Configurações otimizadas para produção

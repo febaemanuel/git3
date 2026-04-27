@@ -122,14 +122,14 @@ docker run -d -p 6379:6379 redis:7-alpine
 
 ```bash
 # Terminal 1: Celery Worker
-celery -A celery_app.celery worker --loglevel=info --concurrency=4
+celery -A app.celery_app.celery worker --loglevel=info --concurrency=4
 ```
 
 ### 4. Iniciar Celery Beat (opcional, para tarefas periódicas)
 
 ```bash
 # Terminal 2: Celery Beat
-celery -A celery_app.celery beat --loglevel=info
+celery -A app.celery_app.celery beat --loglevel=info
 ```
 
 ### 5. Iniciar Flask App
@@ -138,7 +138,7 @@ celery -A celery_app.celery beat --loglevel=info
 # Terminal 3: Flask
 flask run
 # OU
-gunicorn --bind 0.0.0.0:5000 app:app
+gunicorn --bind 0.0.0.0:5000 wsgi:app
 ```
 
 ## Configuração de Ambiente
@@ -187,7 +187,7 @@ Exemplo de resposta ao iniciar campanha:
 pip install flower
 
 # Iniciar Flower
-celery -A celery_app.celery flower --port=5555
+celery -A app.celery_app.celery flower --port=5555
 
 # Acessar: http://localhost:5555
 ```
@@ -211,20 +211,20 @@ celery -A celery_app.celery flower --port=5555
 ```bash
 # Docker: Editar docker-compose.yml
 celery_worker:
-  command: celery -A celery_app.celery worker --loglevel=info --concurrency=8
+  command: celery -A app.celery_app.celery worker --loglevel=info --concurrency=8
 
 # Manual
-celery -A celery_app.celery worker --loglevel=info --concurrency=8
+celery -A app.celery_app.celery worker --loglevel=info --concurrency=8
 ```
 
 ### Múltiplas Instâncias de Workers
 
 ```bash
 # Terminal 1
-celery -A celery_app.celery worker --loglevel=info --concurrency=4 -n worker1@%h
+celery -A app.celery_app.celery worker --loglevel=info --concurrency=4 -n worker1@%h
 
 # Terminal 2
-celery -A celery_app.celery worker --loglevel=info --concurrency=4 -n worker2@%h
+celery -A app.celery_app.celery worker --loglevel=info --concurrency=4 -n worker2@%h
 ```
 
 ## Troubleshooting
@@ -246,7 +246,7 @@ celery -A celery_app.celery worker --loglevel=info --concurrency=4 -n worker2@%h
 
 3. Verificar conexão Redis:
    ```bash
-   docker-compose exec celery_worker celery -A celery_app.celery inspect active
+   docker-compose exec celery_worker celery -A app.celery_app.celery inspect active
    ```
 
 ### Tasks ficam em estado PENDING
@@ -265,7 +265,7 @@ celery -A celery_app.celery worker --loglevel=info --concurrency=4 -n worker2@%h
 
 - Verifique se Celery Beat está rodando
 - Verifique logs do beat: `docker-compose logs celery_beat`
-- Verifique timezone em `celery_app.py` (atualmente: America/Fortaleza)
+- Verifique timezone em `app/celery_app.py` (atualmente: America/Fortaleza)
 
 ## Performance
 
@@ -281,7 +281,7 @@ celery -A celery_app.celery worker --loglevel=info --concurrency=4 -n worker2@%h
 Se você tiver muitas tasks curtas (< 1 segundo):
 
 ```python
-# celery_app.py
+# app/celery_app.py
 celery.conf.update(
     worker_prefetch_multiplier=4,  # Pega 4 tasks por vez
     worker_concurrency=8,           # 8 workers simultâneos

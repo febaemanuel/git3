@@ -497,7 +497,7 @@ def pesquisa_enviar(id):
 
         # Disparar a task em background.
         try:
-            from celery_app import celery
+            from app.celery_app import celery
             res = celery.send_task('tasks.processar_envio_pesquisa', args=[envio.id])
             envio.celery_task_id = res.id
             db.session.commit()
@@ -563,7 +563,7 @@ def envio_continuar(envio_id):
         envio.status_msg = None
         db.session.commit()
         try:
-            from celery_app import celery
+            from app.celery_app import celery
             res = celery.send_task('tasks.processar_envio_pesquisa', args=[envio.id])
             envio.celery_task_id = res.id
             db.session.commit()
@@ -611,7 +611,7 @@ def envio_reenviar_falhas(envio_id):
     db.session.commit()
 
     try:
-        from celery_app import celery
+        from app.celery_app import celery
         res = celery.send_task('tasks.processar_envio_pesquisa', args=[novo.id])
         novo.celery_task_id = res.id
         db.session.commit()

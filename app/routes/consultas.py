@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from celery.result import AsyncResult
-    from tasks import enviar_campanha_consultas_task
+    from app.tasks import enviar_campanha_consultas_task
 except ImportError:
     AsyncResult = None
     enviar_campanha_consultas_task = None

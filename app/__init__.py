@@ -37,9 +37,13 @@ def create_app(config_name=None):
         pass
 
     # Importing app.main runs the (now app-free) module-level setup: logging,
-    # constants, helpers, AI/OCR classes, the @login_manager.user_loader, etc.
+    # constants, route helpers, the @login_manager.user_loader, etc.
     from app import main as _main
     from app.config import BASE_DIR, BaseConfig
+    from app.seeds import (
+        ADMIN_EMAIL, ADMIN_SENHA, criar_admin, criar_faqs_padrao,
+        criar_tutoriais_padrao,
+    )
     from flask import Flask
 
     static_dir = os.path.join(BASE_DIR, 'static')
@@ -65,17 +69,17 @@ def create_app(config_name=None):
     @flask_app.cli.command('init-db')
     def _init_db_cli():
         db.create_all()
-        _main.criar_admin()
-        print(f"DB criado! Admin: {_main.ADMIN_EMAIL} / {_main.ADMIN_SENHA}")
+        criar_admin()
+        print(f"DB criado! Admin: {ADMIN_EMAIL} / {ADMIN_SENHA}")
 
     from app.routes import register_blueprints
     register_blueprints(flask_app)
 
     with flask_app.app_context():
         db.create_all()
-        _main.criar_admin()
-        _main.criar_faqs_padrao()
-        _main.criar_tutoriais_padrao()
+        criar_admin()
+        criar_faqs_padrao()
+        criar_tutoriais_padrao()
 
     _app_instance = flask_app
     return flask_app

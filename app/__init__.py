@@ -43,9 +43,9 @@ def create_app(config_name=None):
     from flask import Flask
 
     static_dir = os.path.join(BASE_DIR, 'static')
+    # template_folder defaults to <package>/templates (i.e. app/templates).
     flask_app = Flask(
         'app',
-        template_folder=os.path.join(BASE_DIR, 'templates'),
         static_folder=static_dir if os.path.isdir(static_dir) else None,
     )
     flask_app.config.from_object(BaseConfig)

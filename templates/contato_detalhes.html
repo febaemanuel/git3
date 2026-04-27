@@ -181,8 +181,8 @@
         <div class="col-12">
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
-                    <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}"><i class="bi bi-house-door"></i> Dashboard</a></li>
-                    <li class="breadcrumb-item"><a href="{{ url_for('campanha_detalhe', id=contato.campanha_id) }}"><i class="bi bi-megaphone"></i> Campanha</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('fila.dashboard') }}"><i class="bi bi-house-door"></i> Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('fila.campanha_detalhe', id=contato.campanha_id) }}"><i class="bi bi-megaphone"></i> Campanha</a></li>
                     <li class="breadcrumb-item active">{{ contato.nome }}</li>
                 </ol>
             </nav>
@@ -290,7 +290,7 @@
             <div class="card info-card mt-3">
                 <div class="card-body">
                     <div class="d-grid gap-2">
-                        <a href="{{ url_for('editar_contato', id=contato.id) }}" class="btn btn-outline-primary">
+                        <a href="{{ url_for('fila.editar_contato', id=contato.id) }}" class="btn btn-outline-primary">
                             <i class="bi bi-pencil-square me-1"></i> Editar Contato
                         </a>
                         <button class="btn btn-outline-secondary" onclick="window.print()">

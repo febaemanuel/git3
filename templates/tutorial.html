@@ -11,19 +11,19 @@
 <div class="card mb-3">
     <div class="card-body">
         <div class="btn-group" role="group">
-            <a href="{{ url_for('tutorial', categoria='inicio') }}"
+            <a href="{{ url_for('fila.tutorial', categoria='inicio') }}"
                class="btn btn-sm {% if categoria == 'inicio' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
                 Início
             </a>
-            <a href="{{ url_for('tutorial', categoria='campanhas') }}"
+            <a href="{{ url_for('fila.tutorial', categoria='campanhas') }}"
                class="btn btn-sm {% if categoria == 'campanhas' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
                 Campanhas
             </a>
-            <a href="{{ url_for('tutorial', categoria='configuracoes') }}"
+            <a href="{{ url_for('fila.tutorial', categoria='configuracoes') }}"
                class="btn btn-sm {% if categoria == 'configuracoes' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
                 Configurações
             </a>
-            <a href="{{ url_for('tutorial', categoria='atendimento') }}"
+            <a href="{{ url_for('fila.tutorial', categoria='atendimento') }}"
                class="btn btn-sm {% if categoria == 'atendimento' %}btn-primary{% else %}btn-outline-secondary{% endif %}">
                 Atendimento
             </a>
@@ -39,7 +39,7 @@
             <div class="card-body">
                 <h5 class="card-title">{{ tutorial.titulo }}</h5>
                 <p class="card-text text-muted">{{ tutorial.descricao }}</p>
-                <a href="{{ url_for('tutorial_detalhe', id=tutorial.id) }}" class="btn btn-primary btn-sm">
+                <a href="{{ url_for('fila.tutorial_detalhe', id=tutorial.id) }}" class="btn btn-primary btn-sm">
                     Ler Tutorial
                 </a>
             </div>

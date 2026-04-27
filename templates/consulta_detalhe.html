@@ -136,8 +136,8 @@
         <div class="col-12">
             <nav aria-label="breadcrumb">
                 <ol class="breadcrumb">
-                    <li class="breadcrumb-item"><a href="{{ url_for('consultas_dashboard') }}"><i class="bi bi-house-door"></i> Dashboard</a></li>
-                    <li class="breadcrumb-item"><a href="{{ url_for('consultas_campanha_detalhe', id=consulta.campanha_id) }}"><i class="bi bi-calendar-check"></i> Campanha</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('consultas.consultas_dashboard') }}"><i class="bi bi-house-door"></i> Dashboard</a></li>
+                    <li class="breadcrumb-item"><a href="{{ url_for('consultas.consultas_campanha_detalhe', id=consulta.campanha_id) }}"><i class="bi bi-calendar-check"></i> Campanha</a></li>
                     <li class="breadcrumb-item active">{{ consulta.paciente }}</li>
                 </ol>
             </nav>
@@ -287,7 +287,7 @@
                         </div>
                         {% endif %}
 
-                        <a href="{{ url_for('consultas_campanha_detalhe', id=consulta.campanha_id) }}" class="btn btn-outline-secondary">
+                        <a href="{{ url_for('consultas.consultas_campanha_detalhe', id=consulta.campanha_id) }}" class="btn btn-outline-secondary">
                             <i class="bi bi-arrow-left me-1"></i> Voltar
                         </a>
                         <button class="btn btn-outline-secondary" onclick="window.print()">

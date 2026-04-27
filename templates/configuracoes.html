@@ -93,7 +93,7 @@
                     <strong>Atenção:</strong> Estas configurações são globais e afetam todos os usuários do sistema.
                     Configure a URL e API Key da Evolution API.
                 </div>
-                <form method="POST" action="{{ url_for('configuracoes_global') }}">
+                <form method="POST" action="{{ url_for('fila.configuracoes_global') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="row">
                         <div class="col-md-5 mb-3">

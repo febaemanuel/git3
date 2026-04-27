@@ -7,8 +7,8 @@
     <div class="col-12 mb-4">
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
-                <li class="breadcrumb-item"><a href="{{ url_for('campanha_detalhe', id=contato.campanha_id) }}">{{
+                <li class="breadcrumb-item"><a href="{{ url_for('fila.dashboard') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('fila.campanha_detalhe', id=contato.campanha_id) }}">{{
                         contato.campanha.nome }}</a></li>
                 <li class="breadcrumb-item active">Editar Contato</li>
             </ol>
@@ -24,7 +24,7 @@
                 <span class="badge {{ contato.status_badge() }} float-end">{{ contato.status_texto() }}</span>
             </div>
             <div class="card-body">
-                <form method="POST" action="{{ url_for('editar_contato', id=contato.id) }}">
+                <form method="POST" action="{{ url_for('fila.editar_contato', id=contato.id) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="row">
                         <div class="col-md-6 mb-3">
@@ -80,7 +80,7 @@
                     </div>
 
                     <div class="d-flex justify-content-between">
-                        <a href="{{ url_for('campanha_detalhe', id=contato.campanha_id) }}" class="btn btn-secondary">
+                        <a href="{{ url_for('fila.campanha_detalhe', id=contato.campanha_id) }}" class="btn btn-secondary">
                             <i class="bi bi-arrow-left"></i> Voltar
                         </a>
                         <button type="submit" class="btn btn-primary">

@@ -55,7 +55,7 @@
     <div class="col-12 mb-4">
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ url_for('consultas_dashboard') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('consultas.consultas_dashboard') }}">Dashboard</a></li>
                 <li class="breadcrumb-item active">{{ campanha.nome }}</li>
             </ol>
         </nav>
@@ -69,7 +69,7 @@
             </div>
             <div class="d-flex gap-2 flex-wrap">
                 {% if campanha.status in ['pendente', 'pronta', 'pausado'] %}
-                <form method="POST" action="{{ url_for('consultas_campanha_iniciar', id=campanha.id) }}"
+                <form method="POST" action="{{ url_for('consultas.consultas_campanha_iniciar', id=campanha.id) }}"
                     class="d-inline">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-whatsapp">
@@ -77,7 +77,7 @@
                     </button>
                 </form>
                 {% elif campanha.status == 'enviando' %}
-                <form method="POST" action="{{ url_for('consultas_campanha_pausar', id=campanha.id) }}"
+                <form method="POST" action="{{ url_for('consultas.consultas_campanha_pausar', id=campanha.id) }}"
                     class="d-inline">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-warning">
@@ -260,31 +260,31 @@
 
                     <!-- Filtros -->
                     <div class="btn-group btn-group-sm flex-wrap">
-                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='todos') }}"
+                        <a href="{{ url_for('consultas.consultas_campanha_detalhe', id=campanha.id, filtro='todos') }}"
                             class="btn {% if filtro == 'todos' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">
                             Todos
                         </a>
-                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='aguardando_envio') }}"
+                        <a href="{{ url_for('consultas.consultas_campanha_detalhe', id=campanha.id, filtro='aguardando_envio') }}"
                             class="btn {% if filtro == 'aguardando_envio' %}btn-secondary{% else %}btn-outline-secondary{% endif %}">
                             Pendentes
                         </a>
-                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='aguardando_confirmacao') }}"
+                        <a href="{{ url_for('consultas.consultas_campanha_detalhe', id=campanha.id, filtro='aguardando_confirmacao') }}"
                             class="btn {% if filtro == 'aguardando_confirmacao' %}btn-info{% else %}btn-outline-info{% endif %}">
                             Ag. Confirmacao
                         </a>
-                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='aguardando_comprovante') }}"
+                        <a href="{{ url_for('consultas.consultas_campanha_detalhe', id=campanha.id, filtro='aguardando_comprovante') }}"
                             class="btn {% if filtro == 'aguardando_comprovante' %}btn-warning{% else %}btn-outline-warning{% endif %}">
                             Ag. Comprovante
                         </a>
-                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='confirmados') }}"
+                        <a href="{{ url_for('consultas.consultas_campanha_detalhe', id=campanha.id, filtro='confirmados') }}"
                             class="btn {% if filtro == 'confirmados' %}btn-success{% else %}btn-outline-success{% endif %}">
                             Confirmados
                         </a>
-                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='cancelados') }}"
+                        <a href="{{ url_for('consultas.consultas_campanha_detalhe', id=campanha.id, filtro='cancelados') }}"
                             class="btn {% if filtro == 'cancelados' %}btn-dark{% else %}btn-outline-dark{% endif %}">
                             Cancelados
                         </a>
-                        <a href="{{ url_for('consultas_campanha_detalhe', id=campanha.id, filtro='rejeitados') }}"
+                        <a href="{{ url_for('consultas.consultas_campanha_detalhe', id=campanha.id, filtro='rejeitados') }}"
                             class="btn {% if filtro == 'rejeitados' %}btn-danger{% else %}btn-outline-danger{% endif %}">
                             Rejeitados
                         </a>
@@ -360,7 +360,7 @@
                                 <td class="text-center table-actions">
                                     <div class="d-flex justify-content-center gap-1 flex-wrap">
                                         <!-- Ver Detalhes/Chat -->
-                                        <a href="{{ url_for('consulta_detalhe', id=consulta.id) }}"
+                                        <a href="{{ url_for('consultas.consulta_detalhe', id=consulta.id) }}"
                                             class="btn btn-sm btn-outline-primary" title="Ver detalhes e chat">
                                             <i class="bi bi-chat-dots"></i>
                                         </a>
@@ -754,7 +754,7 @@
             .then(data => {
                 if (data.sucesso) {
                     alert('Campanha excluida!');
-                    window.location.href = '{{ url_for("consultas_dashboard") }}';
+                    window.location.href = '{{ url_for("consultas.consultas_dashboard") }}';
                 } else {
                     alert('Erro: ' + (data.erro || 'Desconhecido'));
                 }

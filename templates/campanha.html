@@ -8,7 +8,7 @@
     <div class="col-12 mb-4">
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('fila.dashboard') }}">Dashboard</a></li>
                 <li class="breadcrumb-item active">{{ campanha.nome }}</li>
             </ol>
         </nav>
@@ -31,7 +31,7 @@
                 </button>
                 {% endif %}
 
-                <a href="{{ url_for('exportar_campanha', id=campanha.id) }}" class="btn btn-success">
+                <a href="{{ url_for('fila.exportar_campanha', id=campanha.id) }}" class="btn btn-success">
                     <i class="bi bi-download"></i> Exportar Excel
                 </a>
 
@@ -42,7 +42,7 @@
                     <ul class="dropdown-menu">
                         {% if campanha.status != 'em_andamento' %}
                         <li>
-                            <form method="POST" action="{{ url_for('excluir_campanha', id=campanha.id) }}"
+                            <form method="POST" action="{{ url_for('fila.excluir_campanha', id=campanha.id) }}"
                                   onsubmit="return confirm('Tem certeza que deseja excluir esta campanha?');">
                                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="dropdown-item text-danger">
@@ -192,27 +192,27 @@
 
                     <!-- Filtros -->
                     <div class="btn-group btn-group-sm">
-                        <a href="{{ url_for('campanha_detalhe', id=campanha.id, filtro='todos') }}"
+                        <a href="{{ url_for('fila.campanha_detalhe', id=campanha.id, filtro='todos') }}"
                            class="btn btn-outline-secondary {% if filtro == 'todos' %}active{% endif %}">
                             Todos
                         </a>
-                        <a href="{{ url_for('campanha_detalhe', id=campanha.id, filtro='confirmados') }}"
+                        <a href="{{ url_for('fila.campanha_detalhe', id=campanha.id, filtro='confirmados') }}"
                            class="btn btn-outline-success {% if filtro == 'confirmados' %}active{% endif %}">
                             Confirmados
                         </a>
-                        <a href="{{ url_for('campanha_detalhe', id=campanha.id, filtro='rejeitados') }}"
+                        <a href="{{ url_for('fila.campanha_detalhe', id=campanha.id, filtro='rejeitados') }}"
                            class="btn btn-outline-warning {% if filtro == 'rejeitados' %}active{% endif %}">
                             Rejeitados
                         </a>
-                        <a href="{{ url_for('campanha_detalhe', id=campanha.id, filtro='aguardando') }}"
+                        <a href="{{ url_for('fila.campanha_detalhe', id=campanha.id, filtro='aguardando') }}"
                            class="btn btn-outline-info {% if filtro == 'aguardando' %}active{% endif %}">
                             Aguardando
                         </a>
-                        <a href="{{ url_for('campanha_detalhe', id=campanha.id, filtro='pendentes') }}"
+                        <a href="{{ url_for('fila.campanha_detalhe', id=campanha.id, filtro='pendentes') }}"
                            class="btn btn-outline-secondary {% if filtro == 'pendentes' %}active{% endif %}">
                             Pendentes
                         </a>
-                        <a href="{{ url_for('campanha_detalhe', id=campanha.id, filtro='erros') }}"
+                        <a href="{{ url_for('fila.campanha_detalhe', id=campanha.id, filtro='erros') }}"
                            class="btn btn-outline-danger {% if filtro == 'erros' %}active{% endif %}">
                             Erros
                         </a>
@@ -291,7 +291,7 @@
                                 </td>
                                 <td class="text-center">
                                     <div class="btn-group btn-group-sm">
-                                        <a href="{{ url_for('contato_detalhes_pagina', id=contato.id) }}"
+                                        <a href="{{ url_for('fila.contato_detalhes_pagina', id=contato.id) }}"
                                            class="btn btn-outline-info" title="Ver detalhes e histórico">
                                             <i class="bi bi-info-circle"></i>
                                         </a>
@@ -325,7 +325,7 @@
                     <ul class="pagination justify-content-center mb-0">
                         {% if contatos.has_prev %}
                         <li class="page-item">
-                            <a class="page-link" href="{{ url_for('campanha_detalhe', id=campanha.id, page=contatos.prev_num, filtro=filtro) }}">
+                            <a class="page-link" href="{{ url_for('fila.campanha_detalhe', id=campanha.id, page=contatos.prev_num, filtro=filtro) }}">
                                 Anterior
                             </a>
                         </li>
@@ -334,7 +334,7 @@
                         {% for page in contatos.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
                             {% if page %}
                             <li class="page-item {% if page == contatos.page %}active{% endif %}">
-                                <a class="page-link" href="{{ url_for('campanha_detalhe', id=campanha.id, page=page, filtro=filtro) }}">
+                                <a class="page-link" href="{{ url_for('fila.campanha_detalhe', id=campanha.id, page=page, filtro=filtro) }}">
                                     {{ page }}
                                 </a>
                             </li>
@@ -345,7 +345,7 @@
 
                         {% if contatos.has_next %}
                         <li class="page-item">
-                            <a class="page-link" href="{{ url_for('campanha_detalhe', id=campanha.id, page=contatos.next_num, filtro=filtro) }}">
+                            <a class="page-link" href="{{ url_for('fila.campanha_detalhe', id=campanha.id, page=contatos.next_num, filtro=filtro) }}">
                                 Proximo
                             </a>
                         </li>

@@ -56,7 +56,7 @@
                                 <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#modalEditarFAQ{{ faq.id }}">
                                     <i class="bi bi-pencil"></i>
                                 </button>
-                                <form method="POST" action="{{ url_for('excluir_faq', id=faq.id) }}" style="display:inline;" onsubmit="return confirm('Tem certeza?')">
+                                <form method="POST" action="{{ url_for('fila.excluir_faq', id=faq.id) }}" style="display:inline;" onsubmit="return confirm('Tem certeza?')">
                                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                     <button type="submit" class="btn btn-sm btn-outline-danger">
                                         <i class="bi bi-trash"></i>
@@ -69,7 +69,7 @@
                         <div class="modal fade" id="modalEditarFAQ{{ faq.id }}" tabindex="-1">
                             <div class="modal-dialog">
                                 <div class="modal-content">
-                                    <form method="POST" action="{{ url_for('editar_faq', id=faq.id) }}">
+                                    <form method="POST" action="{{ url_for('fila.editar_faq', id=faq.id) }}">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                         <div class="modal-header">
                                             <h5 class="modal-title">Editar FAQ</h5>
@@ -126,7 +126,7 @@
 <div class="modal fade" id="modalNovoFAQ" tabindex="-1">
     <div class="modal-dialog">
         <div class="modal-content">
-            <form method="POST" action="{{ url_for('criar_faq') }}">
+            <form method="POST" action="{{ url_for('fila.criar_faq') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-header">
                     <h5 class="modal-title">Nova Resposta Automática</h5>

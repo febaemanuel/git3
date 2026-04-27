@@ -189,19 +189,19 @@
                     {% if current_user.tipo_sistema == 'AGENDAMENTO_CONSULTA' %}
                     <!-- MODO CONSULTA -->
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('consultas_dashboard') }}">
+                        <a class="nav-link" href="{{ url_for('consultas.consultas_dashboard') }}">
                             <i class="bi bi-calendar-check"></i> Consultas
                         </a>
                     </li>
                     {% else %}
                     <!-- FILA CIRÚRGICA (padrão) -->
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('dashboard') }}">
+                        <a class="nav-link" href="{{ url_for('fila.dashboard') }}">
                             <i class="bi bi-speedometer2"></i> Dashboard
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('relatorios') }}">
+                        <a class="nav-link" href="{{ url_for('fila.relatorios') }}">
                             <i class="bi bi-bar-chart-line"></i> Relatórios
                         </a>
                     </li>
@@ -210,17 +210,17 @@
                             <i class="bi bi-graph-up"></i> Análises
                         </a>
                         <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('dashboard_sentimentos') }}">
+                            <li><a class="dropdown-item" href="{{ url_for('fila.dashboard_sentimentos') }}">
                                 <i class="bi bi-emoji-smile"></i> Sentimentos
                             </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('logs') }}">
+                            <li><a class="dropdown-item" href="{{ url_for('fila.logs') }}">
                                 <i class="bi bi-chat-dots"></i> Logs
                             </a></li>
                         </ul>
                     </li>
                     {% endif %}
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('gerenciar_faq') }}">
+                        <a class="nav-link" href="{{ url_for('fila.gerenciar_faq') }}">
                             <i class="bi bi-chat-square-text"></i> FAQ
                         </a>
                     </li>
@@ -229,22 +229,22 @@
                             <i class="bi bi-gear"></i> Configurações
                         </a>
                         <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="{{ url_for('configuracoes') }}">
+                            <li><a class="dropdown-item" href="{{ url_for('fila.configuracoes') }}">
                                 <i class="bi bi-whatsapp"></i> WhatsApp
                             </a></li>
-                            <li><a class="dropdown-item" href="{{ url_for('configurar_followup') }}">
+                            <li><a class="dropdown-item" href="{{ url_for('fila.configurar_followup') }}">
                                 <i class="bi bi-arrow-repeat"></i> Follow-up
                             </a></li>
                         </ul>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('tutorial') }}">
+                        <a class="nav-link" href="{{ url_for('fila.tutorial') }}">
                             <i class="bi bi-book"></i> Tutorial
                         </a>
                     </li>
                     {% if current_user.is_admin %}
                     <li class="nav-item">
-                        <a class="nav-link text-warning" href="{{ url_for('admin_dashboard') }}">
+                        <a class="nav-link text-warning" href="{{ url_for('admin.admin_dashboard') }}">
                             <i class="bi bi-shield-lock"></i> Admin
                         </a>
                     </li>
@@ -258,12 +258,12 @@
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             {% if current_user.is_admin %}
-                            <li><a class="dropdown-item" href="{{ url_for('admin_dashboard') }}">
+                            <li><a class="dropdown-item" href="{{ url_for('admin.admin_dashboard') }}">
                                 <i class="bi bi-shield-lock"></i> Painel Admin
                             </a></li>
                             <li><hr class="dropdown-divider"></li>
                             {% endif %}
-                            <li><a class="dropdown-item" href="{{ url_for('logout') }}">
+                            <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">
                                 <i class="bi bi-box-arrow-right"></i> Sair
                             </a></li>
                         </ul>

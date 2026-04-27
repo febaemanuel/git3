@@ -1816,7 +1816,7 @@ def processar_envio_pesquisa(self, envio_id):
         from app import app as flask_app
         with flask_app.app_context():
             with flask_app.test_request_context():
-                link_publico = url_for('pesquisa_publica',
+                link_publico = url_for('pesquisa_publica.pesquisa_publica',
                                        token=pesquisa.token_publico,
                                        _external=True)
 

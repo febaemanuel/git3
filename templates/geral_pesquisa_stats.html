@@ -12,12 +12,12 @@
 
 <div class="row">
     <div class="col-12 mb-3">
-        <a href="{{ url_for('geral_pesquisa_detalhe', id=pesquisa.id) }}" class="btn btn-link p-0">
+        <a href="{{ url_for('geral.geral_pesquisa_detalhe', id=pesquisa.id) }}" class="btn btn-link p-0">
             <i class="bi bi-arrow-left"></i> Voltar à pesquisa
         </a>
         <div class="d-flex justify-content-between align-items-center mt-2">
             <h2 class="mb-0"><i class="bi bi-bar-chart"></i> {{ pesquisa.titulo }}</h2>
-            <a href="{{ url_for('geral_pesquisa_exportar', id=pesquisa.id) }}" class="btn btn-outline-success">
+            <a href="{{ url_for('geral.geral_pesquisa_exportar', id=pesquisa.id) }}" class="btn btn-outline-success">
                 <i class="bi bi-file-earmark-excel"></i> Exportar Excel
             </a>
         </div>

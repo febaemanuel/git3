@@ -42,7 +42,7 @@
                         <button type="submit" class="btn btn-whatsapp">
                             <i class="bi bi-filter"></i> Filtrar
                         </button>
-                        <a href="{{ url_for('logs') }}" class="btn btn-outline-secondary">
+                        <a href="{{ url_for('fila.logs') }}" class="btn btn-outline-secondary">
                             <i class="bi bi-x"></i> Limpar
                         </a>
                     </div>
@@ -108,7 +108,7 @@
                                 </td>
                                 <td>
                                     {% if log.campanha %}
-                                    <a href="{{ url_for('campanha_detalhes', id=log.campanha_id) }}">
+                                    <a href="{{ url_for('fila.campanha_detalhe', id=log.campanha_id) }}">
                                         {{ log.campanha.nome[:20] }}
                                     </a>
                                     {% else %}
@@ -127,7 +127,7 @@
                     <ul class="pagination justify-content-center mb-0">
                         {% if logs.has_prev %}
                         <li class="page-item">
-                            <a class="page-link" href="{{ url_for('logs', page=logs.prev_num, campanha_id=campanha_id, direcao=direcao) }}">
+                            <a class="page-link" href="{{ url_for('fila.logs', page=logs.prev_num, campanha_id=campanha_id, direcao=direcao) }}">
                                 Anterior
                             </a>
                         </li>
@@ -136,7 +136,7 @@
                         {% for page in logs.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
                             {% if page %}
                             <li class="page-item {% if page == logs.page %}active{% endif %}">
-                                <a class="page-link" href="{{ url_for('logs', page=page, campanha_id=campanha_id, direcao=direcao) }}">
+                                <a class="page-link" href="{{ url_for('fila.logs', page=page, campanha_id=campanha_id, direcao=direcao) }}">
                                     {{ page }}
                                 </a>
                             </li>
@@ -147,7 +147,7 @@
 
                         {% if logs.has_next %}
                         <li class="page-item">
-                            <a class="page-link" href="{{ url_for('logs', page=logs.next_num, campanha_id=campanha_id, direcao=direcao) }}">
+                            <a class="page-link" href="{{ url_for('fila.logs', page=logs.next_num, campanha_id=campanha_id, direcao=direcao) }}">
                                 Proximo
                             </a>
                         </li>

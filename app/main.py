@@ -1,30 +1,14 @@
-"""
-=============================================================================
-BUSCA ATIVA DE PACIENTES - HUWC/CHUFC
-Sistema Completo para Envio de Mensagens WhatsApp
-=============================================================================
+"""Shared module for the BUSCA ATIVA / Agendamento / GERAL stack.
 
-Funcionalidades:
-- Upload de planilha Excel com contatos
-- Verificacao de numeros no WhatsApp (Evolution API)
-- Envio automatizado de mensagens personalizadas
-- Recepcao de respostas via webhook
-- Dashboard com estatisticas em tempo real
-- Exportacao de relatorios Excel
-- Historico de mensagens
-- Controle de limite diario
-
-Usuario Admin Padrao:
-- Email: admin@huwc.com
-- Senha: admin123
-
-Versao: 2.0
+Holds the constants, helper functions, AI/OCR classes and seed routines
+that the route blueprints (app/routes/*) consume. The Flask app itself is
+built by ``app.create_app()``; this module only contributes data and
+behavior, not application construction.
 """
 
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
+from flask import render_template, request, redirect, url_for, flash, jsonify, send_file
 from flask_login import login_user, logout_user, login_required, current_user
 from app.extensions import db, login_manager, csrf
-from app.config import BaseConfig, BASE_DIR
 from app.services.timezone import (
     TZ_FORTALEZA,
     obter_agora_fortaleza,
@@ -61,17 +45,6 @@ import json
 from io import BytesIO
 
 
-# Carregar variaveis de ambiente do .env
-try:
-    from dotenv import load_dotenv
-    load_dotenv()
-except ImportError:
-    pass
-
-# =============================================================================
-# CONFIGURACAO
-# =============================================================================
-
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
@@ -90,23 +63,6 @@ except ImportError as e:
     celery_app = None
     AsyncResult = None
     logger.warning(f"Celery não disponível - funcionalidades assíncronas desabilitadas: {e}")
-
-_STATIC_DIR = os.path.join(BASE_DIR, 'static')
-app = Flask(
-    __name__,
-    template_folder=os.path.join(BASE_DIR, 'templates'),
-    static_folder=_STATIC_DIR if os.path.isdir(_STATIC_DIR) else None,
-)
-app.config.from_object(BaseConfig)
-
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-
-db.init_app(app)
-csrf.init_app(app)
-login_manager.init_app(app)
-login_manager.login_view = 'login'
-login_manager.login_message = 'Faca login para acessar.'
-login_manager.login_message_category = 'warning'
 
 # Constantes
 ADMIN_EMAIL = 'admin@huwc.com'
@@ -862,13 +818,6 @@ def get_dashboard_route():
         return 'fila.dashboard'
     return 'auth.login'
 
-@app.context_processor
-def inject_dashboard_route():
-    """Disponibiliza get_dashboard_route nos templates"""
-    return dict(get_dashboard_route=get_dashboard_route)
-
-
-
 def processar_planilha(arquivo, campanha_id):
     try:
         df = pd.read_excel(arquivo)
@@ -1088,6 +1037,7 @@ def validar_campanha_bg(campanha_id):
     Mantida apenas para compatibilidade temporária.
     Use tasks.validar_campanha_task.delay(campanha_id) ao invés desta função.
     """
+    from app import app  # lazy: avoids circular import
     with app.app_context():
         try:
             camp = db.session.get(Campanha, campanha_id)
@@ -1177,6 +1127,7 @@ def enviar_campanha_bg(campanha_id):
     Mantida apenas para compatibilidade temporária.
     Use tasks.enviar_campanha_task.delay(campanha_id) ao invés desta função.
     """
+    from app import app  # lazy: avoids circular import
     with app.app_context():
         try:
             camp = db.session.get(Campanha, campanha_id)
@@ -1342,6 +1293,7 @@ def processar_followup_bg():
     Mantida apenas para compatibilidade temporária.
     Use tasks.follow_up_automatico_task.delay() ao invés desta função.
     """
+    from app import app  # lazy: avoids circular import
     with app.app_context():
         try:
             config = ConfigTentativas.get()
@@ -3111,42 +3063,4 @@ def _get_envio_do_usuario(envio_id):
 
 
 
-# CLI
-@app.cli.command('init-db')
-def init_db():
-    db.create_all()
-    criar_admin()
-    print(f"DB criado! Admin: {ADMIN_EMAIL} / {ADMIN_SENHA}")
 
-
-# Init
-# =============================================================================
-# CELERY TASK STATUS
-# =============================================================================
-
-
-
-
-
-# =============================================================================
-# BLUEPRINTS
-# =============================================================================
-
-from app.routes import register_blueprints
-register_blueprints(app)
-
-# =============================================================================
-# INICIALIZACAO
-# =============================================================================
-
-with app.app_context():
-    db.create_all()
-    criar_admin()
-    criar_faqs_padrao()
-    criar_tutoriais_padrao()
-
-
-if __name__ == '__main__':
-    debug = os.environ.get('DEBUG', 'True').lower() in ('true', '1', 'yes')
-    port = int(os.environ.get('PORT', 5001))
-    app.run(debug=debug, host='0.0.0.0', port=port)

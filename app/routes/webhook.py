@@ -1,4 +1,4 @@
-"""Evolution-API webhook endpoint."""
+"""Evolution-API receive endpoint."""
 
 import threading
 from datetime import datetime, timedelta
@@ -37,9 +37,9 @@ from app.services.whatsapp import WhatsApp
 bp = Blueprint('webhook', __name__)
 
 
-@bp.route('/webhook/whatsapp', methods=['POST'])
+@bp.route('/receive/whatsapp', methods=['POST'])
 @csrf.exempt
-def webhook():
+def receive():
     try:
         data = request.get_json()
         if not data:
@@ -121,7 +121,7 @@ def webhook():
         elif len(numero) == 13:
             numeros_buscar.append(numero[:4] + numero[5:])  # Sem 9º dígito
 
-        # Verificar se esta mensagem já foi processada por OUTRO webhook (outro usuário)
+        # Verificar se esta mensagem já foi processada por OUTRO receive (outro usuário)
         from datetime import timedelta
         cinco_segundos_atras = datetime.utcnow() - timedelta(seconds=5)
 
@@ -134,7 +134,7 @@ def webhook():
         ).first()
 
         if log_global_consulta:
-            logger.debug(f"Webhook: Mensagem já processada por outro webhook de consulta. Ignorando.")
+            logger.debug(f"Webhook: Mensagem já processada por outro receive de consulta. Ignorando.")
             return jsonify({'status': 'ok'}), 200
 
         # Buscar log global por telefone (qualquer cirurgia/fila)
@@ -146,7 +146,7 @@ def webhook():
         ).first()
 
         if log_global_fila:
-            logger.debug(f"Webhook: Mensagem já processada por outro webhook de fila. Ignorando.")
+            logger.debug(f"Webhook: Mensagem já processada por outro receive de fila. Ignorando.")
             return jsonify({'status': 'ok'}), 200
 
         # =====================================================================
@@ -660,7 +660,7 @@ def webhook():
                                     ).rowcount
                                     db.session.commit()
                                     if rows == 0:
-                                        # Outro webhook já reivindicou este comprovante — fluxo normal
+                                        # Outro receive já reivindicou este comprovante — fluxo normal
                                         enviar_e_registrar_consulta(ws, numero_resposta, "✅ Consulta confirmada! Aguarde o envio do comprovante.", consulta)
                                     else:
                                         db.session.refresh(comp_ant)
@@ -1510,7 +1510,7 @@ _Hospital Universitário Walter Cantídio_""")
 
         elif c.status == 'concluido':
             # Se o usuario mandar mensagem depois de concluido, reforcar o status uma única vez
-            # (FAQ já foi verificado no início do webhook)
+            # (FAQ já foi verificado no início do receive)
             # Cooldown de 24h POR NÚMERO para evitar spam e bloqueio no WhatsApp
             um_dia_atras = datetime.utcnow() - timedelta(hours=24)
             msg_concluido_recente = LogMsg.query.filter(
@@ -1558,6 +1558,6 @@ _Hospital Universitário Walter Cantídio_""")
     except Exception as e:
         logger.error(f"Webhook erro: {e}")
         return jsonify({'status': 'error'}), 500
-@bp.route('/webhook/whatsapp', methods=['GET'])
-def webhook_check():
+@bp.route('/receive/whatsapp', methods=['GET'])
+def check():
     return jsonify({'status': 'ok', 'app': 'Busca Ativa HUWC'}), 200

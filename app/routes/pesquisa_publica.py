@@ -19,7 +19,7 @@ bp = Blueprint('pesquisa_publica', __name__)
 
 @bp.route('/p/<token>', methods=['GET', 'POST'])
 @csrf.exempt  # link é compartilhado externamente; usa token na URL como autorização
-def pesquisa_publica(token):
+def responder(token):
     pesquisa = Pesquisa.query.filter_by(token_publico=token).first_or_404()
 
     if not pesquisa.ativa:

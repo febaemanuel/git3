@@ -4,7 +4,7 @@
 {% block content %}
 <div class="row">
     <div class="col-12 mb-3">
-        <a href="{{ url_for('geral.geral_pesquisa_detalhe', id=envio.pesquisa_id) }}" class="btn btn-link p-0">
+        <a href="{{ url_for('geral.pesquisa_detalhe', id=envio.pesquisa_id) }}" class="btn btn-link p-0">
             <i class="bi bi-arrow-left"></i> Voltar à pesquisa
         </a>
         <div class="d-flex justify-content-between align-items-end mt-2">
@@ -17,19 +17,19 @@
             </div>
             <div>
                 {% if envio.status == 'enviando' %}
-                    <form method="POST" action="{{ url_for('geral.geral_envio_pausar', envio_id=envio.id) }}" class="d-inline">
+                    <form method="POST" action="{{ url_for('geral.envio_pausar', envio_id=envio.id) }}" class="d-inline">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button class="btn btn-warning"><i class="bi bi-pause-circle"></i> Pausar</button>
                     </form>
                 {% elif envio.status in ('pausado', 'erro') %}
-                    <form method="POST" action="{{ url_for('geral.geral_envio_continuar', envio_id=envio.id) }}" class="d-inline">
+                    <form method="POST" action="{{ url_for('geral.envio_continuar', envio_id=envio.id) }}" class="d-inline">
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button class="btn btn-success"><i class="bi bi-play-circle"></i> Retomar</button>
                     </form>
                 {% endif %}
 
                 {% if envio.falhas > 0 %}
-                <form method="POST" action="{{ url_for('geral.geral_envio_reenviar_falhas', envio_id=envio.id) }}" class="d-inline"
+                <form method="POST" action="{{ url_for('geral.envio_reenviar_falhas', envio_id=envio.id) }}" class="d-inline"
                       onsubmit="return confirm('Criar novo lote contendo apenas os {{ envio.falhas }} números que falharam?');">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button class="btn btn-outline-danger">
@@ -137,7 +137,7 @@
 
 <script>
 (function () {
-    var statusUrl = "{{ url_for('geral.geral_envio_status', envio_id=envio.id) }}";
+    var statusUrl = "{{ url_for('geral.envio_status', envio_id=envio.id) }}";
     var statusEl = document.querySelector('[data-status]');
     var statusMsgEl = document.querySelector('[data-status-msg]');
     var progressEl = document.querySelector('[data-progress]');

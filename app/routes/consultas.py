@@ -507,7 +507,7 @@ def enviar_lote_comprovantes_antecipados(campanha_id):
 
 @bp.route('/consultas/dashboard')
 @login_required
-def consultas_dashboard():
+def dashboard():
     """Dashboard principal - lista de campanhas de consultas"""
     tipo_sistema = getattr(current_user, 'tipo_sistema', 'BUSCA_ATIVA')
     if tipo_sistema != 'AGENDAMENTO_CONSULTA':
@@ -539,7 +539,7 @@ def consultas_dashboard():
 
 @bp.route('/consultas/tutorial')
 @login_required
-def consultas_tutorial():
+def tutorial():
     """Tutorial completo do Modo Consulta"""
     return render_template('tutorial_consultas.html')
 
@@ -550,7 +550,7 @@ def consultas_tutorial():
 
 @bp.route('/consultas/importar', methods=['GET', 'POST'])
 @login_required
-def consultas_importar():
+def importar():
     """Importa planilha Excel com consultas"""
     tipo_sistema = getattr(current_user, 'tipo_sistema', 'BUSCA_ATIVA')
     if tipo_sistema != 'AGENDAMENTO_CONSULTA':
@@ -591,13 +591,13 @@ def consultas_importar():
             if not config_whatsapp:
                 flash('❌ ERRO: Você precisa configurar o WhatsApp antes de criar campanhas de consulta! '
                       'Acesse Configurações no menu superior.', 'danger')
-                return redirect(url_for('consultas.consultas_dashboard'))
+                return redirect(url_for('consultas.dashboard'))
 
             ws_test = WhatsApp(current_user.id)
             if not ws_test.ok():
                 flash('❌ ERRO: WhatsApp não está configurado corretamente. '
                       'Acesse Configurações no menu superior e configure o WhatsApp.', 'danger')
-                return redirect(url_for('consultas.consultas_dashboard'))
+                return redirect(url_for('consultas.dashboard'))
 
             # Ler planilha
             df = pd.read_excel(arquivo, dtype=str)
@@ -735,7 +735,7 @@ def consultas_importar():
             db.session.commit()
 
             flash(f'Campanha criada com sucesso! {consultas_criadas} consultas importadas.', 'success')
-            return redirect(url_for('consultas.consultas_campanha_detalhe', id=campanha.id))
+            return redirect(url_for('consultas.campanha_detalhe', id=campanha.id))
 
         except Exception as e:
             db.session.rollback()
@@ -752,14 +752,14 @@ def consultas_importar():
 
 @bp.route('/consultas/campanha/<int:id>')
 @login_required
-def consultas_campanha_detalhe(id):
+def campanha_detalhe(id):
     """Detalhes de uma campanha de consultas"""
     campanha = CampanhaConsulta.query.get_or_404(id)
 
     # Verificar permissão
     if campanha.criador_id != current_user.id and not current_user.is_admin:
         flash('Acesso negado', 'danger')
-        return redirect(url_for('consultas.consultas_dashboard'))
+        return redirect(url_for('consultas.dashboard'))
 
     # Atualizar estatísticas
     campanha.atualizar_stats()
@@ -815,7 +815,7 @@ def consultas_campanha_detalhe(id):
 
 @bp.route('/consultas/campanha/<int:id>/iniciar', methods=['POST'])
 @login_required
-def consultas_campanha_iniciar(id):
+def campanha_iniciar(id):
     """Inicia envio automático da campanha"""
     campanha = CampanhaConsulta.query.get_or_404(id)
 
@@ -824,7 +824,7 @@ def consultas_campanha_iniciar(id):
 
     if not enviar_campanha_consultas_task:
         flash('Celery não está disponível', 'danger')
-        return redirect(url_for('consultas.consultas_campanha_detalhe', id=id))
+        return redirect(url_for('consultas.campanha_detalhe', id=id))
 
     try:
         # VALIDAÇÃO CRÍTICA: Verificar se a campanha pertence a usuário com WhatsApp
@@ -833,7 +833,7 @@ def consultas_campanha_iniciar(id):
         if not config_whatsapp:
             flash(f'❌ ERRO CRÍTICO: A campanha foi criada por um usuário (ID {campanha.criador_id}) que não tem WhatsApp configurado! '
                   f'Não é possível enviar mensagens. Contate o administrador.', 'danger')
-            return redirect(url_for('consultas.consultas_campanha_detalhe', id=id))
+            return redirect(url_for('consultas.campanha_detalhe', id=id))
 
         # Verificar WhatsApp do usuário atual (se for diferente do criador)
         if current_user.id != campanha.criador_id:
@@ -845,12 +845,12 @@ def consultas_campanha_iniciar(id):
 
         if not ws.ok():
             flash('Configure o WhatsApp antes de iniciar. Acesse Configurações no menu superior.', 'warning')
-            return redirect(url_for('consultas.consultas_dashboard'))
+            return redirect(url_for('consultas.dashboard'))
 
         conn, _ = ws.conectado()
         if not conn:
             flash('WhatsApp desconectado. Acesse Configurações no menu superior para conectar.', 'warning')
-            return redirect(url_for('consultas.consultas_dashboard'))
+            return redirect(url_for('consultas.dashboard'))
 
         # Iniciar task
         task = enviar_campanha_consultas_task.delay(campanha.id)
@@ -865,12 +865,12 @@ def consultas_campanha_iniciar(id):
         logger.exception(f"Erro ao iniciar envio: {e}")
         flash(f'Erro ao iniciar envio: {str(e)}', 'danger')
 
-    return redirect(url_for('consultas.consultas_campanha_detalhe', id=id))
+    return redirect(url_for('consultas.campanha_detalhe', id=id))
 
 
 @bp.route('/consultas/campanha/<int:id>/pausar', methods=['POST'])
 @login_required
-def consultas_campanha_pausar(id):
+def campanha_pausar(id):
     """Pausa envio da campanha"""
     campanha = CampanhaConsulta.query.get_or_404(id)
 
@@ -882,12 +882,12 @@ def consultas_campanha_pausar(id):
     db.session.commit()
 
     flash('Campanha pausada', 'info')
-    return redirect(url_for('consultas.consultas_campanha_detalhe', id=id))
+    return redirect(url_for('consultas.campanha_detalhe', id=id))
 
 
 @bp.route('/consultas/campanha/<int:id>/continuar', methods=['POST'])
 @login_required
-def consultas_campanha_continuar(id):
+def campanha_continuar(id):
     """Continua envio pausado"""
     campanha = CampanhaConsulta.query.get_or_404(id)
 
@@ -896,7 +896,7 @@ def consultas_campanha_continuar(id):
 
     if not enviar_campanha_consultas_task:
         flash('Celery não está disponível', 'danger')
-        return redirect(url_for('consultas.consultas_campanha_detalhe', id=id))
+        return redirect(url_for('consultas.campanha_detalhe', id=id))
 
     try:
         # Reiniciar task
@@ -912,7 +912,7 @@ def consultas_campanha_continuar(id):
         logger.exception(f"Erro ao continuar envio: {e}")
         flash(f'Erro ao continuar envio: {str(e)}', 'danger')
 
-    return redirect(url_for('consultas.consultas_campanha_detalhe', id=id))
+    return redirect(url_for('consultas.campanha_detalhe', id=id))
 
 
 # =========================================================================
@@ -921,14 +921,14 @@ def consultas_campanha_continuar(id):
 
 @bp.route('/consultas/consulta/<int:id>')
 @login_required
-def consulta_detalhe(id):
+def detalhe(id):
     """Detalhes de uma consulta individual"""
     consulta = AgendamentoConsulta.query.get_or_404(id)
 
     # Verificar permissão
     if consulta.usuario_id != current_user.id and not current_user.is_admin:
         flash('Acesso negado', 'danger')
-        return redirect(url_for('consultas.consultas_dashboard'))
+        return redirect(url_for('consultas.dashboard'))
 
     # Buscar logs de mensagens
     logs = LogMsgConsulta.query.filter_by(consulta_id=consulta.id).order_by(LogMsgConsulta.data.asc()).all()
@@ -985,7 +985,7 @@ def download_comprovante_publico(consulta_id):
 
 @bp.route('/api/consulta/<int:id>/enviar_comprovante', methods=['POST'])
 @login_required
-def consulta_enviar_comprovante(id):
+def enviar_comprovante(id):
     """Envia comprovante (PDF/JPG) para o paciente (MSG 2) - ASSÍNCRONO"""
     consulta = AgendamentoConsulta.query.get_or_404(id)
 
@@ -1078,7 +1078,7 @@ def consulta_enviar_comprovante(id):
 
 @bp.route('/api/consulta/<int:consulta_id>/reagendar', methods=['POST'])
 @login_required
-def reagendar_consulta_manual(consulta_id):
+def reagendar_manual(consulta_id):
     """
     Processa o reagendamento manual de uma consulta.
     O admin informa nova data/hora. O sistema envia msg confirmando.
@@ -1156,7 +1156,7 @@ _Hospital Universitário Walter Cantídio_"""
 
 @bp.route('/api/consulta/<int:id>/confirmar', methods=['POST'])
 @login_required
-def consulta_confirmar_manual(id):
+def confirmar_manual(id):
     """Confirma consulta manualmente (sem comprovante)"""
     consulta = AgendamentoConsulta.query.get_or_404(id)
 
@@ -1185,7 +1185,7 @@ def consulta_confirmar_manual(id):
 
 @bp.route('/api/consulta/<int:id>/cancelar', methods=['POST'])
 @login_required
-def consulta_cancelar_manual(id):
+def cancelar_manual(id):
     """Cancela/rejeita consulta manualmente"""
     consulta = AgendamentoConsulta.query.get_or_404(id)
 
@@ -1221,19 +1221,19 @@ def consulta_cancelar_manual(id):
 
 @bp.route('/consultas/campanha/<int:id>/progresso')
 @login_required
-def consultas_campanha_progresso(id):
+def campanha_progresso(id):
     """Página de progresso do envio da campanha"""
     campanha = CampanhaConsulta.query.get_or_404(id)
 
     if campanha.criador_id != current_user.id and not current_user.is_admin:
         flash('Acesso negado', 'danger')
-        return redirect(url_for('consultas.consultas_dashboard'))
+        return redirect(url_for('consultas.dashboard'))
 
     task_id = request.args.get('task_id') or campanha.celery_task_id
 
     if not task_id:
         flash('Task ID não encontrado', 'warning')
-        return redirect(url_for('consultas.consultas_dashboard'))
+        return redirect(url_for('consultas.dashboard'))
 
     return render_template('progresso_campanha_consultas.html', campanha=campanha, task_id=task_id)
 
@@ -1244,7 +1244,7 @@ def consultas_campanha_progresso(id):
 
 @bp.route('/api/consulta/<int:id>/detalhes', methods=['GET'])
 @login_required
-def consulta_detalhes_api(id):
+def detalhes_api(id):
     """API: Retorna detalhes e histórico de mensagens de uma consulta"""
     consulta = AgendamentoConsulta.query.get_or_404(id)
 
@@ -1287,7 +1287,7 @@ def consulta_detalhes_api(id):
 
 @bp.route('/api/consulta/<int:id>/enviar_mensagem', methods=['POST'])
 @login_required
-def consulta_enviar_mensagem_manual(id):
+def enviar_mensagem_manual(id):
     """API: Envia mensagem manual para uma consulta"""
     consulta = AgendamentoConsulta.query.get_or_404(id)
 
@@ -1374,7 +1374,7 @@ def consulta_enviar_mensagem_manual(id):
 
 @bp.route('/api/consulta/<int:id>/excluir', methods=['DELETE', 'POST'])
 @login_required
-def consulta_excluir(id):
+def excluir(id):
     """Exclui uma consulta individual"""
     consulta = AgendamentoConsulta.query.get_or_404(id)
 
@@ -1414,7 +1414,7 @@ def consulta_excluir(id):
 
 @bp.route('/api/consulta/<int:id>/reenviar', methods=['POST'])
 @login_required
-def consulta_reenviar(id):
+def reenviar(id):
     """Reenvia mensagem de confirmação para uma consulta"""
     from app import formatar_mensagem_consulta_inicial
 
@@ -1512,7 +1512,7 @@ def consulta_reenviar(id):
 
 @bp.route('/api/consultas/campanha/<int:id>/editar', methods=['POST'])
 @login_required
-def consultas_campanha_editar(id):
+def campanha_editar(id):
     """Edita configurações da campanha"""
     campanha = CampanhaConsulta.query.get_or_404(id)
 
@@ -1569,7 +1569,7 @@ def consultas_campanha_editar(id):
 
 @bp.route('/api/consultas/campanha/<int:id>/excluir', methods=['DELETE', 'POST'])
 @login_required
-def consultas_campanha_excluir(id):
+def campanha_excluir(id):
     """Exclui uma campanha e todas as suas consultas"""
     campanha = CampanhaConsulta.query.get_or_404(id)
 
@@ -1690,7 +1690,7 @@ def pesquisas_export_csv():
 
 @bp.route('/consultas/historico')
 @login_required
-def consultas_historico():
+def historico():
     """Página de histórico de consultas dos pacientes"""
     tipo_sistema = getattr(current_user, 'tipo_sistema', 'BUSCA_ATIVA')
     if tipo_sistema != 'AGENDAMENTO_CONSULTA':
@@ -1752,13 +1752,13 @@ def consultas_historico():
 
 @bp.route('/consultas/historico/paciente/<int:id>')
 @login_required
-def consultas_historico_paciente(id):
+def historico_paciente(id):
     """Detalhes do histórico de um paciente específico"""
     paciente = Paciente.query.get_or_404(id)
 
     if paciente.usuario_id != current_user.id:
         flash('Acesso negado', 'danger')
-        return redirect(url_for('consultas.consultas_historico'))
+        return redirect(url_for('consultas.historico'))
 
     # Buscar todo o histórico do paciente
     historicos = HistoricoConsulta.query.filter_by(

@@ -12,15 +12,15 @@
         <div class="d-flex gap-2 align-items-center">
             <!-- Seletor de Modo -->
             <div class="btn-group" role="group" aria-label="Selecionar modo">
-                <a href="{{ url_for('admin.admin_dashboard', modo='consulta') }}"
+                <a href="{{ url_for('admin.dashboard', modo='consulta') }}"
                    class="btn {% if modo_selecionado == 'consulta' %}btn-success{% else %}btn-outline-success{% endif %}">
                     <i class="bi bi-calendar-check me-1"></i> Modo Consulta
                 </a>
-                <a href="{{ url_for('admin.admin_dashboard', modo='fila') }}"
+                <a href="{{ url_for('admin.dashboard', modo='fila') }}"
                    class="btn {% if modo_selecionado == 'fila' %}btn-dark{% else %}btn-outline-dark{% endif %}">
                     <i class="bi bi-people-fill me-1"></i> Modo Fila
                 </a>
-                <a href="{{ url_for('admin.admin_dashboard') }}"
+                <a href="{{ url_for('admin.dashboard') }}"
                    class="btn {% if modo_selecionado == 'todos' %}btn-primary{% else %}btn-outline-primary{% endif %}">
                     <i class="bi bi-grid me-1"></i> Todos
                 </a>
@@ -420,7 +420,7 @@
                                 {% set taxa = ((u.comprovantes_enviados or 0) / u.disparos_msg1 * 100)|round(1) if u.disparos_msg1 > 0 else 0 %}
                                 <tr>
                                     <td>
-                                        <a href="{{ url_for('admin.admin_usuario_detalhes', usuario_id=u.id) }}" class="text-decoration-none">
+                                        <a href="{{ url_for('admin.usuario_detalhes', usuario_id=u.id) }}" class="text-decoration-none">
                                             <strong>{{ u.nome }}</strong>
                                             <i class="bi bi-box-arrow-up-right ms-1 small"></i>
                                         </a>
@@ -571,7 +571,7 @@
                     </h5>
                     <div>
                         <span class="badge bg-secondary me-2">{{ total_comentarios }} no total</span>
-                        <a href="{{ url_for('admin.admin_comentarios') }}" class="btn btn-sm btn-primary">
+                        <a href="{{ url_for('admin.comentarios') }}" class="btn btn-sm btn-primary">
                             <i class="bi bi-list-ul me-1"></i> Ver Todos
                         </a>
                     </div>
@@ -787,7 +787,7 @@
                                 {% set taxa = ((u.confirmados or 0) / u.enviados * 100)|round(1) if u.enviados > 0 else 0 %}
                                 <tr>
                                     <td>
-                                        <a href="{{ url_for('admin.admin_usuario_detalhes', usuario_id=u.id) }}" class="text-decoration-none">
+                                        <a href="{{ url_for('admin.usuario_detalhes', usuario_id=u.id) }}" class="text-decoration-none">
                                             <strong>{{ u.nome }}</strong>
                                             <i class="bi bi-box-arrow-up-right ms-1 small"></i>
                                         </a>
@@ -1059,11 +1059,11 @@ function trocarModoExport(modo) {
     if (modo === 'consulta') {
         filtrosConsulta.style.display = 'block';
         filtrosFila.style.display = 'none';
-        form.action = '{{ url_for("admin.admin_exportar_dados") }}';
+        form.action = '{{ url_for("admin.exportar_dados") }}';
     } else {
         filtrosConsulta.style.display = 'none';
         filtrosFila.style.display = 'block';
-        form.action = '{{ url_for("admin.admin_exportar_fila") }}';
+        form.action = '{{ url_for("admin.exportar_fila") }}';
     }
 }
 
@@ -1109,7 +1109,7 @@ document.getElementById('modalExportar').addEventListener('hidden.bs.modal', fun
                 </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form action="{{ url_for('admin.admin_exportar_dados') }}" method="POST" id="formExportar" onsubmit="mostrarLoading()">
+            <form action="{{ url_for('admin.exportar_dados') }}" method="POST" id="formExportar" onsubmit="mostrarLoading()">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <div class="modal-body">
                     <p class="text-muted mb-3">Selecione os filtros para personalizar sua exportação:</p>

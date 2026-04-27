@@ -10,13 +10,13 @@
                 <p class="text-muted mb-0">Crie pesquisas/enquetes e compartilhe um link para o paciente responder.</p>
             </div>
             <div class="d-flex gap-2">
-                <a href="{{ url_for('geral.geral_dashboard') }}" class="btn btn-outline-secondary">
+                <a href="{{ url_for('geral.dashboard') }}" class="btn btn-outline-secondary">
                     <i class="bi bi-arrow-left"></i> Dashboard
                 </a>
-                <a href="{{ url_for('geral.geral_pesquisa_templates') }}" class="btn btn-outline-primary">
+                <a href="{{ url_for('geral.pesquisa_templates') }}" class="btn btn-outline-primary">
                     <i class="bi bi-collection"></i> Usar template
                 </a>
-                <a href="{{ url_for('geral.geral_pesquisa_nova') }}" class="btn btn-primary">
+                <a href="{{ url_for('geral.pesquisa_nova') }}" class="btn btn-primary">
                     <i class="bi bi-plus-lg"></i> Nova pesquisa
                 </a>
             </div>
@@ -59,10 +59,10 @@
                         </td>
                         <td>{{ p.data_criacao.strftime('%d/%m/%Y') if p.data_criacao else '-' }}</td>
                         <td class="text-end">
-                            <a href="{{ url_for('geral.geral_pesquisa_stats', id=p.id) }}" class="btn btn-sm btn-outline-success" title="Estatísticas">
+                            <a href="{{ url_for('geral.pesquisa_stats', id=p.id) }}" class="btn btn-sm btn-outline-success" title="Estatísticas">
                                 <i class="bi bi-bar-chart"></i>
                             </a>
-                            <a href="{{ url_for('geral.geral_pesquisa_detalhe', id=p.id) }}" class="btn btn-sm btn-primary">
+                            <a href="{{ url_for('geral.pesquisa_detalhe', id=p.id) }}" class="btn btn-sm btn-primary">
                                 <i class="bi bi-pencil"></i> Editar
                             </a>
                         </td>

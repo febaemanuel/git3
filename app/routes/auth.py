@@ -48,7 +48,7 @@ def logout():
     logout_user()
     return redirect(url_for('auth.login'))
 @bp.route('/cadastro', methods=['GET', 'POST'])
-def cadastro_publico():
+def cadastro():
     if current_user.is_authenticated:
         return redirect(url_for(get_dashboard_route()))
 

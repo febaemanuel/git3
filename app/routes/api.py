@@ -16,7 +16,7 @@ bp = Blueprint('api', __name__)
 
 @bp.route('/api/whatsapp/conectar', methods=['POST'])
 @login_required
-def api_conectar_whatsapp():
+def conectar_whatsapp():
     """
     Conectar WhatsApp automaticamente:
     1. Verifica config global
@@ -75,7 +75,7 @@ def api_conectar_whatsapp():
         return jsonify({'erro': str(e)}), 500
 @bp.route('/api/whatsapp/webhook/configurar', methods=['POST'])
 @login_required
-def configurar_webhook_whatsapp():
+def configurar_webhook():
     """Configura webhook para a instância do usuário"""
     try:
         ws = WhatsApp(current_user.id)
@@ -96,7 +96,7 @@ def configurar_webhook_whatsapp():
         return jsonify({'erro': str(e)}), 500
 @bp.route('/api/whatsapp/qrcode')
 @login_required
-def api_qrcode():
+def qrcode():
     """Obter QR code (mantido por compatibilidade, mas use /conectar)"""
     ws = WhatsApp(current_user.id)
     if not ws.ok():
@@ -111,7 +111,7 @@ def api_qrcode():
         return jsonify({'erro': result}), 400
 @bp.route('/api/whatsapp/status')
 @login_required
-def api_ws_status():
+def ws_status():
     ws = WhatsApp(current_user.id)
     if not ws.ok():
         return jsonify({'conectado': False, 'mensagem': 'Nao configurado'})

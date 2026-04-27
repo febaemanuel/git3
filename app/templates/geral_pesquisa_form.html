@@ -12,7 +12,7 @@
 
 <div class="row">
     <div class="col-12 mb-3">
-        <a href="{{ url_for('geral.geral_pesquisas_lista') }}" class="btn btn-link p-0">
+        <a href="{{ url_for('geral.pesquisas_lista') }}" class="btn btn-link p-0">
             <i class="bi bi-arrow-left"></i> Voltar
         </a>
         <h2 class="mt-2 mb-0">
@@ -54,7 +54,7 @@
                         <i class="bi bi-check-circle"></i> Salvar
                     </button>
                     {% if pesquisa %}
-                    <a href="{{ url_for('geral.geral_pesquisa_stats', id=pesquisa.id) }}" class="btn btn-outline-success">
+                    <a href="{{ url_for('geral.pesquisa_stats', id=pesquisa.id) }}" class="btn btn-outline-success">
                         <i class="bi bi-bar-chart"></i> Estatísticas
                     </a>
                     {% endif %}
@@ -83,7 +83,7 @@
                                 {% endif %}
                             </small>
                         </div>
-                        <form method="POST" action="{{ url_for('geral.geral_pesquisa_pergunta_excluir', id=pesquisa.id, pid=p.id) }}"
+                        <form method="POST" action="{{ url_for('geral.pesquisa_pergunta_excluir', id=pesquisa.id, pid=p.id) }}"
                               onsubmit="return confirm('Remover esta pergunta? Respostas associadas também serão apagadas.');">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-sm btn-outline-danger">
@@ -97,7 +97,7 @@
                 <p class="text-muted">Nenhuma pergunta ainda. Adicione a primeira abaixo.</p>
                 {% endif %}
 
-                <form method="POST" action="{{ url_for('geral.geral_pesquisa_pergunta_criar', id=pesquisa.id) }}">
+                <form method="POST" action="{{ url_for('geral.pesquisa_pergunta_criar', id=pesquisa.id) }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-2">
                         <label class="form-label">Texto da pergunta *</label>
@@ -132,7 +132,7 @@
         </div>
 
         <div class="d-flex justify-content-end">
-            <form method="POST" action="{{ url_for('geral.geral_pesquisa_excluir', id=pesquisa.id) }}"
+            <form method="POST" action="{{ url_for('geral.pesquisa_excluir', id=pesquisa.id) }}"
                   onsubmit="return confirm('Excluir a pesquisa e todas as respostas? Esta ação não pode ser desfeita.');">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-outline-danger btn-sm">
@@ -158,7 +158,7 @@
                 <a href="{{ link_publico }}" target="_blank" class="btn btn-sm btn-outline-primary">
                     <i class="bi bi-box-arrow-up-right"></i> Abrir formulário
                 </a>
-                <a href="{{ url_for('geral.geral_pesquisa_exportar', id=pesquisa.id) }}" class="btn btn-sm btn-outline-success">
+                <a href="{{ url_for('geral.pesquisa_exportar', id=pesquisa.id) }}" class="btn btn-sm btn-outline-success">
                     <i class="bi bi-file-earmark-excel"></i> Exportar Excel
                 </a>
             </div>
@@ -167,7 +167,7 @@
         <div class="card mb-3">
             <div class="card-header d-flex justify-content-between align-items-center">
                 <strong><i class="bi bi-broadcast"></i> Envios em massa</strong>
-                <a href="{{ url_for('geral.geral_pesquisa_enviar', id=pesquisa.id) }}" class="btn btn-sm btn-danger">
+                <a href="{{ url_for('geral.pesquisa_enviar', id=pesquisa.id) }}" class="btn btn-sm btn-danger">
                     <i class="bi bi-send"></i> Novo envio
                 </a>
             </div>
@@ -176,7 +176,7 @@
                 <ul class="list-group list-group-flush small">
                     {% for e in pesquisa.envios | sort(attribute='data_criacao', reverse=true) %}
                     <li class="list-group-item">
-                        <a href="{{ url_for('geral.geral_envio_progresso', envio_id=e.id) }}" class="text-decoration-none">
+                        <a href="{{ url_for('geral.envio_progresso', envio_id=e.id) }}" class="text-decoration-none">
                             {{ e.nome or ('Lote #' ~ e.id) }}
                         </a>
                         <br>

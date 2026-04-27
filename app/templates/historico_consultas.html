@@ -8,7 +8,7 @@
     <div class="col-12 mb-4">
         <nav aria-label="breadcrumb">
             <ol class="breadcrumb">
-                <li class="breadcrumb-item"><a href="{{ url_for('consultas.consultas_dashboard') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('consultas.dashboard') }}">Dashboard</a></li>
                 <li class="breadcrumb-item active">Historico de Consultas</li>
             </ol>
         </nav>
@@ -96,7 +96,7 @@
                 </form>
                 {% if filtro_paciente or filtro_especialidade or filtro_data_inicio or filtro_data_fim %}
                 <div class="mt-2">
-                    <a href="{{ url_for('consultas.consultas_historico') }}" class="btn btn-sm btn-outline-secondary">
+                    <a href="{{ url_for('consultas.historico') }}" class="btn btn-sm btn-outline-secondary">
                         <i class="bi bi-x"></i> Limpar Filtros
                     </a>
                 </div>
@@ -157,7 +157,7 @@
                                 </td>
                                 <td class="text-center">
                                     {% if h.paciente %}
-                                    <a href="{{ url_for('consultas.consultas_historico_paciente', id=h.paciente.id) }}"
+                                    <a href="{{ url_for('consultas.historico_paciente', id=h.paciente.id) }}"
                                        class="btn btn-sm btn-outline-primary" title="Ver historico do paciente">
                                         <i class="bi bi-eye"></i>
                                     </a>
@@ -212,7 +212,7 @@
                                 </div>
                             </div>
                             <div class="card-footer bg-transparent py-1">
-                                <a href="{{ url_for('consultas.consultas_historico_paciente', id=paciente.id) }}"
+                                <a href="{{ url_for('consultas.historico_paciente', id=paciente.id) }}"
                                    class="btn btn-sm btn-outline-primary w-100">
                                     <i class="bi bi-clock-history"></i> Ver Historico
                                 </a>

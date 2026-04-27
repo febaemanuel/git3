@@ -189,7 +189,7 @@
                     {% if current_user.tipo_sistema == 'AGENDAMENTO_CONSULTA' %}
                     <!-- MODO CONSULTA -->
                     <li class="nav-item">
-                        <a class="nav-link" href="{{ url_for('consultas.consultas_dashboard') }}">
+                        <a class="nav-link" href="{{ url_for('consultas.dashboard') }}">
                             <i class="bi bi-calendar-check"></i> Consultas
                         </a>
                     </li>
@@ -244,7 +244,7 @@
                     </li>
                     {% if current_user.is_admin %}
                     <li class="nav-item">
-                        <a class="nav-link text-warning" href="{{ url_for('admin.admin_dashboard') }}">
+                        <a class="nav-link text-warning" href="{{ url_for('admin.dashboard') }}">
                             <i class="bi bi-shield-lock"></i> Admin
                         </a>
                     </li>
@@ -258,7 +258,7 @@
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end">
                             {% if current_user.is_admin %}
-                            <li><a class="dropdown-item" href="{{ url_for('admin.admin_dashboard') }}">
+                            <li><a class="dropdown-item" href="{{ url_for('admin.dashboard') }}">
                                 <i class="bi bi-shield-lock"></i> Painel Admin
                             </a></li>
                             <li><hr class="dropdown-divider"></li>

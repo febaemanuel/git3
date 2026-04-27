@@ -13,7 +13,7 @@
             <p class="text-muted mb-0">Pesquisa de Satisfacao - Comentarios de pacientes</p>
         </div>
         <div>
-            <a href="{{ url_for('admin.admin_dashboard') }}" class="btn btn-outline-secondary">
+            <a href="{{ url_for('admin.dashboard') }}" class="btn btn-outline-secondary">
                 <i class="bi bi-arrow-left me-1"></i> Voltar ao Dashboard
             </a>
         </div>
@@ -25,7 +25,7 @@
             <h5 class="mb-0"><i class="bi bi-funnel me-2"></i>Filtros</h5>
         </div>
         <div class="card-body">
-            <form method="get" action="{{ url_for('admin.admin_comentarios') }}" class="row g-3">
+            <form method="get" action="{{ url_for('admin.comentarios') }}" class="row g-3">
                 <div class="col-md-3">
                     <label class="form-label">Especialidade</label>
                     <select name="especialidade" class="form-select">
@@ -77,7 +77,7 @@
                         <button type="submit" class="btn btn-primary">
                             <i class="bi bi-search me-1"></i> Filtrar
                         </button>
-                        <a href="{{ url_for('admin.admin_comentarios') }}" class="btn btn-outline-secondary">
+                        <a href="{{ url_for('admin.comentarios') }}" class="btn btn-outline-secondary">
                             <i class="bi bi-x-circle me-1"></i> Limpar
                         </a>
                     </div>

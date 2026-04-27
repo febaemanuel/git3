@@ -28,7 +28,7 @@ bp = Blueprint('admin', __name__)
 @bp.route('/admin/dashboard')
 @login_required
 @admin_required
-def admin_dashboard():
+def dashboard():
     """Dashboard administrativo com métricas globais do sistema"""
     from sqlalchemy import func, case
 
@@ -518,7 +518,7 @@ def admin_dashboard():
 @bp.route('/admin/exportar', methods=['GET', 'POST'])
 @login_required
 @admin_required
-def admin_exportar_dados():
+def exportar_dados():
     """
     Exportar dados de agendamentos para Excel com filtros.
     Permite filtrar por status, tipo, especialidade, usuário, datas, etc.
@@ -738,7 +738,7 @@ def admin_exportar_dados():
 @bp.route('/admin/exportar/fila', methods=['GET', 'POST'])
 @login_required
 @admin_required
-def admin_exportar_fila():
+def exportar_fila():
     """
     Exportar dados de campanhas de Fila (Busca Ativa) para Excel com filtros.
     """
@@ -913,7 +913,7 @@ def admin_exportar_fila():
 @bp.route('/admin/usuario/<int:usuario_id>')
 @login_required
 @admin_required
-def admin_usuario_detalhes(usuario_id):
+def usuario_detalhes(usuario_id):
     """Página de detalhes completos de um usuário específico"""
     from sqlalchemy import func, case
     from datetime import timedelta
@@ -1191,19 +1191,19 @@ def admin_usuario_detalhes(usuario_id):
 @bp.route('/admin/usuario/<int:usuario_id>/deletar', methods=['POST'])
 @login_required
 @admin_required
-def admin_deletar_usuario(usuario_id):
+def deletar_usuario(usuario_id):
     """Deletar um usuário do sistema"""
     usuario = Usuario.query.get_or_404(usuario_id)
 
     # Não permitir deletar o próprio usuário logado
     if usuario.id == current_user.id:
         flash('Voce nao pode deletar sua propria conta!', 'danger')
-        return redirect(url_for('admin.admin_usuario_detalhes', usuario_id=usuario_id))
+        return redirect(url_for('admin.usuario_detalhes', usuario_id=usuario_id))
 
     # Não permitir deletar outros admins (segurança)
     if usuario.is_admin and not current_user.is_admin:
         flash('Apenas administradores podem deletar outros administradores!', 'danger')
-        return redirect(url_for('admin.admin_usuario_detalhes', usuario_id=usuario_id))
+        return redirect(url_for('admin.usuario_detalhes', usuario_id=usuario_id))
 
     nome_usuario = usuario.nome
 
@@ -1239,16 +1239,16 @@ def admin_deletar_usuario(usuario_id):
         db.session.commit()
 
         flash(f'Usuario "{nome_usuario}" deletado com sucesso!', 'success')
-        return redirect(url_for('admin.admin_dashboard'))
+        return redirect(url_for('admin.dashboard'))
 
     except Exception as e:
         db.session.rollback()
         flash(f'Erro ao deletar usuario: {str(e)}', 'danger')
-        return redirect(url_for('admin.admin_usuario_detalhes', usuario_id=usuario_id))
+        return redirect(url_for('admin.usuario_detalhes', usuario_id=usuario_id))
 @bp.route('/admin/comentarios')
 @login_required
 @admin_required
-def admin_comentarios():
+def comentarios():
     """Página para visualizar todos os comentários da pesquisa de satisfação"""
     from sqlalchemy import func, case
 

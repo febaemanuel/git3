@@ -35,13 +35,13 @@ bp = Blueprint('geral', __name__)
 
 @bp.route('/geral/dashboard')
 @login_required
-def geral_dashboard():
+def dashboard():
     config, redir = _exigir_usuario_geral()
     if redir:
         return redir
 
     if not config.wizard_concluido:
-        return redirect(url_for('geral.geral_wizard'))
+        return redirect(url_for('geral.wizard'))
 
     return render_template(
         'geral_dashboard.html',
@@ -50,7 +50,7 @@ def geral_dashboard():
     )
 @bp.route('/geral/wizard', methods=['GET', 'POST'])
 @login_required
-def geral_wizard():
+def wizard():
     config, redir = _exigir_usuario_geral()
     if redir:
         return redir
@@ -75,7 +75,7 @@ def geral_wizard():
         db.session.commit()
 
         flash('Configuração salva! Você já pode usar o sistema.', 'success')
-        return redirect(url_for('geral.geral_dashboard'))
+        return redirect(url_for('geral.dashboard'))
 
     return render_template(
         'geral_wizard.html',
@@ -85,7 +85,7 @@ def geral_wizard():
     )
 @bp.route('/geral/pesquisas')
 @login_required
-def geral_pesquisas_lista():
+def pesquisas_lista():
     config, redir = _exigir_usuario_geral()
     if redir:
         return redir
@@ -108,7 +108,7 @@ def geral_pesquisas_lista():
     )
 @bp.route('/geral/pesquisas/nova', methods=['GET', 'POST'])
 @login_required
-def geral_pesquisa_nova():
+def pesquisa_nova():
     config, redir = _exigir_usuario_geral()
     if redir:
         return redir
@@ -134,13 +134,13 @@ def geral_pesquisa_nova():
         db.session.add(pesquisa)
         db.session.commit()
         flash('Pesquisa criada. Agora cadastre as perguntas.', 'success')
-        return redirect(url_for('geral.geral_pesquisa_detalhe', id=pesquisa.id))
+        return redirect(url_for('geral.pesquisa_detalhe', id=pesquisa.id))
 
     return render_template('geral_pesquisa_form.html', pesquisa=None,
                            titulo='', descricao='', mensagem_whatsapp='')
 @bp.route('/geral/pesquisas/templates')
 @login_required
-def geral_pesquisa_templates():
+def pesquisa_templates():
     config, redir = _exigir_usuario_geral()
     if redir:
         return redir
@@ -148,7 +148,7 @@ def geral_pesquisa_templates():
                            templates=TEMPLATES_PESQUISA)
 @bp.route('/geral/pesquisas/templates/<key>/criar', methods=['POST'])
 @login_required
-def geral_pesquisa_criar_de_template(key):
+def pesquisa_criar_de_template(key):
     config, redir = _exigir_usuario_geral()
     if redir:
         return redir
@@ -156,7 +156,7 @@ def geral_pesquisa_criar_de_template(key):
     template = TEMPLATES_PESQUISA.get(key)
     if not template:
         flash('Template não encontrado.', 'danger')
-        return redirect(url_for('geral.geral_pesquisa_templates'))
+        return redirect(url_for('geral.pesquisa_templates'))
 
     pesquisa = Pesquisa(
         usuario_id=current_user.id,
@@ -182,10 +182,10 @@ def geral_pesquisa_criar_de_template(key):
 
     db.session.commit()
     flash(f'Pesquisa "{pesquisa.titulo}" criada a partir do template. Revise e ajuste se quiser.', 'success')
-    return redirect(url_for('geral.geral_pesquisa_detalhe', id=pesquisa.id))
+    return redirect(url_for('geral.pesquisa_detalhe', id=pesquisa.id))
 @bp.route('/geral/pesquisas/<int:id>', methods=['GET', 'POST'])
 @login_required
-def geral_pesquisa_detalhe(id):
+def pesquisa_detalhe(id):
     config, redir = _exigir_usuario_geral()
     if redir:
         return redir
@@ -198,9 +198,9 @@ def geral_pesquisa_detalhe(id):
         pesquisa.ativa = request.form.get('ativa') == 'on'
         db.session.commit()
         flash('Pesquisa atualizada.', 'success')
-        return redirect(url_for('geral.geral_pesquisa_detalhe', id=pesquisa.id))
+        return redirect(url_for('geral.pesquisa_detalhe', id=pesquisa.id))
 
-    link_publico = url_for('pesquisa_publica.pesquisa_publica', token=pesquisa.token_publico, _external=True)
+    link_publico = url_for('pesquisa_publica.responder', token=pesquisa.token_publico, _external=True)
     return render_template(
         'geral_pesquisa_form.html',
         pesquisa=pesquisa,
@@ -212,7 +212,7 @@ def geral_pesquisa_detalhe(id):
     )
 @bp.route('/geral/pesquisas/<int:id>/excluir', methods=['POST'])
 @login_required
-def geral_pesquisa_excluir(id):
+def pesquisa_excluir(id):
     config, redir = _exigir_usuario_geral()
     if redir:
         return redir
@@ -220,10 +220,10 @@ def geral_pesquisa_excluir(id):
     db.session.delete(pesquisa)
     db.session.commit()
     flash('Pesquisa removida.', 'info')
-    return redirect(url_for('geral.geral_pesquisas_lista'))
+    return redirect(url_for('geral.pesquisas_lista'))
 @bp.route('/geral/pesquisas/<int:id>/perguntas', methods=['POST'])
 @login_required
-def geral_pesquisa_pergunta_criar(id):
+def pesquisa_pergunta_criar(id):
     config, redir = _exigir_usuario_geral()
     if redir:
         return redir
@@ -236,17 +236,17 @@ def geral_pesquisa_pergunta_criar(id):
 
     if not texto:
         flash('Digite o texto da pergunta.', 'danger')
-        return redirect(url_for('geral.geral_pesquisa_detalhe', id=pesquisa.id))
+        return redirect(url_for('geral.pesquisa_detalhe', id=pesquisa.id))
     if tipo not in TIPOS_PERGUNTA:
         flash('Tipo de pergunta inválido.', 'danger')
-        return redirect(url_for('geral.geral_pesquisa_detalhe', id=pesquisa.id))
+        return redirect(url_for('geral.pesquisa_detalhe', id=pesquisa.id))
 
     opcoes = []
     if tipo == 'MULTI_ESCOLHA':
         opcoes = [o.strip() for o in opcoes_raw.split('\n') if o.strip()]
         if len(opcoes) < 2:
             flash('Múltipla escolha precisa de pelo menos 2 opções (uma por linha).', 'danger')
-            return redirect(url_for('geral.geral_pesquisa_detalhe', id=pesquisa.id))
+            return redirect(url_for('geral.pesquisa_detalhe', id=pesquisa.id))
 
     proxima_ordem = (db.session.query(db.func.max(PerguntaPesquisa.ordem))
                      .filter_by(pesquisa_id=pesquisa.id).scalar() or 0) + 1
@@ -263,10 +263,10 @@ def geral_pesquisa_pergunta_criar(id):
     db.session.add(pergunta)
     db.session.commit()
     flash('Pergunta adicionada.', 'success')
-    return redirect(url_for('geral.geral_pesquisa_detalhe', id=pesquisa.id))
+    return redirect(url_for('geral.pesquisa_detalhe', id=pesquisa.id))
 @bp.route('/geral/pesquisas/<int:id>/perguntas/<int:pid>/excluir', methods=['POST'])
 @login_required
-def geral_pesquisa_pergunta_excluir(id, pid):
+def pesquisa_pergunta_excluir(id, pid):
     config, redir = _exigir_usuario_geral()
     if redir:
         return redir
@@ -275,10 +275,10 @@ def geral_pesquisa_pergunta_excluir(id, pid):
     db.session.delete(pergunta)
     db.session.commit()
     flash('Pergunta removida.', 'info')
-    return redirect(url_for('geral.geral_pesquisa_detalhe', id=pesquisa.id))
+    return redirect(url_for('geral.pesquisa_detalhe', id=pesquisa.id))
 @bp.route('/geral/pesquisas/<int:id>/stats')
 @login_required
-def geral_pesquisa_stats(id):
+def pesquisa_stats(id):
     config, redir = _exigir_usuario_geral()
     if redir:
         return redir
@@ -350,7 +350,7 @@ def geral_pesquisa_stats(id):
     )
 @bp.route('/geral/pesquisas/<int:id>/exportar')
 @login_required
-def geral_pesquisa_exportar(id):
+def pesquisa_exportar(id):
     config, redir = _exigir_usuario_geral()
     if redir:
         return redir
@@ -394,7 +394,7 @@ def geral_pesquisa_exportar(id):
                      mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 @bp.route('/geral/pesquisas/<int:id>/enviar', methods=['GET', 'POST'])
 @login_required
-def geral_pesquisa_enviar(id):
+def pesquisa_enviar(id):
     config, redir = _exigir_usuario_geral()
     if redir:
         return redir
@@ -402,13 +402,13 @@ def geral_pesquisa_enviar(id):
 
     if not pesquisa.perguntas:
         flash('Cadastre ao menos uma pergunta antes de enviar.', 'warning')
-        return redirect(url_for('geral.geral_pesquisa_detalhe', id=pesquisa.id))
+        return redirect(url_for('geral.pesquisa_detalhe', id=pesquisa.id))
 
     if not pesquisa.ativa:
         flash('Reative a pesquisa antes de enviar o link.', 'warning')
-        return redirect(url_for('geral.geral_pesquisa_detalhe', id=pesquisa.id))
+        return redirect(url_for('geral.pesquisa_detalhe', id=pesquisa.id))
 
-    link_publico = url_for('pesquisa_publica.pesquisa_publica', token=pesquisa.token_publico, _external=True)
+    link_publico = url_for('pesquisa_publica.responder', token=pesquisa.token_publico, _external=True)
     mensagem_padrao = pesquisa.mensagem_whatsapp or (
         f'Olá {{NOME}}! Por favor, responda nossa pesquisa: {{LINK}}'
     )
@@ -470,14 +470,14 @@ def geral_pesquisa_enviar(id):
             flash(f'Envio criado, mas o disparo falhou: {e}', 'danger')
 
         flash(f'Envio iniciado: {len(telefones)} destinatários.', 'success')
-        return redirect(url_for('geral.geral_envio_progresso', envio_id=envio.id))
+        return redirect(url_for('geral.envio_progresso', envio_id=envio.id))
 
     return render_template('geral_envio_form.html', pesquisa=pesquisa,
                            link_publico=link_publico, mensagem=mensagem_padrao,
                            telefones='', nome='')
 @bp.route('/geral/envios/<int:envio_id>')
 @login_required
-def geral_envio_progresso(envio_id):
+def envio_progresso(envio_id):
     config, redir = _exigir_usuario_geral()
     if redir:
         return redir
@@ -487,7 +487,7 @@ def geral_envio_progresso(envio_id):
     return render_template('geral_envio_progresso.html', envio=envio, pendentes=pendentes)
 @bp.route('/geral/envios/<int:envio_id>/status.json')
 @login_required
-def geral_envio_status(envio_id):
+def envio_status(envio_id):
     config, redir = _exigir_usuario_geral()
     if redir:
         return jsonify({'erro': 'forbidden'}), 403
@@ -502,7 +502,7 @@ def geral_envio_status(envio_id):
     })
 @bp.route('/geral/envios/<int:envio_id>/pausar', methods=['POST'])
 @login_required
-def geral_envio_pausar(envio_id):
+def envio_pausar(envio_id):
     config, redir = _exigir_usuario_geral()
     if redir:
         return redir
@@ -512,10 +512,10 @@ def geral_envio_pausar(envio_id):
         envio.status_msg = 'Pausado pelo usuário'
         db.session.commit()
         flash('Envio pausado.', 'info')
-    return redirect(url_for('geral.geral_envio_progresso', envio_id=envio.id))
+    return redirect(url_for('geral.envio_progresso', envio_id=envio.id))
 @bp.route('/geral/envios/<int:envio_id>/continuar', methods=['POST'])
 @login_required
-def geral_envio_continuar(envio_id):
+def envio_continuar(envio_id):
     config, redir = _exigir_usuario_geral()
     if redir:
         return redir
@@ -535,10 +535,10 @@ def geral_envio_continuar(envio_id):
             envio.status_msg = f'Falha ao retomar: {e}'
             db.session.commit()
             flash(f'Falha ao retomar: {e}', 'danger')
-    return redirect(url_for('geral.geral_envio_progresso', envio_id=envio.id))
+    return redirect(url_for('geral.envio_progresso', envio_id=envio.id))
 @bp.route('/geral/envios/<int:envio_id>/reenviar_falhas', methods=['POST'])
 @login_required
-def geral_envio_reenviar_falhas(envio_id):
+def envio_reenviar_falhas(envio_id):
     """Cria um novo lote contendo apenas os números que falharam neste envio."""
     config, redir = _exigir_usuario_geral()
     if redir:
@@ -548,7 +548,7 @@ def geral_envio_reenviar_falhas(envio_id):
     falhas = [t for t in envio.telefones if t.status == 'falhou']
     if not falhas:
         flash('Não há falhas neste envio para reenviar.', 'info')
-        return redirect(url_for('geral.geral_envio_progresso', envio_id=envio.id))
+        return redirect(url_for('geral.envio_progresso', envio_id=envio.id))
 
     novo = EnvioPesquisa(
         pesquisa_id=envio.pesquisa_id,
@@ -582,7 +582,7 @@ def geral_envio_reenviar_falhas(envio_id):
         novo.status_msg = f'Falha ao agendar task: {e}'
         db.session.commit()
         flash(f'Reenvio criado, mas o disparo falhou: {e}', 'danger')
-        return redirect(url_for('geral.geral_envio_progresso', envio_id=novo.id))
+        return redirect(url_for('geral.envio_progresso', envio_id=novo.id))
 
     flash(f'Reenvio iniciado: {len(falhas)} destinatários que haviam falhado.', 'success')
-    return redirect(url_for('geral.geral_envio_progresso', envio_id=novo.id))
+    return redirect(url_for('geral.envio_progresso', envio_id=novo.id))

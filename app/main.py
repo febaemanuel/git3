@@ -811,9 +811,9 @@ def get_dashboard_route():
     if current_user.is_authenticated:
         tipo = getattr(current_user, 'tipo_sistema', 'BUSCA_ATIVA')
         if tipo == 'AGENDAMENTO_CONSULTA':
-            return 'consultas.consultas_dashboard'
+            return 'consultas.dashboard'
         if tipo == 'GERAL':
-            return 'geral.geral_dashboard'
+            return 'geral.dashboard'
         # Aceita tanto BUSCA_ATIVA quanto FILA_CIRURGICA (compatibilidade)
         return 'fila.dashboard'
     return 'auth.login'

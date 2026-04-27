@@ -3,7 +3,7 @@
 from datetime import datetime
 
 from app.extensions import db
-from app.main import obter_hora_fortaleza, obter_hoje_fortaleza
+from app.services.timezone import obter_hora_fortaleza, obter_hoje_fortaleza
 
 
 class ConfigUsuarioGeral(db.Model):

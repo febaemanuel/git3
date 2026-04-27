@@ -4,7 +4,7 @@ plus the related ticket / retry / config tables."""
 from datetime import date, datetime, timedelta
 
 from app.extensions import db
-from app.main import (
+from app.services.timezone import (
     obter_agora_fortaleza,
     obter_hora_fortaleza,
     obter_hoje_fortaleza,

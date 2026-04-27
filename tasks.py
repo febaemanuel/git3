@@ -23,7 +23,7 @@ class DatabaseTask(Task):
     def db(self):
         if self._db is None:
             # Import aqui para evitar circular dependency
-            from app import db
+            from app.extensions import db
             self._db = db
         return self._db
 
@@ -62,7 +62,9 @@ def validar_campanha_task(self, campanha_id):
     Raises:
         Retry: Se houver erro temporário
     """
-    from app import db, Campanha, Telefone, WhatsApp
+    from app.extensions import db
+    from app.models import Campanha, Telefone
+    from app.services.whatsapp import WhatsApp
     from datetime import datetime
 
     logger.info(f"Iniciando validação da campanha {campanha_id}")
@@ -183,7 +185,9 @@ def enviar_campanha_task(self, campanha_id):
     Raises:
         Retry: Se houver erro temporário (API indisponível, etc)
     """
-    from app import db, Campanha, Contato, Telefone, LogMsg, WhatsApp
+    from app.extensions import db
+    from app.models import Campanha, Contato, Telefone, LogMsg
+    from app.services.whatsapp import WhatsApp
     from datetime import datetime
 
     logger.info(f"Iniciando envio da campanha {campanha_id}")
@@ -301,7 +305,8 @@ def enviar_campanha_task(self, campanha_id):
             # Envio
             if c.status == 'pronto_envio':
                 # Normalização JIT (Just-In-Time) - normaliza só quando for enviar
-                from app import ProcedimentoNormalizado, DeepSeekAI
+                from app.ai import DeepSeekAI
+                from app.models import ProcedimentoNormalizado
 
                 if not c.procedimento_normalizado and c.procedimento:
                     # Verificar cache
@@ -431,7 +436,9 @@ def follow_up_automatico_task(self):
     Task periódica para enviar follow-ups automáticos
     Executada diariamente às 9h via Celery Beat
     """
-    from app import db, Contato, Telefone, ConfigTentativas, TentativaContato, LogMsg, WhatsApp
+    from app.extensions import db
+    from app.models import Contato, Telefone, ConfigTentativas, TentativaContato, LogMsg
+    from app.services.whatsapp import WhatsApp
     from datetime import datetime, timedelta
 
     logger.info("Iniciando follow-up automático")
@@ -620,7 +627,8 @@ def retomar_campanhas_automaticas():
 
     Retorna: número de campanhas retomadas
     """
-    from app import db, Campanha
+    from app.extensions import db
+    from app.models import Campanha
     from datetime import datetime
 
     logger.info("Verificando campanhas pausadas para retomada automática")
@@ -646,7 +654,7 @@ def retomar_campanhas_automaticas():
                 continue
 
             # Verificar se tem contatos pendentes
-            from app import Contato
+            from app.models import Contato
             pendentes = camp.contatos.filter(
                 Contato.status.in_(['pendente', 'pronto_envio'])
             ).count()
@@ -711,7 +719,9 @@ def processar_planilha_task(self, arquivo_path, campanha_id):
     Returns:
         dict: Resultado do processamento
     """
-    from app import db, Campanha, Contato, Telefone, DeepSeekAI
+    from app.extensions import db
+    from app.ai import DeepSeekAI
+    from app.models import Campanha, Contato, Telefone
     from datetime import datetime
     import pandas as pd
 
@@ -1002,7 +1012,8 @@ def retomar_campanhas_consultas_automaticas():
 
     Retorna: número de campanhas retomadas
     """
-    from app import db, CampanhaConsulta, AgendamentoConsulta
+    from app.extensions import db
+    from app.models import CampanhaConsulta, AgendamentoConsulta
     from datetime import datetime
 
     logger.info("Verificando campanhas de CONSULTAS pausadas para retomada automática")
@@ -1102,10 +1113,11 @@ def enviar_campanha_consultas_task(self, campanha_id):
     Raises:
         Retry: Se houver erro temporário (API indisponível, etc)
     """
-    from app import (
-        db, CampanhaConsulta, AgendamentoConsulta, TelefoneConsulta,
-        LogMsgConsulta, WhatsApp, formatar_numero, formatar_mensagem_consulta_inicial
-    )
+    from app.extensions import db
+    from app.models import CampanhaConsulta, AgendamentoConsulta, TelefoneConsulta, LogMsgConsulta
+    from app.services.mensagem import formatar_mensagem_consulta_inicial
+    from app.services.telefone import formatar_numero
+    from app.services.whatsapp import WhatsApp
     from datetime import datetime
 
     logger.info(f"Iniciando envio da campanha de consultas {campanha_id}")
@@ -1353,12 +1365,10 @@ def retry_consultas_sem_resposta():
     - 2ª Retry: ~16h após envio inicial
     - Cancelamento: 24h após envio inicial (se não responder)
     """
-    from app import (
-        db, AgendamentoConsulta, WhatsApp, LogMsgConsulta,
-        formatar_mensagem_consulta_inicial, formatar_mensagem_consulta_retry1,
-        formatar_mensagem_consulta_retry2, formatar_mensagem_cancelamento_sem_resposta,
-        enviar_e_registrar_consulta
-    )
+    from app.extensions import db
+    from app.models import AgendamentoConsulta, LogMsgConsulta
+    from app.services.mensagem import formatar_mensagem_consulta_inicial, formatar_mensagem_consulta_retry1, formatar_mensagem_consulta_retry2, formatar_mensagem_cancelamento_sem_resposta, enviar_e_registrar_consulta
+    from app.services.whatsapp import WhatsApp
     from datetime import datetime, timedelta
     
     logger.info("Verificando consultas sem resposta para retry")
@@ -1599,11 +1609,10 @@ def retry_fila_sem_resposta():
 
     Para para um contato assim que ele confirmar (basta 1 confirmação).
     """
-    from app import (
-        db, Contato, Telefone, LogMsg, WhatsApp,
-        formatar_mensagem_fila_retry1, formatar_mensagem_fila_retry2,
-        formatar_mensagem_fila_sem_resposta
-    )
+    from app.extensions import db
+    from app.models import Contato, Telefone, LogMsg
+    from app.services.mensagem import formatar_mensagem_fila_retry1, formatar_mensagem_fila_retry2, formatar_mensagem_fila_sem_resposta
+    from app.services.whatsapp import WhatsApp
     from datetime import datetime, timedelta
 
     logger.info("Verificando fila cirúrgica sem resposta para retry")
@@ -1773,10 +1782,10 @@ def processar_envio_pesquisa(self, envio_id):
     Sem retry automático em caso de falha por destinatário — quem falhar fica
     com status='falhou' e o usuário pode criar outro envio com a lista filtrada.
     """
-    from app import (
-        db, EnvioPesquisa, EnvioPesquisaTelefone, Pesquisa, WhatsApp,
-        _renderizar_mensagem_envio,
-    )
+    from app.extensions import db
+    from app.models import EnvioPesquisa, EnvioPesquisaTelefone, Pesquisa
+    from app.services.whatsapp import WhatsApp
+    from app.services.mensagem import _renderizar_mensagem_envio
     from datetime import datetime
     from flask import url_for
 
@@ -1816,7 +1825,7 @@ def processar_envio_pesquisa(self, envio_id):
         from app import app as flask_app
         with flask_app.app_context():
             with flask_app.test_request_context():
-                link_publico = url_for('pesquisa_publica',
+                link_publico = url_for('pesquisa_publica.responder',
                                        token=pesquisa.token_publico,
                                        _external=True)
 
@@ -1909,7 +1918,8 @@ def retomar_envios_pesquisa_automaticos():
     retomar_campanhas_consultas_automaticas: só retoma quem foi pausado
     por motivo automático (não pelo usuário).
     """
-    from app import db, EnvioPesquisa, EnvioPesquisaTelefone
+    from app.extensions import db
+    from app.models import EnvioPesquisa, EnvioPesquisaTelefone
 
     logger.info("Verificando envios de pesquisa pausados para retomada")
 

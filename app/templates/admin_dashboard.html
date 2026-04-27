@@ -1,0 +1,1425 @@
+{% extends "base.html" %}
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Header -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h2 class="mb-1"><i class="bi bi-shield-lock me-2"></i>Painel Administrativo</h2>
+            <p class="text-muted mb-0">Visão geral da performance do sistema</p>
+        </div>
+        <div class="d-flex gap-2 align-items-center">
+            <!-- Seletor de Modo -->
+            <div class="btn-group" role="group" aria-label="Selecionar modo">
+                <a href="{{ url_for('admin.dashboard', modo='consulta') }}"
+                   class="btn {% if modo_selecionado == 'consulta' %}btn-success{% else %}btn-outline-success{% endif %}">
+                    <i class="bi bi-calendar-check me-1"></i> Modo Consulta
+                </a>
+                <a href="{{ url_for('admin.dashboard', modo='fila') }}"
+                   class="btn {% if modo_selecionado == 'fila' %}btn-dark{% else %}btn-outline-dark{% endif %}">
+                    <i class="bi bi-people-fill me-1"></i> Modo Fila
+                </a>
+                <a href="{{ url_for('admin.dashboard') }}"
+                   class="btn {% if modo_selecionado == 'todos' %}btn-primary{% else %}btn-outline-primary{% endif %}">
+                    <i class="bi bi-grid me-1"></i> Todos
+                </a>
+            </div>
+            <button class="btn btn-outline-secondary" onclick="window.location.reload()">
+                <i class="bi bi-arrow-clockwise me-1"></i> Atualizar
+            </button>
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#modalExportar">
+                <i class="bi bi-file-earmark-excel me-1"></i> Exportar Excel
+            </button>
+        </div>
+    </div>
+
+    <!-- Indicador do Modo Selecionado -->
+    {% if modo_selecionado != 'todos' %}
+    <div class="alert {% if modo_selecionado == 'consulta' %}alert-success{% else %}alert-dark{% endif %} mb-4">
+        <i class="bi {% if modo_selecionado == 'consulta' %}bi-calendar-check{% else %}bi-people-fill{% endif %} me-2"></i>
+        <strong>Visualizando:</strong>
+        {% if modo_selecionado == 'consulta' %}
+        Modo Consulta (Agendamentos) - Exibindo apenas usuários e dados do sistema de agendamento de consultas
+        {% else %}
+        Modo Fila (Busca Ativa) - Exibindo apenas usuários e dados do sistema de busca ativa
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- Cards de Resumo Geral -->
+    <div class="row g-3 mb-4">
+        <!-- Card Usuários - Sempre visível -->
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-primary">{{ total_usuarios }}</div>
+                    <div class="text-muted small">Usuários</div>
+                    <div class="mt-1">
+                        <span class="badge bg-success">{{ usuarios_ativos }} ativos</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if modo_selecionado == 'fila' %}
+        <!-- ========== CARDS MODO FILA ========== -->
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100 border-dark">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-dark">{{ total_campanhas_fila }}</div>
+                    <div class="text-muted small">Campanhas Fila</div>
+                    <div class="mt-1">
+                        <span class="badge bg-dark">{{ campanhas_fila_ativas }} ativas</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-info">{{ "{:,}".format(fila_total_contatos).replace(",", ".") }}</div>
+                    <div class="text-muted small">Contatos</div>
+                    <div class="mt-1">
+                        <span class="badge bg-dark">fila</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-info">{{ "{:,}".format(fila_total_enviados).replace(",", ".") }}</div>
+                    <div class="text-muted small">Enviados</div>
+                    <div class="mt-1">
+                        <span class="badge bg-dark">fila</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-success">{{ "{:,}".format(fila_total_confirmados).replace(",", ".") }}</div>
+                    <div class="text-muted small">Confirmados</div>
+                    <div class="mt-1">
+                        <span class="badge bg-success">{{ fila_taxa_confirmacao }}%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-warning">{{ "{:,}".format(fila_total_rejeitados).replace(",", ".") }}</div>
+                    <div class="text-muted small">Rejeitados</div>
+                    <div class="mt-1">
+                        <span class="badge bg-dark">fila</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% elif modo_selecionado == 'consulta' %}
+        <!-- ========== CARDS MODO CONSULTA ========== -->
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100 border-success">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-success">{{ total_campanhas_consulta }}</div>
+                    <div class="text-muted small">Campanhas Consulta</div>
+                    <div class="mt-1">
+                        <span class="badge bg-success">{{ campanhas_consulta_ativas }} ativas</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-info">{{ "{:,}".format(total_disparos_msg1).replace(",", ".") }}</div>
+                    <div class="text-muted small">Disparos MSG 1</div>
+                    <div class="mt-1">
+                        <span class="badge bg-success">consulta</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-success">{{ "{:,}".format(total_comprovantes_enviados).replace(",", ".") }}</div>
+                    <div class="text-muted small">Comprovantes</div>
+                    <div class="mt-1">
+                        <span class="badge bg-success">enviados</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-warning">{{ "{:,}".format(total_aguardando_comprovante).replace(",", ".") }}</div>
+                    <div class="text-muted small">Aguardando</div>
+                    <div class="mt-1">
+                        <span class="badge bg-warning text-dark">comprovante</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-warning">{{ media_nota }}</div>
+                    <div class="text-muted small">Nota Média</div>
+                    <div class="mt-1">
+                        {% for i in range(media_nota|int) %}
+                        <i class="bi bi-star-fill text-warning small"></i>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% else %}
+        <!-- ========== CARDS MODO TODOS ========== -->
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-info">{{ total_campanhas }}</div>
+                    <div class="text-muted small">Campanhas</div>
+                    <div class="mt-1">
+                        <span class="badge bg-secondary">{{ campanhas_fila_ativas + campanhas_consulta_ativas }} ativas</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-info">{{ "{:,}".format(total_disparos_msg1).replace(",", ".") }}</div>
+                    <div class="text-muted small">Disparos MSG 1</div>
+                    <div class="mt-1">
+                        <span class="badge bg-success">consulta</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-success">{{ "{:,}".format(total_comprovantes_enviados).replace(",", ".") }}</div>
+                    <div class="text-muted small">Comprovantes</div>
+                    <div class="mt-1">
+                        <span class="badge bg-success">enviados</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-warning">{{ "{:,}".format(total_aguardando_comprovante).replace(",", ".") }}</div>
+                    <div class="text-muted small">Aguardando</div>
+                    <div class="mt-1">
+                        <span class="badge bg-warning text-dark">comprovante</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body text-center">
+                    <div class="display-6 fw-bold text-warning">{{ media_nota }}</div>
+                    <div class="text-muted small">Nota Média</div>
+                    <div class="mt-1">
+                        {% for i in range(media_nota|int) %}
+                        <i class="bi bi-star-fill text-warning small"></i>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Comparativo Fila vs Consulta -->
+    <div class="row g-4 mb-4">
+        <!-- MODO FILA -->
+        {% if modo_selecionado != 'consulta' %}
+        <div class="{% if modo_selecionado == 'fila' %}col-lg-12{% else %}col-lg-6{% endif %}">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="bi bi-people-fill me-2"></i>Modo Fila (Busca Ativa)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="p-3 bg-light rounded">
+                                <div class="h4 mb-0">{{ total_campanhas_fila }}</div>
+                                <small class="text-muted">Campanhas</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-3 bg-light rounded">
+                                <div class="h4 mb-0">{{ "{:,}".format(fila_total_contatos).replace(",", ".") }}</div>
+                                <small class="text-muted">Contatos</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 bg-info bg-opacity-10 rounded text-center">
+                                <div class="h5 mb-0 text-info">{{ "{:,}".format(fila_total_enviados).replace(",", ".") }}</div>
+                                <small class="text-muted">Enviados</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 bg-success bg-opacity-10 rounded text-center">
+                                <div class="h5 mb-0 text-success">{{ "{:,}".format(fila_total_confirmados).replace(",", ".") }}</div>
+                                <small class="text-muted">Confirmados</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 bg-warning bg-opacity-10 rounded text-center">
+                                <div class="h5 mb-0 text-warning">{{ "{:,}".format(fila_total_rejeitados).replace(",", ".") }}</div>
+                                <small class="text-muted">Rejeitados</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span>Taxa de Confirmação</span>
+                            <span class="fw-bold text-success">{{ fila_taxa_confirmacao }}%</span>
+                        </div>
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar bg-success" style="width: {{ fila_taxa_confirmacao }}%"></div>
+                        </div>
+                    </div>
+                    {% if fila_total_erros > 0 %}
+                    <div class="mt-2 text-danger small">
+                        <i class="bi bi-exclamation-triangle"></i> {{ fila_total_erros }} erros de envio
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- MODO CONSULTA -->
+        {% if modo_selecionado != 'fila' %}
+        <div class="{% if modo_selecionado == 'consulta' %}col-lg-12{% else %}col-lg-6{% endif %}">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header" style="background: linear-gradient(135deg, #128C7E 0%, #25D366 100%); color: white;">
+                    <h5 class="mb-0"><i class="bi bi-calendar-check me-2"></i>Modo Consulta (Agendamentos)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="p-3 bg-light rounded">
+                                <div class="h4 mb-0">{{ total_campanhas_consulta }}</div>
+                                <small class="text-muted">Campanhas</small>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-3 bg-light rounded">
+                                <div class="h4 mb-0">{{ "{:,}".format(consulta_total).replace(",", ".") }}</div>
+                                <small class="text-muted">Consultas</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 bg-info bg-opacity-10 rounded text-center">
+                                <div class="h5 mb-0 text-info">{{ "{:,}".format(consulta_enviados).replace(",", ".") }}</div>
+                                <small class="text-muted">Enviados</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 bg-success bg-opacity-10 rounded text-center">
+                                <div class="h5 mb-0 text-success">{{ "{:,}".format(consulta_confirmados).replace(",", ".") }}</div>
+                                <small class="text-muted">Confirmados</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="p-2 bg-warning bg-opacity-10 rounded text-center">
+                                <div class="h5 mb-0 text-warning">{{ "{:,}".format(consulta_rejeitados).replace(",", ".") }}</div>
+                                <small class="text-muted">Rejeitados</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span>Taxa de Confirmação</span>
+                            <span class="fw-bold text-success">{{ consulta_taxa_confirmacao }}%</span>
+                        </div>
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar bg-success" style="width: {{ consulta_taxa_confirmacao }}%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- ==================== SEÇÕES EXCLUSIVAS DO MODO CONSULTA ==================== -->
+    {% if modo_selecionado != 'fila' %}
+
+    <!-- Gráficos - MODO CONSULTA -->
+    <div class="row g-4 mb-4">
+        <!-- Gráfico de MSG 1 por Dia -->
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-graph-up me-2"></i>Atividade dos Últimos 30 Dias
+                        <span class="badge bg-success ms-2">Modo Consulta</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="chartAtividade" height="100"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Gráfico de Distribuição de Notas -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-bar-chart me-2"></i>Distribuição de Notas</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="chartNotas" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabela de Desempenho por Usuário - MODO CONSULTA -->
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-person-badge me-2"></i>Desempenho por Usuário
+                        <span class="badge bg-success ms-2">Modo Consulta</span>
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Usuário</th>
+                                    <th class="text-center">Disparos MSG 1</th>
+                                    <th class="text-center">Comprovantes Enviados</th>
+                                    <th class="text-center">Aguardando</th>
+                                    <th class="text-center">Rejeitados</th>
+                                    <th class="text-center">Cancelados</th>
+                                    <th class="text-center">Taxa Sucesso</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for u in desempenho_usuarios %}
+                                {% set taxa = ((u.comprovantes_enviados or 0) / u.disparos_msg1 * 100)|round(1) if u.disparos_msg1 > 0 else 0 %}
+                                <tr>
+                                    <td>
+                                        <a href="{{ url_for('admin.usuario_detalhes', usuario_id=u.id) }}" class="text-decoration-none">
+                                            <strong>{{ u.nome }}</strong>
+                                            <i class="bi bi-box-arrow-up-right ms-1 small"></i>
+                                        </a>
+                                    </td>
+                                    <td class="text-center"><span class="badge bg-info">{{ u.disparos_msg1 or 0 }}</span></td>
+                                    <td class="text-center"><span class="badge bg-success">{{ u.comprovantes_enviados or 0 }}</span></td>
+                                    <td class="text-center"><span class="badge bg-warning text-dark">{{ u.aguardando_comprovante or 0 }}</span></td>
+                                    <td class="text-center"><span class="badge bg-secondary">{{ u.rejeitados or 0 }}</span></td>
+                                    <td class="text-center"><span class="badge bg-danger">{{ u.cancelados or 0 }}</span></td>
+                                    <td class="text-center">
+                                        <span class="badge {% if taxa >= 70 %}bg-success{% elif taxa >= 40 %}bg-warning{% else %}bg-danger{% endif %}">
+                                            {{ taxa }}%
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="7" class="text-center text-muted">Nenhum dado disponível</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Especialidades e Pesquisa de Satisfação - MODO CONSULTA -->
+    <div class="row g-4 mb-4">
+        <!-- Top Especialidades -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-hospital me-2"></i>Top Especialidades
+                        <span class="badge bg-success ms-2">Modo Consulta</span>
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Especialidade</th>
+                                    <th class="text-center">Total</th>
+                                    <th class="text-center">Confirmados</th>
+                                    <th class="text-center">Rejeitados</th>
+                                    <th class="text-center">Taxa</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for e in especialidades_top %}
+                                {% set taxa = ((e.confirmados or 0) / e.total * 100)|round(1) if e.total > 0 else 0 %}
+                                <tr>
+                                    <td>{{ e.especialidade or '-' }}</td>
+                                    <td class="text-center">{{ e.total }}</td>
+                                    <td class="text-center"><span class="badge bg-success">{{ e.confirmados or 0 }}</span></td>
+                                    <td class="text-center"><span class="badge bg-warning">{{ e.rejeitados or 0 }}</span></td>
+                                    <td class="text-center">
+                                        <div class="progress" style="height: 20px; min-width: 60px;">
+                                            <div class="progress-bar bg-success" style="width: {{ taxa }}%">{{ taxa }}%</div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr>
+                                    <td colspan="5" class="text-center text-muted">Nenhum dado disponível</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Resumo Pesquisa de Satisfação -->
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-star me-2"></i>Pesquisa de Satisfação
+                        <span class="badge bg-success ms-2">Modo Consulta</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 mb-3">
+                        <div class="col-4">
+                            <div class="text-center p-3 bg-primary bg-opacity-10 rounded">
+                                <div class="h3 mb-0 text-primary">{{ total_pesquisas }}</div>
+                                <small class="text-muted">Total</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-center p-3 bg-success bg-opacity-10 rounded">
+                                <div class="h3 mb-0 text-success">{{ pesquisas_respondidas }}</div>
+                                <small class="text-muted">Respondidas</small>
+                            </div>
+                        </div>
+                        <div class="col-4">
+                            <div class="text-center p-3 bg-secondary bg-opacity-10 rounded">
+                                <div class="h3 mb-0 text-secondary">{{ pesquisas_puladas }}</div>
+                                <small class="text-muted">Puladas</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-6">
+                            <div class="p-3 border rounded text-center">
+                                <div class="display-5 fw-bold text-warning">{{ media_nota }}</div>
+                                <div class="text-muted">Nota Média</div>
+                                <div class="mt-1">
+                                    {% for i in range(10) %}
+                                    {% if i < media_nota|int %}
+                                    <i class="bi bi-star-fill text-warning"></i>
+                                    {% else %}
+                                    <i class="bi bi-star text-muted"></i>
+                                    {% endif %}
+                                    {% endfor %}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="p-3 border rounded text-center">
+                                <div class="display-5 fw-bold text-success">{{ pct_atenciosa }}%</div>
+                                <div class="text-muted">Equipe Atenciosa</div>
+                                <div class="progress mt-2" style="height: 8px;">
+                                    <div class="progress-bar bg-success" style="width: {{ pct_atenciosa }}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Comentários Recentes - MODO CONSULTA -->
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-chat-quote me-2"></i>Comentários Recentes
+                        <span class="badge bg-success ms-2">Modo Consulta</span>
+                    </h5>
+                    <div>
+                        <span class="badge bg-secondary me-2">{{ total_comentarios }} no total</span>
+                        <a href="{{ url_for('admin.comentarios') }}" class="btn btn-sm btn-primary">
+                            <i class="bi bi-list-ul me-1"></i> Ver Todos
+                        </a>
+                    </div>
+                </div>
+                <div class="card-body" style="max-height: 400px; overflow-y: auto;">
+                    {% if comentarios_recentes %}
+                    <div class="row g-3">
+                        {% for pesquisa, paciente in comentarios_recentes %}
+                        <div class="col-md-6">
+                            <div class="p-3 border rounded h-100">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div>
+                                        {% for i in range(pesquisa.nota_satisfacao or 0) %}
+                                        <i class="bi bi-star-fill text-warning"></i>
+                                        {% endfor %}
+                                        {% for i in range(10 - (pesquisa.nota_satisfacao or 0)) %}
+                                        <i class="bi bi-star text-muted"></i>
+                                        {% endfor %}
+                                    </div>
+                                    <span class="badge bg-light text-dark">{{ pesquisa.especialidade or '-' }}</span>
+                                </div>
+                                <p class="mb-2 fst-italic">"{{ pesquisa.comentario }}"</p>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <small class="text-muted">{{ paciente }}</small>
+                                    <small class="text-muted">{{ pesquisa.data_resposta.strftime('%d/%m/%Y %H:%M') if pesquisa.data_resposta else '-' }}</small>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                    {% else %}
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-chat-text" style="font-size: 48px;"></i>
+                        <p class="mt-2">Nenhum comentário ainda</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% endif %}
+    <!-- ==================== FIM SEÇÕES EXCLUSIVAS DO MODO CONSULTA ==================== -->
+
+    <!-- Gráficos - MODO FILA -->
+    {% if modo_selecionado == 'fila' %}
+    <div class="row g-4 mb-4">
+        <!-- Gráfico de Atividade Fila -->
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-graph-up me-2"></i>Atividade dos Últimos 30 Dias
+                        <span class="badge bg-dark ms-2">Modo Fila</span>
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="chartAtividadeFila" height="100"></canvas>
+                </div>
+            </div>
+        </div>
+        <!-- Gráfico de Distribuição de Status -->
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0"><i class="bi bi-pie-chart me-2"></i>Distribuição de Status</h5>
+                </div>
+                <div class="card-body">
+                    <canvas id="chartStatusFila" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Mensagens por Usuário - Modo Fila -->
+    {% if msgs_por_usuario_fila and modo_selecionado != 'consulta' %}
+    <div class="row g-4 mb-4">
+        <div class="col-lg-6">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="bi bi-person-badge me-2"></i>Mensagens por Usuário (Fila)</h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light sticky-top">
+                                <tr>
+                                    <th>Usuário</th>
+                                    <th class="text-center">Enviadas</th>
+                                    <th class="text-center">Recebidas</th>
+                                    <th class="text-center">Total</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for u in msgs_por_usuario_fila %}
+                                <tr>
+                                    <td>{{ u.nome }}</td>
+                                    <td class="text-center"><span class="badge bg-info">{{ u.enviadas or 0 }}</span></td>
+                                    <td class="text-center"><span class="badge bg-secondary">{{ u.recebidas or 0 }}</span></td>
+                                    <td class="text-center"><strong>{{ u.total_msgs }}</strong></td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Notas Médias por Especialidade - MODO CONSULTA -->
+    {% if notas_por_especialidade and modo_selecionado != 'fila' %}
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-star-half me-2"></i>Notas Médias por Especialidade
+                        <small class="text-muted ms-2">(Pesquisa de Satisfação)</small>
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Especialidade</th>
+                                    <th class="text-center">Nota Média</th>
+                                    <th class="text-center">Total Respostas</th>
+                                    <th class="text-center">Equipe Atenciosa</th>
+                                    <th class="text-center">Visualização</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for esp in notas_por_especialidade %}
+                                {% set pct_atenciosa = ((esp.atenciosa_sim or 0) / esp.total_atenciosa * 100)|round(1) if esp.total_atenciosa > 0 else 0 %}
+                                <tr>
+                                    <td><strong>{{ esp.especialidade or '-' }}</strong></td>
+                                    <td class="text-center">
+                                        <div class="d-flex align-items-center justify-content-center">
+                                            <span class="badge bg-warning text-dark fs-6 me-2">{{ esp.media_nota|round(1) }}</span>
+                                            <div>
+                                                {% for i in range(esp.media_nota|int) %}
+                                                <i class="bi bi-star-fill text-warning"></i>
+                                                {% endfor %}
+                                                {% if esp.media_nota|int < 10 %}
+                                                <i class="bi bi-star text-muted"></i>
+                                                {% endif %}
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-info">{{ esp.total_respostas }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge {% if pct_atenciosa >= 80 %}bg-success{% elif pct_atenciosa >= 60 %}bg-warning{% else %}bg-danger{% endif %}">
+                                            {{ pct_atenciosa }}%
+                                        </span>
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="progress" style="width: 100px; height: 20px;">
+                                            <div class="progress-bar"
+                                                 style="width: {{ (esp.media_nota / 10 * 100)|round(0) }}%;
+                                                        background: linear-gradient(90deg,
+                                                            {% if esp.media_nota < 5 %}#dc3545{% elif esp.media_nota < 7 %}#ffc107{% else %}#198754{% endif %} 0%,
+                                                            {% if esp.media_nota < 5 %}#ff6b6b{% elif esp.media_nota < 7 %}#ffd54f{% else %}#2ecc71{% endif %} 100%);">
+                                                {{ (esp.media_nota / 10 * 100)|round(0) }}%
+                                            </div>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Estatísticas Detalhadas por Usuário - MODO CONSULTA -->
+    {% if stats_detalhadas_usuario and modo_selecionado != 'fila' %}
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white">
+                    <h5 class="mb-0">
+                        <i class="bi bi-people me-2"></i>Estatísticas Detalhadas por Usuário
+                        <small class="text-muted ms-2">(Modo Consulta)</small>
+                    </h5>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Usuário</th>
+                                    <th class="text-center" data-bs-toggle="tooltip" title="Total de campanhas criadas">Campanhas</th>
+                                    <th class="text-center" data-bs-toggle="tooltip" title="Total de agendamentos processados">Agendamentos</th>
+                                    <th class="text-center" data-bs-toggle="tooltip" title="Mensagens enviadas com sucesso">Enviados</th>
+                                    <th class="text-center" data-bs-toggle="tooltip" title="Consultas confirmadas">Confirmados</th>
+                                    <th class="text-center" data-bs-toggle="tooltip" title="Consultas rejeitadas">Rejeitados</th>
+                                    <th class="text-center" data-bs-toggle="tooltip" title="Taxa de confirmação (Confirmados/Enviados). Pode ser >100% se houver confirmações múltiplas ou antigas">Taxa</th>
+                                    <th class="text-center" data-bs-toggle="tooltip" title="Pesquisas respondidas">Pesquisas</th>
+                                    <th class="text-center" data-bs-toggle="tooltip" title="Nota media nas pesquisas de satisfacao">Nota Média</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for u in stats_detalhadas_usuario %}
+                                {% set taxa = ((u.confirmados or 0) / u.enviados * 100)|round(1) if u.enviados > 0 else 0 %}
+                                <tr>
+                                    <td>
+                                        <a href="{{ url_for('admin.usuario_detalhes', usuario_id=u.id) }}" class="text-decoration-none">
+                                            <strong>{{ u.nome }}</strong>
+                                            <i class="bi bi-box-arrow-up-right ms-1 small"></i>
+                                        </a>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-primary">{{ u.campanhas_criadas or 0 }}</span>
+                                    </td>
+                                    <td class="text-center">{{ u.total_agendamentos or 0 }}</td>
+                                    <td class="text-center">
+                                        <span class="badge bg-info">{{ u.enviados or 0 }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-success">{{ u.confirmados or 0 }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-warning">{{ u.rejeitados or 0 }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge {% if taxa >= 70 %}bg-success{% elif taxa >= 40 %}bg-warning text-dark{% else %}bg-danger{% endif %} fs-6">
+                                            {{ taxa }}%
+                                        </span>
+                                        {% if taxa > 100 %}
+                                        <i class="bi bi-info-circle text-primary ms-1" data-bs-toggle="tooltip"
+                                           title="Taxa acima de 100% indica que existem mais confirmações do que mensagens enviadas. Isso pode ocorrer por: confirmações múltiplas, confirmações antigas sem registro de envio, ou confirmações manuais."></i>
+                                        {% endif %}
+                                    </td>
+                                    <td class="text-center">
+                                        <span class="badge bg-secondary">{{ u.total_pesquisas or 0 }}</span>
+                                    </td>
+                                    <td class="text-center">
+                                        {% if u.media_nota_usuario %}
+                                        <span class="badge bg-warning text-dark">{{ u.media_nota_usuario|round(1) }}</span>
+                                        <div class="small">
+                                            {% for i in range(u.media_nota_usuario|int) %}
+                                            <i class="bi bi-star-fill text-warning"></i>
+                                            {% endfor %}
+                                        </div>
+                                        {% else %}
+                                        <span class="text-muted">-</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Explicação sobre Taxa de Confirmação - MODO CONSULTA -->
+    {% if modo_selecionado != 'fila' %}
+    <div class="row g-4 mb-4">
+        <div class="col-12">
+            <div class="alert alert-info border-0 shadow-sm">
+                <h5 class="alert-heading">
+                    <i class="bi bi-info-circle me-2"></i>Entendendo a Taxa de Confirmação
+                    <span class="badge bg-success ms-2">Modo Consulta</span>
+                </h5>
+                <hr>
+                <p class="mb-2"><strong>Por que a taxa pode ser maior que 100%?</strong></p>
+                <ul class="mb-0">
+                    <li><strong>Confirmações múltiplas:</strong> Um paciente pode confirmar a consulta mais de uma vez</li>
+                    <li><strong>Confirmações antigas:</strong> Consultas confirmadas antes do sistema registrar o envio da mensagem</li>
+                    <li><strong>Confirmações manuais:</strong> Confirmações feitas por outros canais (telefone, presencial) que foram registradas no sistema</li>
+                    <li><strong>Dados históricos:</strong> Registros importados de sistemas anteriores sem log de envio completo</li>
+                </ul>
+                <hr>
+                <p class="mb-0 small"><strong>Como interpretar:</strong> Uma taxa de 100% indica que todos os contatos confirmaram. Uma taxa acima de 100% ainda é positiva, indicando alto engajamento, mas reflete as situações acima.</p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+{% if modo_selecionado != 'fila' %}
+// Gráfico de Atividade (Baseado em MSG 1) - MODO CONSULTA
+const ctxAtividade = document.getElementById('chartAtividade').getContext('2d');
+new Chart(ctxAtividade, {
+    type: 'line',
+    data: {
+        labels: {{ dias_labels | tojson }},
+        datasets: [
+            {
+                label: 'MSG 1 (Disparos)',
+                data: {{ msg1_data | tojson }},
+                borderColor: '#0dcaf0',
+                backgroundColor: 'rgba(13, 202, 240, 0.1)',
+                fill: true,
+                tension: 0.3
+            },
+            {
+                label: 'Comprovantes Enviados',
+                data: {{ comprovantes_data | tojson }},
+                borderColor: '#198754',
+                backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                fill: true,
+                tension: 0.3
+            },
+            {
+                label: 'Rejeitados',
+                data: {{ rejeitados_data | tojson }},
+                borderColor: '#dc3545',
+                backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                fill: true,
+                tension: 0.3
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                position: 'top'
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+
+// Gráfico de Distribuição de Notas - MODO CONSULTA
+const ctxNotas = document.getElementById('chartNotas').getContext('2d');
+new Chart(ctxNotas, {
+    type: 'bar',
+    data: {
+        labels: {{ notas_labels | tojson }},
+        datasets: [{
+            label: 'Quantidade',
+            data: {{ notas_data | tojson }},
+            backgroundColor: [
+                '#dc3545', '#dc3545', '#dc3545', '#dc3545',  // 1-4 vermelho
+                '#ffc107', '#ffc107', '#ffc107',              // 5-7 amarelo
+                '#198754', '#198754', '#198754'               // 8-10 verde
+            ],
+            borderRadius: 5
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: {
+            legend: {
+                display: false
+            },
+            title: {
+                display: true,
+                text: 'Notas de 1 a 10'
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true
+            }
+        }
+    }
+});
+{% endif %}
+
+{% if modo_selecionado == 'fila' %}
+// Gráfico de Atividade - MODO FILA
+const ctxAtividadeFila = document.getElementById('chartAtividadeFila').getContext('2d');
+new Chart(ctxAtividadeFila, {
+    type: 'line',
+    data: {
+        labels: {{ fila_dias_labels | tojson }},
+        datasets: [
+            {
+                label: 'Mensagens Enviadas',
+                data: {{ fila_enviados_data | tojson }},
+                borderColor: '#0dcaf0',
+                backgroundColor: 'rgba(13, 202, 240, 0.1)',
+                fill: true,
+                tension: 0.3
+            },
+            {
+                label: 'Confirmados',
+                data: {{ fila_confirmados_data | tojson }},
+                borderColor: '#198754',
+                backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                fill: true,
+                tension: 0.3
+            },
+            {
+                label: 'Rejeitados',
+                data: {{ fila_rejeitados_data | tojson }},
+                borderColor: '#dc3545',
+                backgroundColor: 'rgba(220, 53, 69, 0.1)',
+                fill: true,
+                tension: 0.3
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { position: 'top' } },
+        scales: { y: { beginAtZero: true } }
+    }
+});
+
+// Gráfico de Distribuição de Status - MODO FILA
+const STATUS_CORES = {
+    'pendente': '#6c757d',
+    'validando': '#0dcaf0',
+    'pronto_envio': '#0d6efd',
+    'enviado': '#fd7e14',
+    'aguardando_nascimento': '#ffc107',
+    'aguardando_motivo_rejeicao': '#ffc107',
+    'concluido': '#198754',
+    'erro': '#dc3545',
+    'sem_whatsapp': '#adb5bd'
+};
+const filaStatusLabels = {{ fila_status_labels | tojson }};
+const filaStatusCores = filaStatusLabels.map(l => STATUS_CORES[l] || '#6c757d');
+
+const ctxStatusFila = document.getElementById('chartStatusFila').getContext('2d');
+new Chart(ctxStatusFila, {
+    type: 'doughnut',
+    data: {
+        labels: filaStatusLabels,
+        datasets: [{
+            data: {{ fila_status_data | tojson }},
+            backgroundColor: filaStatusCores,
+            borderWidth: 2
+        }]
+    },
+    options: {
+        responsive: true,
+        plugins: { legend: { position: 'bottom' } }
+    }
+});
+{% endif %}
+
+// Inicializar tooltips do Bootstrap
+var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+    return new bootstrap.Tooltip(tooltipTriggerEl);
+});
+
+// Funções do modal de exportação
+function selecionarTodosStatus() {
+    document.querySelectorAll('input[name="status"]').forEach(cb => cb.checked = true);
+}
+function desmarcarTodosStatus() {
+    document.querySelectorAll('input[name="status"]').forEach(cb => cb.checked = false);
+}
+function selecionarTodosTipos() {
+    document.querySelectorAll('input[name="tipo"]').forEach(cb => cb.checked = true);
+}
+function desmarcarTodosTipos() {
+    document.querySelectorAll('input[name="tipo"]').forEach(cb => cb.checked = false);
+}
+
+// Trocar entre Modo Consulta e Modo Fila
+function trocarModoExport(modo) {
+    const filtrosConsulta = document.getElementById('filtrosConsulta');
+    const filtrosFila = document.getElementById('filtrosFila');
+    const form = document.getElementById('formExportar');
+
+    if (modo === 'consulta') {
+        filtrosConsulta.style.display = 'block';
+        filtrosFila.style.display = 'none';
+        form.action = '{{ url_for("admin.exportar_dados") }}';
+    } else {
+        filtrosConsulta.style.display = 'none';
+        filtrosFila.style.display = 'block';
+        form.action = '{{ url_for("admin.exportar_fila") }}';
+    }
+}
+
+// Mostrar loading no botão de exportar
+function mostrarLoading() {
+    const btnTexto = document.getElementById('btnExportarTexto');
+    const btnLoading = document.getElementById('btnExportarLoading');
+    const btnExportar = document.getElementById('btnExportar');
+
+    btnTexto.style.display = 'none';
+    btnLoading.style.display = 'inline';
+    btnExportar.disabled = true;
+
+    // Restaurar botão após 30 segundos (caso algo dê errado)
+    setTimeout(function() {
+        btnTexto.style.display = 'inline';
+        btnLoading.style.display = 'none';
+        btnExportar.disabled = false;
+    }, 30000);
+
+    return true; // Permite o submit do form
+}
+
+// Restaurar botão quando modal fechar
+document.getElementById('modalExportar').addEventListener('hidden.bs.modal', function () {
+    const btnTexto = document.getElementById('btnExportarTexto');
+    const btnLoading = document.getElementById('btnExportarLoading');
+    const btnExportar = document.getElementById('btnExportar');
+
+    btnTexto.style.display = 'inline';
+    btnLoading.style.display = 'none';
+    btnExportar.disabled = false;
+});
+</script>
+
+<!-- Modal de Exportação -->
+<div class="modal fade" id="modalExportar" tabindex="-1" aria-labelledby="modalExportarLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title" id="modalExportarLabel">
+                    <i class="bi bi-file-earmark-excel me-2"></i>Exportar Dados para Excel
+                </h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form action="{{ url_for('admin.exportar_dados') }}" method="POST" id="formExportar" onsubmit="mostrarLoading()">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <div class="modal-body">
+                    <p class="text-muted mb-3">Selecione os filtros para personalizar sua exportação:</p>
+
+                    <!-- Seletor de Modo -->
+                    <div class="card mb-3 border-primary">
+                        <div class="card-header bg-primary text-white">
+                            <strong><i class="bi bi-toggles me-2"></i>Modo de Exportação</strong>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="modo_export" id="modoConsulta" value="consulta" checked onchange="trocarModoExport('consulta')">
+                                        <label class="form-check-label" for="modoConsulta">
+                                            <i class="bi bi-calendar-check text-success me-1"></i>
+                                            <strong>Modo Consulta</strong> (Agendamentos)
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check form-check-inline">
+                                        <input class="form-check-input" type="radio" name="modo_export" id="modoFila" value="fila" onchange="trocarModoExport('fila')">
+                                        <label class="form-check-label" for="modoFila">
+                                            <i class="bi bi-people-fill text-dark me-1"></i>
+                                            <strong>Modo Fila</strong> (Busca Ativa)
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filtros Modo Consulta -->
+                    <div id="filtrosConsulta">
+
+                    <!-- Status -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <strong><i class="bi bi-flag me-2"></i>Status</strong>
+                            <div>
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="selecionarTodosStatus()">Todos</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="desmarcarTodosStatus()">Nenhum</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status" value="AGUARDANDO_ENVIO" id="status1" checked>
+                                        <label class="form-check-label" for="status1">Aguardando Envio</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status" value="AGUARDANDO_CONFIRMACAO" id="status2" checked>
+                                        <label class="form-check-label" for="status2">Aguardando Confirmação</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status" value="AGUARDANDO_COMPROVANTE" id="status3" checked>
+                                        <label class="form-check-label" for="status3">Aguardando Comprovante</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status" value="CONFIRMADO" id="status4" checked>
+                                        <label class="form-check-label" for="status4">
+                                            <span class="badge bg-success">Confirmado</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status" value="REJEITADO" id="status5" checked>
+                                        <label class="form-check-label" for="status5">
+                                            <span class="badge bg-danger">Rejeitado</span>
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status" value="CANCELADO" id="status6" checked>
+                                        <label class="form-check-label" for="status6">
+                                            <span class="badge bg-secondary">Cancelado</span>
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status" value="REAGENDADO" id="status7" checked>
+                                        <label class="form-check-label" for="status7">Reagendado</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status" value="AGUARDANDO_REAGENDAMENTO" id="status8" checked>
+                                        <label class="form-check-label" for="status8">Aguard. Reagendamento</label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="status" value="AGUARDANDO_MOTIVO_REJEICAO" id="status9" checked>
+                                        <label class="form-check-label" for="status9">Aguard. Motivo</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Tipo de Agendamento -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                            <strong><i class="bi bi-tags me-2"></i>Tipo de Agendamento</strong>
+                            <div>
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="selecionarTodosTipos()">Todos</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" onclick="desmarcarTodosTipos()">Nenhum</button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="tipo" value="RETORNO" id="tipo1" checked>
+                                        <label class="form-check-label" for="tipo1">Retorno</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="tipo" value="INTERCONSULTA" id="tipo2" checked>
+                                        <label class="form-check-label" for="tipo2">Interconsulta</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-4">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="tipo" value="REMARCACAO" id="tipo3" checked>
+                                        <label class="form-check-label" for="tipo3">Remarcação</label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Telefones -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <strong><i class="bi bi-telephone me-2"></i>Telefones</strong>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="telefones_validos" value="true" id="telValidos" checked>
+                                        <label class="form-check-label" for="telValidos">
+                                            <i class="bi bi-check-circle text-success me-1"></i>Incluir com telefones válidos
+                                        </label>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="telefones_invalidos" value="true" id="telInvalidos" checked>
+                                        <label class="form-check-label" for="telInvalidos">
+                                            <i class="bi bi-x-circle text-danger me-1"></i>Incluir com telefones inválidos
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Filtros Adicionais -->
+                    <div class="card mb-3">
+                        <div class="card-header bg-light">
+                            <strong><i class="bi bi-funnel me-2"></i>Filtros Adicionais</strong>
+                        </div>
+                        <div class="card-body">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Especialidade</label>
+                                    <input type="text" class="form-control" name="especialidade" placeholder="Ex: Cardiologia">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Usuário</label>
+                                    <select class="form-select" name="usuario_id">
+                                        <option value="">Todos os usuários</option>
+                                        {% for u in usuarios_export %}
+                                        <option value="{{ u.id }}">{{ u.nome }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Data Início</label>
+                                    <input type="date" class="form-control" name="data_inicio">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label">Data Fim</label>
+                                    <input type="date" class="form-control" name="data_fim">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Opções de Conteúdo -->
+                    <div class="card">
+                        <div class="card-header bg-light">
+                            <strong><i class="bi bi-list-check me-2"></i>Conteúdo da Exportação</strong>
+                        </div>
+                        <div class="card-body">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="incluir_pesquisa" value="true" id="incluirPesquisa" checked>
+                                <label class="form-check-label" for="incluirPesquisa">
+                                    <i class="bi bi-star me-1 text-warning"></i>Incluir dados da Pesquisa de Satisfação (nota, comentários)
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+
+                    </div><!-- Fim filtrosConsulta -->
+
+                    <!-- Filtros Modo Fila (inicialmente oculto) -->
+                    <div id="filtrosFila" style="display: none;">
+
+                        <!-- Status Fila -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-light d-flex justify-content-between align-items-center">
+                                <strong><i class="bi bi-flag me-2"></i>Status</strong>
+                                <div>
+                                    <button type="button" class="btn btn-sm btn-outline-primary" onclick="document.querySelectorAll('input[name=status_fila]').forEach(cb => cb.checked = true)">Todos</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="document.querySelectorAll('input[name=status_fila]').forEach(cb => cb.checked = false)">Nenhum</button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="status_fila" value="aguardando" id="statusFila1" checked>
+                                            <label class="form-check-label" for="statusFila1">Aguardando</label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="status_fila" value="enviado" id="statusFila2" checked>
+                                            <label class="form-check-label" for="statusFila2">Enviado</label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="status_fila" value="confirmado" id="statusFila3" checked>
+                                            <label class="form-check-label" for="statusFila3">
+                                                <span class="badge bg-success">Confirmado</span>
+                                            </label>
+                                        </div>
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="status_fila" value="rejeitado" id="statusFila4" checked>
+                                            <label class="form-check-label" for="statusFila4">
+                                                <span class="badge bg-danger">Rejeitado</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="form-check">
+                                            <input class="form-check-input" type="checkbox" name="status_fila" value="erro" id="statusFila5" checked>
+                                            <label class="form-check-label" for="statusFila5">
+                                                <span class="badge bg-warning">Erro</span>
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Filtros Adicionais Fila -->
+                        <div class="card mb-3">
+                            <div class="card-header bg-light">
+                                <strong><i class="bi bi-funnel me-2"></i>Filtros Adicionais</strong>
+                            </div>
+                            <div class="card-body">
+                                <div class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Procedimento</label>
+                                        <input type="text" class="form-control" name="procedimento_fila" placeholder="Ex: Cirurgia">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Usuário</label>
+                                        <select class="form-select" name="usuario_id_fila">
+                                            <option value="">Todos os usuários</option>
+                                            {% for u in usuarios_fila_export %}
+                                            <option value="{{ u.id }}">{{ u.nome }}</option>
+                                            {% endfor %}
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Data Início</label>
+                                        <input type="date" class="form-control" name="data_inicio_fila">
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Data Fim</label>
+                                        <input type="date" class="form-control" name="data_fim_fila">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="alert alert-info">
+                            <i class="bi bi-info-circle me-2"></i>
+                            <strong>Modo Fila:</strong> Exporta dados das campanhas de Busca Ativa (fila cirúrgica).
+                        </div>
+
+                    </div><!-- Fim filtrosFila -->
+
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-success" id="btnExportar">
+                        <span id="btnExportarTexto"><i class="bi bi-download me-1"></i> Exportar para Excel</span>
+                        <span id="btnExportarLoading" style="display: none;">
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            Gerando arquivo...
+                        </span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,16 +1,13 @@
 """Evolution-API receive endpoint."""
 
+import logging
 import threading
 from datetime import datetime, timedelta
 
 from flask import Blueprint, current_app, jsonify, request
 
+from app.ai import AnaliseSentimento, DeepSeekAI, SistemaFAQ
 from app.extensions import csrf, db
-from app.main import (
-    MENSAGEM_PADRAO, RESPOSTAS_DESCONHECO, RESPOSTAS_NAO,
-    RESPOSTAS_SIM, AnaliseSentimento, DeepSeekAI, SistemaFAQ,
-    logger, verificar_resposta_em_lista,
-)
 from app.models import (
     AgendamentoConsulta, Campanha, CampanhaConsulta,
     ComprovanteAntecipado, ConfigWhatsApp, Contato,
@@ -19,6 +16,7 @@ from app.models import (
     buscar_comprovante_antecipado,
 )
 from app.services.mensagem import (
+    MENSAGEM_PADRAO, RESPOSTAS_DESCONHECO, RESPOSTAS_NAO, RESPOSTAS_SIM,
     enviar_e_registrar_consulta,
     formatar_data_consulta,
     formatar_mensagem_cancelamento_sem_resposta,
@@ -28,10 +26,14 @@ from app.services.mensagem import (
     formatar_mensagem_interconsulta_aprovada,
     formatar_mensagem_perguntar_motivo,
     formatar_mensagem_voltar_posto,
+    verificar_resposta_em_lista,
 )
 from app.services.telefone import formatar_numero
 from app.services.timezone import obter_agora_fortaleza
 from app.services.whatsapp import WhatsApp
+
+
+logger = logging.getLogger(__name__)
 
 
 bp = Blueprint('webhook', __name__)

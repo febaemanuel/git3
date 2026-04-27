@@ -1,6 +1,7 @@
 """Fila cirúrgica (busca ativa) routes."""
 
 import json
+import logging
 import os
 import threading
 import time
@@ -15,30 +16,32 @@ from flask_login import current_user, login_required
 from werkzeug.utils import secure_filename
 import pandas as pd
 
+from app.celery_compat import AsyncResult, celery_app
 from app.extensions import db
-from app.main import (
-    AsyncResult, MENSAGEM_PADRAO, admin_required, celery_app,
-    criar_faqs_padrao, criar_tutoriais_padrao,
-    enviar_campanha_bg, get_dashboard_route, logger,
-    processar_followup_bg, processar_planilha,
-    validar_campanha_bg,
-    verificar_acesso_campanha, verificar_acesso_contato,
-    verificar_acesso_ticket,
-)
 from app.models import (
     Campanha, ConfigGlobal, ConfigTentativas, ConfigWhatsApp,
     Contato, LogMsg, RespostaAutomatica, Telefone, TentativaContato,
     TicketAtendimento, Tutorial, Usuario,
 )
+from app.seeds import criar_faqs_padrao, criar_tutoriais_padrao
 from app.services.mensagem import (
+    MENSAGEM_PADRAO,
     formatar_mensagem_fila_retry1, formatar_mensagem_fila_retry2,
     formatar_mensagem_fila_sem_resposta,
 )
+from app.services.planilha import processar_planilha
 from app.services.telefone import formatar_numero
 from app.services.timezone import (
     obter_agora_fortaleza, obter_hoje_fortaleza,
 )
 from app.services.whatsapp import WhatsApp
+from app.utils import (
+    admin_required, get_dashboard_route, verificar_acesso_campanha,
+    verificar_acesso_contato, verificar_acesso_ticket,
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 bp = Blueprint('fila', __name__)

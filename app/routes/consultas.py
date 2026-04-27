@@ -21,7 +21,7 @@ from app.models import (
     TelefoneConsulta, ConfigWhatsApp,
     buscar_comprovante_antecipado, normalizar_nome_paciente,
 )
-from app.main import extrair_dados_comprovante
+from app.services.ocr import extrair_dados_comprovante
 from app.services.mensagem import (
     enviar_e_registrar_consulta,
     formatar_mensagem_comprovante,

@@ -108,7 +108,7 @@ def init_database():
 
         # Importar app e criar tabelas
         from app import app, db
-        from app.main import criar_admin
+        from app.seeds import criar_admin
 
         with app.app_context():
             db.create_all()
@@ -143,8 +143,8 @@ def show_summary():
 ║                                                                ║
 ║  Para iniciar o servidor:                                      ║
 ║  -------------------------                                     ║
-║  Desenvolvimento:  python app.py                               ║
-║  Producao:         gunicorn -w 4 -b 0.0.0.0:5001 app:app      ║
+║  Desenvolvimento:  python wsgi.py                              ║
+║  Producao:         gunicorn -w 4 -b 0.0.0.0:5001 wsgi:app     ║
 ║                                                                ║
 ║  Acesse: http://localhost:5001                                 ║
 ║                                                                ║
@@ -210,7 +210,7 @@ def main():
             from dotenv import load_dotenv
             load_dotenv()
             from app import app, db
-            from app.main import criar_admin
+            from app.seeds import criar_admin
             with app.app_context():
                 criar_admin()
                 print("Admin criado: admin@huwc.com / admin123")

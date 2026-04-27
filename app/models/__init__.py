@@ -1,7 +1,5 @@
 """Models package: aggregates all model modules and re-exports their public
-names so callers can keep doing ``from app.models import Campanha`` (or, via
-the legacy ``from app.main import *`` shim in ``app/__init__.py``, the older
-``from app import Campanha``)."""
+names so callers do ``from app.models import Campanha``, etc."""
 
 from app.models.usuario import Usuario
 from app.models.core import (

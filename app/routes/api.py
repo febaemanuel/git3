@@ -1,14 +1,18 @@
 """Configuration / Celery / WhatsApp control APIs."""
 
+import logging
 from datetime import datetime
 
 from flask import Blueprint, jsonify, request
 from flask_login import current_user, login_required
 
+from app.celery_compat import AsyncResult, celery_app
 from app.extensions import db
-from app.main import AsyncResult, celery_app, logger
 from app.models import ConfigGlobal, ConfigWhatsApp
 from app.services.whatsapp import WhatsApp
+
+
+logger = logging.getLogger(__name__)
 
 
 bp = Blueprint('api', __name__)

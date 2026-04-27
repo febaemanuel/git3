@@ -305,7 +305,7 @@ def enviar_campanha_task(self, campanha_id):
             # Envio
             if c.status == 'pronto_envio':
                 # Normalização JIT (Just-In-Time) - normaliza só quando for enviar
-                from app.main import DeepSeekAI
+                from app.ai import DeepSeekAI
                 from app.models import ProcedimentoNormalizado
 
                 if not c.procedimento_normalizado and c.procedimento:
@@ -720,7 +720,7 @@ def processar_planilha_task(self, arquivo_path, campanha_id):
         dict: Resultado do processamento
     """
     from app.extensions import db
-    from app.main import DeepSeekAI
+    from app.ai import DeepSeekAI
     from app.models import Campanha, Contato, Telefone
     from datetime import datetime
     import pandas as pd
@@ -1785,7 +1785,7 @@ def processar_envio_pesquisa(self, envio_id):
     from app.extensions import db
     from app.models import EnvioPesquisa, EnvioPesquisaTelefone, Pesquisa
     from app.services.whatsapp import WhatsApp
-    from app.main import _renderizar_mensagem_envio
+    from app.services.mensagem import _renderizar_mensagem_envio
     from datetime import datetime
     from flask import url_for
 

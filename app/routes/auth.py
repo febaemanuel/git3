@@ -1,5 +1,6 @@
 """Auth & landing routes (login, logout, cadastro)."""
 
+import logging
 from datetime import datetime
 
 from flask import (
@@ -11,8 +12,12 @@ from flask_login import (
 )
 
 from app.extensions import db
-from app.main import ADMIN_EMAIL, get_dashboard_route, logger
 from app.models import Usuario, ConfigGlobal
+from app.seeds import ADMIN_EMAIL
+from app.utils import get_dashboard_route
+
+
+logger = logging.getLogger(__name__)
 
 
 bp = Blueprint('auth', __name__)

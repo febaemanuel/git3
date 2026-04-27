@@ -11,9 +11,20 @@ exported here for the same backwards-compat reason; new code should prefer
 ``from app.extensions import db``.
 """
 
+import logging
 import os
 
 from app.extensions import csrf, db, login_manager  # re-exported
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler('busca_ativa.log', encoding='utf-8'),
+    ],
+)
 
 
 _app_instance = None
@@ -36,14 +47,12 @@ def create_app(config_name=None):
     except ImportError:
         pass
 
-    # Importing app.main runs the (now app-free) module-level setup: logging,
-    # constants, route helpers, the @login_manager.user_loader, etc.
-    from app import main as _main
     from app.config import BASE_DIR, BaseConfig
     from app.seeds import (
         ADMIN_EMAIL, ADMIN_SENHA, criar_admin, criar_faqs_padrao,
         criar_tutoriais_padrao,
     )
+    from app.utils import get_dashboard_route, load_user
     from flask import Flask
 
     static_dir = os.path.join(BASE_DIR, 'static')
@@ -61,10 +70,11 @@ def create_app(config_name=None):
     login_manager.login_view = 'auth.login'
     login_manager.login_message = 'Faca login para acessar.'
     login_manager.login_message_category = 'warning'
+    login_manager.user_loader(load_user)
 
     @flask_app.context_processor
     def _inject_dashboard_route():
-        return dict(get_dashboard_route=_main.get_dashboard_route)
+        return dict(get_dashboard_route=get_dashboard_route)
 
     @flask_app.cli.command('init-db')
     def _init_db_cli():

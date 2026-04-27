@@ -497,3 +497,71 @@ Não recebemos sua confirmação para o procedimento de *{procedimento}*.
 Sua vaga foi *disponibilizada* por falta de resposta.
 
 Caso ainda tenha interesse, entre em contato conosco pelo telefone (85) 3366-8000."""
+
+RESPOSTAS_SIM = [
+    'SIM', 'S', '1',
+    'CONFIRMO', 'CONFIRMADO',
+    'TENHO INTERESSE', 'ACEITO', 'OK',
+    '1 SIM', '1SIM', 'SIM 1', 'SIM1'
+]
+
+RESPOSTAS_NAO = [
+    'NAO', 'NÃO', 'N', '2',
+    'NAO QUERO', 'NÃO QUERO',
+    'NAO TENHO INTERESSE', 'NÃO TENHO INTERESSE',
+    '2 NAO', '2NAO', 'NAO 2', 'NAO2',
+    '2 NÃO', '2NÃO', 'NÃO 2', 'NÃO2'
+]
+
+RESPOSTAS_DESCONHECO = [
+    '3', 'DESCONHECO', 'DESCONHEÇO',
+    'NAO SOU', 'NÃO SOU',
+    'ENGANO', 'NUMERO ERRADO', 'NÚMERO ERRADO',
+    '3 DESCONHECO', '3DESCONHECO', '3 DESCONHEÇO', '3DESCONHEÇO'
+]
+
+MENSAGEM_PADRAO = """📋 *Olá, {nome}*!
+
+Aqui é da *Central de Agendamentos do Hospital Universitário Walter Cantídio*.
+
+Consta em nossos registros que você está na lista de espera para o procedimento: *{procedimento}*.
+
+Você ainda tem interesse em realizar esta cirurgia?
+
+1️⃣ *SIM* - Tenho interesse
+2️⃣ *NÃO* - Não tenho mais interesse
+3️⃣ *DESCONHEÇO* - Não sou essa pessoa
+
+_Por favor, responda com o número da opção._
+"""
+
+
+def verificar_resposta_em_lista(texto_up, lista_respostas):
+    """
+    Verifica se o texto É EXATAMENTE uma resposta válida.
+    MUDANÇA CRÍTICA: Agora aceita SOMENTE respostas exatas (mensagem completa).
+    Exemplos:
+    - "SIM" → ✅ aceito
+    - "1" → ✅ aceito  
+    - "TENHO INTERESSE" → ✅ aceito
+    - "Boa tarde! Não sei quando posso ir" → ❌ rejeitado (não é resposta exata)
+    - "Sim, quero" → ❌ rejeitado (não é resposta exata)
+    """
+    # Remove espaços extras e normaliza
+    texto_normalizado = ' '.join(texto_up.split())
+    
+    # Verifica se a mensagem COMPLETA é exatamente uma das respostas válidas
+    return texto_normalizado in lista_respostas
+
+
+def _renderizar_mensagem_envio(mensagem_template, link_publico, nome_destinatario=None):
+    """Substitui placeholders na mensagem; se {LINK} ausente, anexa no fim."""
+    texto = mensagem_template or ''
+    if '{NOME}' in texto:
+        texto = texto.replace('{NOME}', nome_destinatario or '')
+    if '{LINK}' in texto:
+        texto = texto.replace('{LINK}', link_publico)
+    else:
+        texto = (texto.rstrip() + '\n\n' + link_publico).strip()
+    return texto
+

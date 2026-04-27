@@ -3,6 +3,7 @@
 import csv
 import io
 import json
+import logging
 from datetime import datetime, timedelta
 from io import BytesIO
 
@@ -14,23 +15,60 @@ from flask_login import current_user, login_required
 import pandas as pd
 
 from app.extensions import db
-from app.main import (
-    CANAIS_RESPOSTA_GERAL, TIPOS_USO_GERAL,
-    _exigir_usuario_geral, _get_envio_do_usuario,
-    _get_pesquisa_do_usuario, _normalizar_telefones_textarea,
-    _renderizar_mensagem_envio, logger,
-)
 from app.models import (
     ConfigUsuarioGeral, EnvioPesquisa, EnvioPesquisaTelefone,
     PerguntaPesquisa, Pesquisa, RespostaItem, RespostaPesquisa,
     STATUS_ENVIO_PESQUISA, STATUS_ENVIO_TELEFONE, TEMPLATES_PESQUISA,
     TIPOS_PERGUNTA,
 )
-from app.services.telefone import formatar_numero
+from app.services.mensagem import _renderizar_mensagem_envio
+from app.services.telefone import (
+    _normalizar_telefones_textarea, formatar_numero,
+)
 from app.services.timezone import obter_agora_fortaleza
 
 
+logger = logging.getLogger(__name__)
+
+
 bp = Blueprint('geral', __name__)
+
+TIPOS_USO_GERAL = ['CONFIRMACAO', 'PESQUISA', 'ENQUETE']
+
+CANAIS_RESPOSTA_GERAL = ['WHATSAPP_LINK_EXTERNO', 'WHATSAPP_INTERATIVO', 'LINK_INTERNO']
+
+
+def _exigir_usuario_geral():
+    """Bloqueia acesso a quem não é tipo_sistema='GERAL'. Retorna a config (criando se necessário)."""
+    from app.utils import get_dashboard_route
+    if getattr(current_user, 'tipo_sistema', None) != 'GERAL':
+        flash('Esta área é exclusiva de usuários do tipo Geral.', 'warning')
+        return None, redirect(url_for(get_dashboard_route()))
+
+    config = ConfigUsuarioGeral.query.filter_by(usuario_id=current_user.id).first()
+    if not config:
+        config = ConfigUsuarioGeral(usuario_id=current_user.id, wizard_concluido=False)
+        db.session.add(config)
+        db.session.commit()
+    return config, None
+
+
+def _get_pesquisa_do_usuario(pesquisa_id):
+    """Carrega a pesquisa garantindo que pertence ao usuário logado (ou admin)."""
+    from flask import abort
+    pesquisa = Pesquisa.query.get_or_404(pesquisa_id)
+    if pesquisa.usuario_id != current_user.id and not current_user.is_admin:
+        abort(403)
+    return pesquisa
+
+
+def _get_envio_do_usuario(envio_id):
+    from flask import abort
+    envio = EnvioPesquisa.query.get_or_404(envio_id)
+    if envio.usuario_id != current_user.id and not current_user.is_admin:
+        abort(403)
+    return envio
+
 
 
 @bp.route('/geral/dashboard')

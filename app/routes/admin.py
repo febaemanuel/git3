@@ -1,5 +1,6 @@
 """Admin dashboard and exports."""
 
+import logging
 from datetime import datetime, timedelta
 
 from flask import (
@@ -11,15 +12,16 @@ from io import BytesIO
 import pandas as pd
 
 from app.extensions import db
-from app.main import (
-    admin_required, get_dashboard_route, logger,
-)
 from app.models import (
     AgendamentoConsulta, Campanha, CampanhaConsulta, ConfigWhatsApp,
     Contato, LogMsg, LogMsgConsulta, PesquisaSatisfacao,
     RespostaAutomatica, Telefone, TicketAtendimento, Usuario,
 )
 from app.services.whatsapp import WhatsApp
+from app.utils import admin_required, get_dashboard_route
+
+
+logger = logging.getLogger(__name__)
 
 
 bp = Blueprint('admin', __name__)

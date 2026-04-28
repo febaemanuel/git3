@@ -80,6 +80,8 @@ def create_app(config_name=None):
     def _init_db_cli():
         db.create_all()
         criar_admin()
+        criar_faqs_padrao()
+        criar_tutoriais_padrao()
         print(f"DB criado! Admin: {ADMIN_EMAIL} / {ADMIN_SENHA}")
 
     from app.routes import register_blueprints

@@ -6,17 +6,20 @@ SETUP - Busca Ativa de Pacientes HUWC/CHUFC
 
 Script de instalacao e configuracao do sistema.
 
-Uso:
-    python setup.py              # Instalacao completa
-    python setup.py --init-db    # Apenas inicializar banco
-    python setup.py --create-admin  # Apenas criar admin
-    python setup.py --check      # Verificar configuracao
+Uso (a partir da raiz do repo):
+    python scripts/setup.py              # Instalacao completa
+    python scripts/setup.py --init-db    # Apenas inicializar banco
+    python scripts/setup.py --create-admin  # Apenas criar admin
+    python scripts/setup.py --check      # Verificar configuracao
 """
 
 import os
 import sys
 import subprocess
 import getpass
+
+# Permite rodar a partir da raiz: garante que `app` é importável.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def print_header():
     print("""

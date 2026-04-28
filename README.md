@@ -207,10 +207,10 @@ venv\Scripts\activate
 source venv/bin/activate
 
 # 3. Executar setup automático
-python setup.py
+python scripts/setup.py
 ```
 
-O script `setup.py` irá:
+O script `scripts/setup.py` irá:
 - ✅ Instalar todas as dependências
 - ✅ Configurar banco de dados
 - ✅ Criar usuário admin padrão
@@ -232,11 +232,12 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edite o arquivo .env com suas configurações
 
-# 4. Inicializar banco de dados
-python -c "from app import db, criar_admin, criar_faqs_padrao, criar_tutoriais_padrao; db.create_all(); criar_admin(); criar_faqs_padrao(); criar_tutoriais_padrao()"
+# 4. Inicializar banco de dados (a primeira chamada de create_app() já cria
+#    as tabelas e os dados-padrão; alternativamente, use o CLI do Flask)
+flask --app wsgi:app init-db
 
 # 5. Executar aplicação
-python app.py
+python wsgi.py
 ```
 
 ---
@@ -315,7 +316,7 @@ Senha: admin123
 ### Executar em Desenvolvimento
 
 ```bash
-python app.py
+python wsgi.py
 ```
 
 Acesse: http://localhost:5001
@@ -324,10 +325,10 @@ Acesse: http://localhost:5001
 
 ```bash
 # Com Gunicorn (4 workers)
-gunicorn -w 4 -b 0.0.0.0:5001 app:app
+gunicorn -w 4 -b 0.0.0.0:5001 wsgi:app
 
 # Com logs
-gunicorn -w 4 -b 0.0.0.0:5001 app:app --access-logfile access.log --error-logfile error.log
+gunicorn -w 4 -b 0.0.0.0:5001 wsgi:app --access-logfile access.log --error-logfile error.log
 ```
 
 ---
@@ -456,35 +457,37 @@ crontab -e
 
 ```
 busca-ativa/
-├── app.py                      # Aplicação principal (2500+ linhas)
-├── setup.py                    # Script de instalação
+├── wsgi.py                     # Entry-point gunicorn / dev server
 ├── requirements.txt            # Dependências Python
 ├── .env.example                # Exemplo de configuração
-├── .env                        # Configuração (não versionar)
 ├── .gitignore                  # Arquivos ignorados pelo Git
 ├── README.md                   # Este arquivo
 │
-├── templates/                  # Templates HTML
-│   ├── base.html              # Template base
-│   ├── login.html             # Página de login
-│   ├── cadastro.html          # Cadastro público
-│   ├── dashboard.html         # Dashboard principal
-│   ├── campanha.html          # Detalhes da campanha
-│   ├── editar_contato.html    # Editar contato
-│   ├── configuracoes.html     # Configurações WhatsApp
-│   ├── faq.html               # Gerenciamento de FAQ
-│   ├── atendimento.html       # Painel de atendimento
-│   ├── ticket_detalhe.html    # Detalhes do ticket
-│   ├── tutorial.html          # Lista de tutoriais
-│   ├── tutorial_detalhe.html  # Visualizar tutorial
-│   ├── followup_config.html   # Configurar follow-up
-│   ├── sentimentos.html       # Dashboard de sentimentos
-│   └── logs.html              # Histórico de mensagens
+├── app/                        # Pacote da aplicação
+│   ├── __init__.py             # create_app() factory
+│   ├── extensions.py           # db, login_manager, csrf
+│   ├── config.py               # BaseConfig / DevConfig / ProdConfig
+│   ├── ai.py                   # Sentimento, FAQ, DeepSeek
+│   ├── seeds.py                # criar_admin, FAQ/tutorial padrão
+│   ├── utils.py                # verificar_acesso_*, admin_required, ...
+│   ├── celery_app.py           # Instância Celery + beat schedule
+│   ├── celery_compat.py        # Import defensivo de Celery
+│   ├── tasks.py                # Tasks assíncronas (workers Celery)
+│   ├── models/                 # SQLAlchemy models por domínio
+│   ├── services/               # whatsapp, ocr, mensagem, telefone, ...
+│   ├── routes/                 # Blueprints (auth, fila, consultas, ...)
+│   └── templates/              # Templates HTML (Jinja2)
 │
-├── uploads/                    # Arquivos enviados (Excel)
-│   └── .gitkeep
+├── docs/                       # Documentação adicional
+│   ├── CELERY_DEPLOYMENT.md
+│   ├── README-DOCKER.md
+│   └── integracao_evolution_api_whatsapp.py
 │
-└── busca_ativa.db             # Banco SQLite (desenvolvimento)
+├── scripts/                    # Scripts one-off (rodar da raiz)
+│   ├── setup.py                # Instalação inicial
+│   └── migrate_config_geral.py # Migração one-off do módulo GERAL
+│
+└── uploads/                    # Arquivos enviados (Excel, comprovantes)
 ```
 
 ---

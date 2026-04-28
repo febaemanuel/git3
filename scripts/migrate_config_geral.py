@@ -1,11 +1,17 @@
 """
 Migração: cria as tabelas usadas pelo módulo GERAL (wizard + pesquisas).
 
-Execute uma única vez no servidor:
-    python migrate_config_geral.py
+Execute uma única vez no servidor a partir da raiz do repo:
+    python scripts/migrate_config_geral.py
 
 Idempotente (CREATE TABLE IF NOT EXISTS) — pode rodar de novo.
 """
+
+import os
+import sys
+
+# Permite rodar a partir da raiz: garante que `app` é importável.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app import app, db
 from sqlalchemy import text

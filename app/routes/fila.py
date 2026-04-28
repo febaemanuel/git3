@@ -151,7 +151,7 @@ def criar_campanha():
         return redirect(url_for(get_dashboard_route()))
 
     # Processar planilha de forma ASSÍNCRONA com Celery
-    from tasks import processar_planilha_task
+    from app.tasks import processar_planilha_task
     task = processar_planilha_task.delay(temp_path, camp.id)
 
     # Salvar task_id na campanha para polling
@@ -267,7 +267,7 @@ def validar_campanha(id):
         return jsonify({'erro': 'WhatsApp nao configurado'}), 400
 
     # Iniciar task Celery em vez de thread
-    from tasks import validar_campanha_task
+    from app.tasks import validar_campanha_task
     task = validar_campanha_task.delay(id)
 
     return jsonify({
@@ -293,7 +293,7 @@ def iniciar_campanha(id):
         return jsonify({'erro': 'WhatsApp desconectado'}), 400
 
     # Iniciar task Celery em vez de thread
-    from tasks import enviar_campanha_task
+    from app.tasks import enviar_campanha_task
     task = enviar_campanha_task.delay(id)
 
     return jsonify({
@@ -319,7 +319,7 @@ def retomar_campanha(id):
         return jsonify({'erro': 'Nenhum contato pendente'}), 400
 
     # Iniciar task Celery em vez de thread
-    from tasks import enviar_campanha_task
+    from app.tasks import enviar_campanha_task
     task = enviar_campanha_task.delay(id)
 
     return jsonify({
@@ -879,7 +879,7 @@ def configurar_followup():
 def processar_followup_manual():
     """Executar follow-up manualmente (para testes)"""
     # Usar task Celery em vez de thread
-    from tasks import follow_up_automatico_task
+    from app.tasks import follow_up_automatico_task
     task = follow_up_automatico_task.delay()
     flash(f'Follow-up iniciado (Task ID: {task.id})', 'info')
     return redirect(url_for(get_dashboard_route()))

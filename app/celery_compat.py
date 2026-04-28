@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 
 try:
-    from celery_app import celery as celery_app
+    from app.celery_app import celery as celery_app
     from celery.result import AsyncResult
 except ImportError as e:
     celery_app = None

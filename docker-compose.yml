@@ -94,7 +94,7 @@ services:
         condition: service_healthy
     networks:
       - busca-ativa-network
-    command: celery -A celery_app.celery worker --loglevel=info --concurrency=4
+    command: celery -A app.celery_app.celery worker --loglevel=info --concurrency=4
 
   # Celery Beat (Agendador de tarefas periódicas)
   celery_beat:
@@ -116,7 +116,7 @@ services:
         condition: service_healthy
     networks:
       - busca-ativa-network
-    command: celery -A celery_app.celery beat --loglevel=info
+    command: celery -A app.celery_app.celery beat --loglevel=info
 
 volumes:
   postgres_data:

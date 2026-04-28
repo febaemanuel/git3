@@ -442,7 +442,7 @@ def enviar_lote_comprovantes_antecipados(campanha_id):
     if campanha.criador_id != current_user.id:
         return jsonify({'erro': 'Acesso negado'}), 403
 
-    from app import buscar_comprovante_antecipado, ComprovanteAntecipado
+    from app.models import buscar_comprovante_antecipado, ComprovanteAntecipado
     from sqlalchemy import update as sa_update
     enviados = 0
     erros = []
@@ -524,7 +524,7 @@ def dashboard():
     db.session.commit()
 
     # VALIDAÇÃO: Verificar se usuário tem WhatsApp configurado
-    from app import ConfigWhatsApp
+    from app.models import ConfigWhatsApp
     config_whatsapp = ConfigWhatsApp.query.filter_by(usuario_id=current_user.id).first()
     if not config_whatsapp and campanhas:
         flash('⚠️ ATENÇÃO: Você possui campanhas mas não tem WhatsApp configurado! '
@@ -586,7 +586,7 @@ def importar():
                 return redirect(request.url)
 
             # VALIDAÇÃO CRÍTICA: Verificar se usuário tem WhatsApp configurado
-            from app import ConfigWhatsApp
+            from app.models import ConfigWhatsApp
             config_whatsapp = ConfigWhatsApp.query.filter_by(usuario_id=current_user.id).first()
             if not config_whatsapp:
                 flash('❌ ERRO: Você precisa configurar o WhatsApp antes de criar campanhas de consulta! '
@@ -828,7 +828,7 @@ def campanha_iniciar(id):
 
     try:
         # VALIDAÇÃO CRÍTICA: Verificar se a campanha pertence a usuário com WhatsApp
-        from app import ConfigWhatsApp
+        from app.models import ConfigWhatsApp
         config_whatsapp = ConfigWhatsApp.query.filter_by(usuario_id=campanha.criador_id).first()
         if not config_whatsapp:
             flash(f'❌ ERRO CRÍTICO: A campanha foi criada por um usuário (ID {campanha.criador_id}) que não tem WhatsApp configurado! '
@@ -1416,7 +1416,7 @@ def excluir(id):
 @login_required
 def reenviar(id):
     """Reenvia mensagem de confirmação para uma consulta"""
-    from app import formatar_mensagem_consulta_inicial
+    from app.services.mensagem import formatar_mensagem_consulta_inicial
 
     consulta = AgendamentoConsulta.query.get_or_404(id)
 

@@ -670,11 +670,8 @@ NÃO, NAO, N, 2, DESISTO, CANCELA, NEGATIVO, NAO QUERO, NAO TENHO
 
 ### Banco de dados não inicia
 ```bash
-# Recriar banco
-python -c "from app import db; db.drop_all(); db.create_all()"
-
-# Recriar admin e dados padrão
-python -c "from app import criar_admin, criar_faqs_padrao, criar_tutoriais_padrao; criar_admin(); criar_faqs_padrao(); criar_tutoriais_padrao()"
+# Recriar banco + admin + dados padrão (Flask CLI)
+flask --app wsgi:app init-db
 ```
 
 ---

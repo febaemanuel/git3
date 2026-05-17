@@ -1073,8 +1073,8 @@ def retomar_campanhas_consultas_automaticas():
     retry_backoff=True,
     retry_backoff_max=1800,
     retry_jitter=True,
-    time_limit=7200,  # 2 horas máximo
-    soft_time_limit=7000
+    time_limit=86400,  # 24 horas (campanhas longas com intervalo entre envios podem rodar o dia todo)
+    soft_time_limit=86100
 )
 def enviar_campanha_consultas_task(self, campanha_id):
     """
@@ -1155,6 +1155,53 @@ def enviar_campanha_consultas_task(self, campanha_id):
                 db.session.commit()
                 logger.info(msg)
                 break
+
+            # DEDUPLICAÇÃO: se o mesmo paciente já tem uma consulta idêntica
+            # (mesma data_aghu + mesma especialidade) já confirmada em qualquer
+            # campanha deste usuário, não reenviamos. Marcamos a linha atual
+            # como já confirmada herdando o comprovante.
+            if consulta.paciente and consulta.data_aghu and consulta.especialidade:
+                duplicata = AgendamentoConsulta.query.join(
+                    CampanhaConsulta, AgendamentoConsulta.campanha_id == CampanhaConsulta.id
+                ).filter(
+                    AgendamentoConsulta.id != consulta.id,
+                    AgendamentoConsulta.paciente == consulta.paciente,
+                    AgendamentoConsulta.data_aghu == consulta.data_aghu,
+                    AgendamentoConsulta.especialidade == consulta.especialidade,
+                    AgendamentoConsulta.status.in_(['CONFIRMADO', 'AGUARDANDO_COMPROVANTE', 'INFORMADO']),
+                    CampanhaConsulta.criador_id == camp.criador_id
+                ).order_by(AgendamentoConsulta.id.desc()).first()
+
+                if duplicata:
+                    consulta.status = duplicata.status
+                    consulta.data_confirmacao = duplicata.data_confirmacao or datetime.utcnow()
+                    consulta.telefone_confirmacao = duplicata.telefone_confirmacao
+                    if duplicata.comprovante_path:
+                        consulta.comprovante_path = duplicata.comprovante_path
+                        consulta.comprovante_nome = duplicata.comprovante_nome
+                    log_dup = LogMsgConsulta(
+                        campanha_id=camp.id,
+                        consulta_id=consulta.id,
+                        direcao='enviada',
+                        telefone=consulta.telefone_cadastro or consulta.telefone_registro or '-',
+                        mensagem=(
+                            f'[DUPLICATA] Consulta já confirmada anteriormente '
+                            f'(linha {duplicata.id}, campanha {duplicata.campanha_id}). '
+                            f'Envio pulado para não incomodar o paciente.'
+                        )[:500],
+                        status='duplicata'
+                    )
+                    db.session.add(log_dup)
+                    db.session.commit()
+                    camp.atualizar_stats()
+                    db.session.commit()
+                    enviados += 1
+                    logger.info(
+                        f"[DEDUP] Consulta {consulta.id} ({consulta.paciente} | "
+                        f"{consulta.especialidade} | {consulta.data_aghu}) pulada: "
+                        f"já confirmada na consulta {duplicata.id} (campanha {duplicata.campanha_id})"
+                    )
+                    continue
 
             # Atualizar progresso
             progresso = int((i / total) * 100) if total > 0 else 0

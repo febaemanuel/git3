@@ -169,8 +169,8 @@ def validar_campanha_task(self, campanha_id):
     retry_backoff=True,
     retry_backoff_max=1800,
     retry_jitter=True,
-    time_limit=7200,  # 2 horas máximo
-    soft_time_limit=7000
+    time_limit=86400,  # 24 horas (campanhas longas com intervalo entre envios podem rodar o dia todo)
+    soft_time_limit=86100
 )
 def enviar_campanha_task(self, campanha_id):
     """
@@ -1073,8 +1073,8 @@ def retomar_campanhas_consultas_automaticas():
     retry_backoff=True,
     retry_backoff_max=1800,
     retry_jitter=True,
-    time_limit=7200,  # 2 horas máximo
-    soft_time_limit=7000
+    time_limit=86400,  # 24 horas (campanhas longas com intervalo entre envios podem rodar o dia todo)
+    soft_time_limit=86100
 )
 def enviar_campanha_consultas_task(self, campanha_id):
     """
@@ -1089,7 +1089,8 @@ def enviar_campanha_consultas_task(self, campanha_id):
     """
     from app import (
         db, CampanhaConsulta, AgendamentoConsulta, TelefoneConsulta,
-        LogMsgConsulta, WhatsApp, formatar_numero, formatar_mensagem_consulta_inicial
+        LogMsgConsulta, WhatsApp, formatar_numero, formatar_mensagem_consulta_inicial,
+        buscar_comprovante_antecipado, extrair_dados_comprovante
     )
     from datetime import datetime
 
@@ -1156,6 +1157,53 @@ def enviar_campanha_consultas_task(self, campanha_id):
                 logger.info(msg)
                 break
 
+            # DEDUPLICAÇÃO: se o mesmo paciente já tem uma consulta idêntica
+            # (mesma data_aghu + mesma especialidade) já confirmada em qualquer
+            # campanha deste usuário, não reenviamos. Marcamos a linha atual
+            # como já confirmada herdando o comprovante.
+            if consulta.paciente and consulta.data_aghu and consulta.especialidade:
+                duplicata = AgendamentoConsulta.query.join(
+                    CampanhaConsulta, AgendamentoConsulta.campanha_id == CampanhaConsulta.id
+                ).filter(
+                    AgendamentoConsulta.id != consulta.id,
+                    AgendamentoConsulta.paciente == consulta.paciente,
+                    AgendamentoConsulta.data_aghu == consulta.data_aghu,
+                    AgendamentoConsulta.especialidade == consulta.especialidade,
+                    AgendamentoConsulta.status.in_(['CONFIRMADO', 'AGUARDANDO_COMPROVANTE', 'INFORMADO']),
+                    CampanhaConsulta.criador_id == camp.criador_id
+                ).order_by(AgendamentoConsulta.id.desc()).first()
+
+                if duplicata:
+                    consulta.status = duplicata.status
+                    consulta.data_confirmacao = duplicata.data_confirmacao or datetime.utcnow()
+                    consulta.telefone_confirmacao = duplicata.telefone_confirmacao
+                    if duplicata.comprovante_path:
+                        consulta.comprovante_path = duplicata.comprovante_path
+                        consulta.comprovante_nome = duplicata.comprovante_nome
+                    log_dup = LogMsgConsulta(
+                        campanha_id=camp.id,
+                        consulta_id=consulta.id,
+                        direcao='enviada',
+                        telefone=consulta.telefone_cadastro or consulta.telefone_registro or '-',
+                        mensagem=(
+                            f'[DUPLICATA] Consulta já confirmada anteriormente '
+                            f'(linha {duplicata.id}, campanha {duplicata.campanha_id}). '
+                            f'Envio pulado para não incomodar o paciente.'
+                        )[:500],
+                        status='duplicata'
+                    )
+                    db.session.add(log_dup)
+                    db.session.commit()
+                    camp.atualizar_stats()
+                    db.session.commit()
+                    enviados += 1
+                    logger.info(
+                        f"[DEDUP] Consulta {consulta.id} ({consulta.paciente} | "
+                        f"{consulta.especialidade} | {consulta.data_aghu}) pulada: "
+                        f"já confirmada na consulta {duplicata.id} (campanha {duplicata.campanha_id})"
+                    )
+                    continue
+
             # Atualizar progresso
             progresso = int((i / total) * 100) if total > 0 else 0
             self.update_state(
@@ -1197,6 +1245,28 @@ def enviar_campanha_consultas_task(self, campanha_id):
 
                 db.session.commit()
                 db.session.refresh(consulta)
+
+            # HORÁRIO: se a planilha não trouxe o horário, tenta extrair do PDF do
+            # comprovante antecipado da paciente (OCR). Salvamos em consulta.hora_aghu
+            # pra reutilizar nas próximas mensagens (retry, menu, confirmação etc).
+            if not (consulta.hora_aghu or '').strip() and consulta.paciente:
+                try:
+                    comp_ant = buscar_comprovante_antecipado(consulta.campanha_id, consulta.paciente)
+                    if comp_ant and comp_ant.filepath:
+                        dados_ocr = extrair_dados_comprovante(comp_ant.filepath) or {}
+                        hora_ocr = (dados_ocr.get('hora') or '').strip()
+                        if hora_ocr:
+                            consulta.hora_aghu = hora_ocr
+                            db.session.commit()
+                            logger.info(
+                                f"Horário {hora_ocr} extraído do comprovante antecipado "
+                                f"para consulta {consulta.id} ({consulta.paciente})"
+                            )
+                except Exception as e:
+                    logger.warning(
+                        f"Falha ao extrair horário do comprovante antecipado "
+                        f"para consulta {consulta.id}: {e}"
+                    )
 
             # Enviar MSG 1 (confirmação inicial) apenas para o 1º telefone (prioridade 1)
             # Os demais serão tentados após 2h sem resposta ou DESCONHEÇO (via retry task)
@@ -1304,6 +1374,201 @@ def enviar_campanha_consultas_task(self, campanha_id):
 
     except Exception as e:
         logger.exception(f"Erro no envio de consultas: {e}")
+        if camp:
+            camp.status = 'erro'
+            camp.status_msg = str(e)[:200]
+            db.session.commit()
+        raise
+
+
+# =============================================================================
+# TASK - ENVIO DE CAMPANHA SCIH (pesquisa pós-cirúrgica)
+# =============================================================================
+
+@celery.task(
+    base=DatabaseTask,
+    bind=True,
+    name='tasks.enviar_campanha_scih_task',
+    max_retries=5,
+    default_retry_delay=120,
+    autoretry_for=(Exception,),
+    retry_backoff=True,
+    retry_backoff_max=1800,
+    retry_jitter=True,
+    time_limit=86400,
+    soft_time_limit=86100
+)
+def enviar_campanha_scih_task(self, campanha_id, base_url):
+    """
+    Envia a mensagem de convite (com link único do questionário) para cada
+    paciente da campanha SCIH. Respeita hora_inicio/hora_fim e meta_diaria.
+    """
+    from app import (
+        db, CampanhaSCIH, PacienteSCIH, LogMsgSCIH,
+        WhatsApp, formatar_numero
+    )
+    from datetime import datetime
+
+    logger.info(f"Iniciando envio SCIH campanha {campanha_id}")
+    camp = None
+    try:
+        camp = db.session.get(CampanhaSCIH, campanha_id)
+        if not camp:
+            logger.error(f"Campanha SCIH {campanha_id} não encontrada")
+            return {'erro': 'Campanha não encontrada'}
+
+        ws = WhatsApp(camp.criador_id)
+        if not ws.ok():
+            camp.status = 'erro'
+            camp.status_msg = 'WhatsApp não configurado'
+            db.session.commit()
+            return {'erro': 'WhatsApp não configurado'}
+
+        conn, _ = ws.conectado()
+        if not conn:
+            camp.status = 'erro'
+            camp.status_msg = 'WhatsApp desconectado'
+            db.session.commit()
+            return {'erro': 'WhatsApp desconectado'}
+
+        camp.status = 'enviando'
+        if not camp.data_inicio:
+            camp.data_inicio = datetime.utcnow()
+        db.session.commit()
+
+        pacientes = PacienteSCIH.query.filter_by(
+            campanha_id=camp.id,
+            status='AGUARDANDO_ENVIO'
+        ).order_by(PacienteSCIH.id).all()
+
+        total = len(pacientes)
+        enviados = 0
+        erros = 0
+        logger.info(f"Pacientes SCIH a enviar: {total}")
+
+        base_url = (base_url or '').rstrip('/')
+
+        for i, paciente in enumerate(pacientes):
+            db.session.refresh(camp)
+            if camp.status == 'pausado':
+                logger.info("Campanha SCIH pausada, parando...")
+                break
+
+            if not camp.pode_enviar_agora():
+                camp.status = 'pausado'
+                camp.status_msg = f'Fora do horário ({camp.hora_inicio}h-{camp.hora_fim}h)'
+                db.session.commit()
+                logger.info(camp.status_msg)
+                break
+
+            if not camp.pode_enviar_hoje():
+                camp.status = 'pausado'
+                camp.status_msg = f'Meta diária atingida ({camp.meta_diaria} mensagens)'
+                db.session.commit()
+                logger.info(camp.status_msg)
+                break
+
+            self.update_state(
+                state='PROGRESS',
+                meta={
+                    'current': i + 1,
+                    'total': total,
+                    'percent': int((i / total) * 100) if total else 0,
+                    'enviados': enviados,
+                    'erros': erros,
+                    'status': f'Enviando para {paciente.nome}...'
+                }
+            )
+
+            numero_fmt = formatar_numero(paciente.telefone)
+            if not numero_fmt:
+                paciente.status = 'ERRO'
+                paciente.erro_envio = 'Telefone inválido'
+                db.session.add(LogMsgSCIH(
+                    campanha_id=camp.id, paciente_id=paciente.id,
+                    direcao='enviada', telefone=paciente.telefone or '-',
+                    mensagem='', status='erro', erro='Telefone inválido'
+                ))
+                db.session.commit()
+                erros += 1
+                continue
+
+            link = f"{base_url}/p/{paciente.token}"
+            cirurgia_label = 'cesárea' if camp.template == 'CESARIANA' else 'mastologia'
+            nome_disp = paciente.nome.strip().title() if paciente.nome else 'paciente'
+
+            msg = (
+                f"Prezada {nome_disp}, esperamos que esta mensagem a encontre bem.\n\n"
+                f"Estamos entrando em contato do *Serviço de Controle de Infecção Hospitalar* "
+                f"da *Maternidade Escola Assis Chateaubriand* para realizar um breve questionário "
+                f"a respeito da sua experiência pós-cirúrgica, buscando identificar possíveis "
+                f"sinais de infecções relacionadas a sua {cirurgia_label}.\n\n"
+                f"Sua participação é muito importante! Agradecemos sua atenção!\n\n"
+                f"Clique no link abaixo e responda:\n{link}"
+            )
+
+            ok, result = ws.enviar(numero_fmt, msg)
+
+            if ok:
+                paciente.status = 'ENVIADO'
+                paciente.mensagem_enviada = True
+                paciente.data_envio_mensagem = datetime.utcnow()
+                paciente.msg_id = result
+                paciente.erro_envio = None
+                db.session.add(LogMsgSCIH(
+                    campanha_id=camp.id, paciente_id=paciente.id,
+                    direcao='enviada', telefone=numero_fmt,
+                    mensagem=msg[:500], msg_id=result, status='sucesso'
+                ))
+                camp.registrar_envio()
+                camp.total_enviados = (camp.total_enviados or 0) + 1
+                enviados += 1
+                logger.info(f"SCIH: mensagem enviada para {numero_fmt} ({paciente.nome})")
+            else:
+                paciente.status = 'ERRO'
+                paciente.erro_envio = str(result)[:500]
+                db.session.add(LogMsgSCIH(
+                    campanha_id=camp.id, paciente_id=paciente.id,
+                    direcao='enviada', telefone=numero_fmt,
+                    mensagem=msg[:500], status='erro', erro=str(result)[:500]
+                ))
+                erros += 1
+                logger.warning(f"SCIH: erro ao enviar para {numero_fmt}: {result}")
+
+            db.session.commit()
+            camp.atualizar_stats()
+            db.session.commit()
+
+            if i < total - 1 and ok:
+                intervalo = camp.calcular_intervalo()
+                logger.info(f"SCIH: aguardando {intervalo}s")
+                time.sleep(intervalo)
+
+        restantes = PacienteSCIH.query.filter_by(
+            campanha_id=camp.id, status='AGUARDANDO_ENVIO'
+        ).count()
+
+        if restantes == 0 and camp.status == 'enviando':
+            camp.status = 'concluido'
+            camp.data_fim = datetime.utcnow()
+            camp.status_msg = f'{enviados} mensagens enviadas'
+        elif camp.status == 'enviando':
+            camp.status_msg = f'{enviados} enviados, {restantes} pendentes'
+
+        camp.atualizar_stats()
+        db.session.commit()
+
+        logger.info(f"SCIH envio concluído: {enviados} enviados, {erros} erros, {restantes} pendentes")
+        return {
+            'sucesso': True,
+            'total': total,
+            'enviados': enviados,
+            'erros': erros,
+            'restantes': restantes
+        }
+
+    except Exception as e:
+        logger.exception(f"Erro no envio SCIH: {e}")
         if camp:
             camp.status = 'erro'
             camp.status_msg = str(e)[:200]

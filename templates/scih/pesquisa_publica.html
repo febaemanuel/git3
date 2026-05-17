@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ template_info.titulo }} - MEAC</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        body { background: linear-gradient(135deg, #128C7E 0%, #25D366 100%); min-height: 100vh; padding: 20px 0; }
+        .form-card { background: white; border-radius: 14px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); max-width: 720px; margin: 0 auto; }
+        .form-header { background: #128C7E; color: white; padding: 22px 28px; border-radius: 14px 14px 0 0; }
+        .form-body { padding: 28px; }
+        .sintomas-bloco { display: none; }
+        .sintomas-bloco.ativo { display: block; }
+        .remedio-bloco { display: none; }
+        .remedio-bloco.ativo { display: block; }
+        legend.col-form-label { font-weight: 600; color: #128C7E; }
+    </style>
+</head>
+<body>
+    <div class="form-card">
+        <div class="form-header">
+            <h4 class="mb-1"><i class="bi bi-clipboard-pulse"></i> {{ template_info.titulo }}</h4>
+            <small>Serviço de Controle de Infecção Hospitalar — Maternidade Escola Assis Chateaubriand</small>
+        </div>
+        <div class="form-body">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endwith %}
+
+            <p class="text-muted">
+                Prezada <strong>{{ paciente.nome }}</strong>, sua participação é muito importante!
+                Responda às perguntas abaixo sobre a sua experiência pós-cirúrgica.
+            </p>
+
+            <form method="POST">
+                <div class="mb-3">
+                    <label class="form-label">Nome completo</label>
+                    <input type="text" name="nome" class="form-control" value="{{ paciente.nome }}" required>
+                </div>
+
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <label class="form-label">Idade</label>
+                        <input type="number" name="idade" class="form-control" value="{{ paciente.idade or '' }}" min="0" max="120">
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Dia da ligação</label>
+                        <input type="text" class="form-control" value="{{ data_hoje }}" readonly>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label">Dia da {{ template_info.cirurgia_label }}</label>
+                        <input type="text" name="data_cirurgia" class="form-control" placeholder="dd/mm/aaaa" value="{{ paciente.data_cirurgia or '' }}">
+                    </div>
+                </div>
+
+                <hr class="my-4">
+
+                <fieldset class="mb-3">
+                    <legend class="col-form-label">Você apresentou algum dos seguintes sintomas?</legend>
+                    <div class="form-text mb-2">
+                        Febre, ferida cirúrgica avermelhada, inchada, com dor, secreção, pus, sangramento ou mau cheiro.
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="apresentou_sintoma" id="sint_sim" value="SIM" required>
+                        <label class="form-check-label" for="sint_sim">Sim</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="apresentou_sintoma" id="sint_nao" value="NAO" required>
+                        <label class="form-check-label" for="sint_nao">Não</label>
+                    </div>
+                </fieldset>
+
+                <div id="bloco-sintomas" class="sintomas-bloco mb-3">
+                    <label class="form-label fw-semibold">Quais sintomas você apresentou? (marque todos que se aplicam)</label>
+                    {% for s in sintomas_opcoes %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="sintomas" value="{{ s }}" id="s{{ loop.index }}">
+                        <label class="form-check-label" for="s{{ loop.index }}">{{ s }}</label>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <fieldset class="mb-3">
+                    <legend class="col-form-label">Você buscou atendimento médico?</legend>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="buscou_atendimento" id="atend_sim" value="SIM" required>
+                        <label class="form-check-label" for="atend_sim">Sim</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="buscou_atendimento" id="atend_nao" value="NAO" required>
+                        <label class="form-check-label" for="atend_nao">Não</label>
+                    </div>
+                </fieldset>
+
+                <fieldset class="mb-3">
+                    <legend class="col-form-label">Você utilizou algum remédio?</legend>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="usou_remedio" id="rem_sim" value="SIM" required>
+                        <label class="form-check-label" for="rem_sim">Sim</label>
+                    </div>
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input" type="radio" name="usou_remedio" id="rem_nao" value="NAO" required>
+                        <label class="form-check-label" for="rem_nao">Não</label>
+                    </div>
+                </fieldset>
+
+                <div id="bloco-remedio" class="remedio-bloco mb-3">
+                    <label class="form-label">Qual remédio?</label>
+                    <input type="text" name="qual_remedio" class="form-control">
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Observações (opcional)</label>
+                    <textarea name="observacoes" class="form-control" rows="3"></textarea>
+                </div>
+
+                <button type="submit" class="btn btn-success btn-lg w-100">
+                    <i class="bi bi-send-check"></i> Enviar resposta
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const blocoSint = document.getElementById('bloco-sintomas');
+        document.querySelectorAll('input[name="apresentou_sintoma"]').forEach(r => {
+            r.addEventListener('change', e => {
+                blocoSint.classList.toggle('ativo', e.target.value === 'SIM');
+            });
+        });
+        const blocoRem = document.getElementById('bloco-remedio');
+        document.querySelectorAll('input[name="usou_remedio"]').forEach(r => {
+            r.addEventListener('change', e => {
+                blocoRem.classList.toggle('ativo', e.target.value === 'SIM');
+            });
+        });
+    </script>
+</body>
+</html>

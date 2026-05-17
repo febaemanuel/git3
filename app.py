@@ -959,6 +959,7 @@ class AgendamentoConsulta(db.Model):
     data_exata_ou_dias = db.Column(db.String(50))
     estimativa_agendamento = db.Column(db.String(50))
     data_aghu = db.Column(db.String(50))  # Data da consulta
+    hora_aghu = db.Column(db.String(10))  # Horário da consulta (HH:MM), opcional
 
     # Campo específico para INTERCONSULTA
     paciente_voltar_posto_sms = db.Column(db.String(10))  # SIM ou NÃO
@@ -1176,6 +1177,155 @@ class HistoricoConsulta(db.Model):
     consulta = db.relationship('AgendamentoConsulta', backref='historico')
     usuario = db.relationship('Usuario', backref='historico_consultas')
 
+
+# =============================================================================
+# MODELOS - MODO SCIH (Pesquisa pós-cirúrgica de infecção hospitalar)
+# =============================================================================
+
+class CampanhaSCIH(db.Model):
+    """Campanha de pesquisa SCIH (questionário pós-cirúrgico)"""
+    __tablename__ = 'campanhas_scih'
+    id = db.Column(db.Integer, primary_key=True)
+    criador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    nome = db.Column(db.String(200), nullable=False)
+    descricao = db.Column(db.Text)
+    # Template fixo: 'CESARIANA' ou 'MASTOLOGIA'
+    template = db.Column(db.String(30), nullable=False)
+
+    hora_inicio = db.Column(db.Integer, default=8)
+    hora_fim = db.Column(db.Integer, default=18)
+    meta_diaria = db.Column(db.Integer, default=100)
+
+    status = db.Column(db.String(50), default='pendente')
+    status_msg = db.Column(db.String(200))
+
+    total_pacientes = db.Column(db.Integer, default=0)
+    total_enviados = db.Column(db.Integer, default=0)
+    total_respondidos = db.Column(db.Integer, default=0)
+    total_erros = db.Column(db.Integer, default=0)
+
+    enviados_hoje = db.Column(db.Integer, default=0)
+    data_ultimo_envio = db.Column(db.Date)
+
+    data_inicio = db.Column(db.DateTime)
+    data_fim = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    celery_task_id = db.Column(db.String(100))
+
+    criador = db.relationship('Usuario', backref='campanhas_scih')
+
+    def pode_enviar_hoje(self):
+        hoje = obter_hoje_fortaleza()
+        if self.data_ultimo_envio != hoje:
+            self.enviados_hoje = 0
+            self.data_ultimo_envio = hoje
+            db.session.commit()
+        return self.enviados_hoje < self.meta_diaria
+
+    def pode_enviar_agora(self):
+        hora_atual = obter_hora_fortaleza()
+        if self.hora_inicio <= self.hora_fim:
+            return self.hora_inicio <= hora_atual < self.hora_fim
+        return hora_atual >= self.hora_inicio or hora_atual < self.hora_fim
+
+    def calcular_intervalo(self):
+        if self.meta_diaria <= 0:
+            return 30
+        if self.hora_inicio <= self.hora_fim:
+            horas = self.hora_fim - self.hora_inicio
+        else:
+            horas = (24 - self.hora_inicio) + self.hora_fim
+        segundos = max(horas, 1) * 3600
+        return max(int(segundos / self.meta_diaria), 5)
+
+    def registrar_envio(self):
+        hoje = obter_hoje_fortaleza()
+        if self.data_ultimo_envio != hoje:
+            self.enviados_hoje = 1
+            self.data_ultimo_envio = hoje
+        else:
+            self.enviados_hoje += 1
+        db.session.commit()
+
+    def atualizar_stats(self):
+        base = PacienteSCIH.query.filter_by(campanha_id=self.id)
+        self.total_pacientes = base.count()
+        self.total_enviados = base.filter(PacienteSCIH.status.in_(['ENVIADO', 'RESPONDIDO'])).count()
+        self.total_respondidos = base.filter_by(status='RESPONDIDO').count()
+        self.total_erros = base.filter_by(status='ERRO').count()
+        db.session.commit()
+
+    def pct_resposta(self):
+        if not self.total_enviados:
+            return 0
+        return round(self.total_respondidos / self.total_enviados * 100, 1)
+
+
+class PacienteSCIH(db.Model):
+    """Paciente alvo de uma campanha SCIH"""
+    __tablename__ = 'pacientes_scih'
+    id = db.Column(db.Integer, primary_key=True)
+    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas_scih.id', ondelete='CASCADE'), nullable=False)
+    criador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+
+    nome = db.Column(db.String(200), nullable=False)
+    telefone = db.Column(db.String(20))
+    idade = db.Column(db.String(10))
+    data_cirurgia = db.Column(db.String(50))
+
+    token = db.Column(db.String(64), unique=True, nullable=False, index=True)
+
+    status = db.Column(db.String(30), default='AGUARDANDO_ENVIO')
+    mensagem_enviada = db.Column(db.Boolean, default=False)
+    data_envio_mensagem = db.Column(db.DateTime)
+    msg_id = db.Column(db.String(100))
+    erro_envio = db.Column(db.String(500))
+    data_resposta = db.Column(db.DateTime)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    campanha = db.relationship('CampanhaSCIH', backref=db.backref('pacientes', lazy='dynamic', cascade='all, delete-orphan'))
+
+
+class RespostaSCIH(db.Model):
+    """Resposta de um paciente ao questionário SCIH"""
+    __tablename__ = 'respostas_scih'
+    id = db.Column(db.Integer, primary_key=True)
+    paciente_id = db.Column(db.Integer, db.ForeignKey('pacientes_scih.id', ondelete='CASCADE'), nullable=False, unique=True)
+    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas_scih.id', ondelete='CASCADE'), nullable=False)
+
+    # JSON serializado com todos os campos respondidos
+    dados_json = db.Column(db.Text, nullable=False)
+
+    # Campos espelhados pra facilitar agregação no dashboard sem ter que parsear JSON
+    apresentou_sintoma = db.Column(db.Boolean)
+    buscou_atendimento = db.Column(db.Boolean)
+    usou_remedio = db.Column(db.Boolean)
+
+    ip = db.Column(db.String(45))
+    user_agent = db.Column(db.String(500))
+    data_resposta = db.Column(db.DateTime, default=datetime.utcnow)
+
+    paciente = db.relationship('PacienteSCIH', backref=db.backref('resposta', uselist=False, cascade='all, delete-orphan'))
+
+
+class LogMsgSCIH(db.Model):
+    """Log de mensagens trocadas em campanhas SCIH"""
+    __tablename__ = 'logs_msg_scih'
+    id = db.Column(db.Integer, primary_key=True)
+    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas_scih.id', ondelete='CASCADE'))
+    paciente_id = db.Column(db.Integer, db.ForeignKey('pacientes_scih.id', ondelete='CASCADE'))
+    direcao = db.Column(db.String(10))
+    telefone = db.Column(db.String(20))
+    mensagem = db.Column(db.Text)
+    msg_id = db.Column(db.String(100))
+    status = db.Column(db.String(20))
+    erro = db.Column(db.String(500))
+    data = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 # =============================================================================
 # FUNÇÕES DE OCR - EXTRAÇÃO DE DADOS DO COMPROVANTE
 # =============================================================================
@@ -1322,11 +1472,62 @@ def extrair_dados_comprovante(filepath):
 # FUNÇÕES DE MENSAGENS - MODO CONSULTA
 # =============================================================================
 
+def _extrair_hora_da_data(data_str):
+    """
+    Tenta extrair um horário (HH:MM) de uma string de data que pode conter
+    timestamp embutido (ex: "2024-05-20 14:30:00"). Retorna None se não houver
+    horário ou se for 00:00 (que indica "sem horário").
+    """
+    if not data_str:
+        return None
+    s = str(data_str).strip()
+    if ' ' not in s:
+        return None
+    try:
+        parte_hora = s.split(' ', 1)[1].strip()
+        if not parte_hora or ':' not in parte_hora:
+            return None
+        tokens = parte_hora.split(':')
+        hh = int(tokens[0])
+        mm = int(tokens[1]) if len(tokens) > 1 else 0
+        if hh == 0 and mm == 0:
+            return None
+        return f"{hh:02d}:{mm:02d}"
+    except (ValueError, IndexError):
+        return None
+
+
+def formatar_data_hora_consulta(data_str, hora_str=None):
+    """
+    Formata data + horário da consulta de forma amigável.
+    - Se houver horário (separado em `hora_str` ou embutido na `data_str`):
+      retorna "20/05/2024 às 14h30".
+    - Se não houver horário (ou for 00:00): retorna apenas "20/05/2024".
+    """
+    data_fmt = formatar_data_consulta(data_str)
+    hora = (hora_str or '').strip() or _extrair_hora_da_data(data_str)
+    if not hora:
+        return data_fmt
+    # Normalizar hora informada separadamente
+    if ':' in hora:
+        try:
+            hh, mm = hora.split(':')[:2]
+            hh = int(hh); mm = int(mm)
+            if hh == 0 and mm == 0:
+                return data_fmt
+            hora_label = f"{hh:02d}h{mm:02d}" if mm else f"{hh:02d}h"
+        except ValueError:
+            hora_label = hora
+    else:
+        hora_label = hora
+    return f"{data_fmt} às {hora_label}"
+
+
 def formatar_data_consulta(data_str):
     """
     Formata a data da consulta para exibição na mensagem.
     Remove timestamps como "00:00:00" e formata no padrão DD/MM/YYYY.
-    
+
     Exemplos de entrada:
     - "2024-05-20 00:00:00" -> "20/05/2024"
     - "5/20/2024" -> "20/05/2024"
@@ -1425,7 +1626,7 @@ Informamos que sua consulta de *{consulta.especialidade}* com *{consulta.medico_
 📌 *Motivo:* {consulta.motivo_remarcacao or 'Motivo administrativo'}
 
 ❌ Data anterior: *{consulta.data_anterior or 'Não informada'}*
-✅ *Nova data:* *{formatar_data_consulta(consulta.data_aghu)}*
+✅ *Nova data:* *{formatar_data_hora_consulta(consulta.data_aghu, getattr(consulta, "hora_aghu", None))}*
 
 Pode confirmar sua presença na nova data?
 
@@ -1473,7 +1674,7 @@ Sua solicitação de interconsulta do paciente *{consulta.paciente}* para *{cons
         return f"""{saudacao}
 
 Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
-Estamos informando que o *EXAME* do paciente *{consulta.paciente}*, foi *MARCADO* para o dia *{formatar_data_consulta(consulta.data_aghu)}*, exame *{consulta.exames}*, com especialidade em *{consulta.especialidade}*.
+Estamos informando que o *EXAME* do paciente *{consulta.paciente}*, foi *MARCADO* para o dia *{formatar_data_hora_consulta(consulta.data_aghu, getattr(consulta, "hora_aghu", None))}*, exame *{consulta.exames}*, com especialidade em *{consulta.especialidade}*.
 
 Caso não haja confirmação em até *2 dias*, seu exame será cancelado!
 
@@ -1487,7 +1688,7 @@ Posso confirmar o agendamento?
         return f"""{saudacao}
 
 Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
-Estamos informando que a *CONSULTA* do paciente *{consulta.paciente}*, foi *MARCADA* para o dia *{formatar_data_consulta(consulta.data_aghu)}*, com *{consulta.medico_solicitante}*, com especialidade em *{consulta.especialidade}*.
+Estamos informando que a *CONSULTA* do paciente *{consulta.paciente}*, foi *MARCADA* para o dia *{formatar_data_hora_consulta(consulta.data_aghu, getattr(consulta, "hora_aghu", None))}*, com *{consulta.medico_solicitante}*, com especialidade em *{consulta.especialidade}*.
 
 Caso não haja confirmação em até *2 dias*, sua consulta será cancelada!
 
@@ -1516,7 +1717,7 @@ def formatar_mensagem_consulta_retry1(consulta):
 Ainda não recebemos sua confirmação para a consulta de *{consulta.paciente}*.
 
 *Dados da consulta:*
-📅 Data: *{formatar_data_consulta(consulta.data_aghu)}*
+📅 Data: *{formatar_data_hora_consulta(consulta.data_aghu, getattr(consulta, "hora_aghu", None))}*
 👨‍⚕️ Médico: *{consulta.medico_solicitante}*
 🏥 Especialidade: *{consulta.especialidade}*
 
@@ -1548,7 +1749,7 @@ def formatar_mensagem_consulta_retry2(consulta):
 Esta é nossa *ÚLTIMA TENTATIVA* antes do cancelamento automático da consulta de *{consulta.paciente}*.
 
 *Dados da consulta:*
-📅 Data: *{formatar_data_consulta(consulta.data_aghu)}*
+📅 Data: *{formatar_data_hora_consulta(consulta.data_aghu, getattr(consulta, "hora_aghu", None))}*
 👨‍⚕️ Médico: *{consulta.medico_solicitante}*
 🏥 Especialidade: *{consulta.especialidade}*
 
@@ -1743,7 +1944,7 @@ def formatar_mensagem_cancelamento_sem_resposta(consulta):
 
 Olá, {consulta.paciente}.
 
-Não recebemos sua confirmação para a consulta de *{consulta.especialidade}* marcada para *{formatar_data_consulta(consulta.data_aghu)}*.
+Não recebemos sua confirmação para a consulta de *{consulta.especialidade}* marcada para *{formatar_data_hora_consulta(consulta.data_aghu, getattr(consulta, "hora_aghu", None))}*.
 
 Sua consulta foi *CANCELADA* por falta de resposta.
 
@@ -2846,6 +3047,8 @@ def get_dashboard_route():
         tipo = getattr(current_user, 'tipo_sistema', 'BUSCA_ATIVA')
         if tipo == 'AGENDAMENTO_CONSULTA':
             return 'consultas_dashboard'
+        if tipo == 'PESQUISA_SCIH':
+            return 'scih_dashboard'
         # Aceita tanto BUSCA_ATIVA quanto FILA_CIRURGICA (compatibilidade)
         return 'dashboard'
     return 'login'
@@ -6964,7 +7167,7 @@ def webhook():
 
                     # Ordenar por data (mais próxima primeiro)
                     for consulta in sorted(consultas_pendentes, key=lambda c: c.data_aghu or ''):
-                        data_str = formatar_data_consulta(consulta.data_aghu) if consulta.data_aghu else 'Data não informada'
+                        data_str = formatar_data_hora_consulta(consulta.data_aghu, getattr(consulta, "hora_aghu", None)) if consulta.data_aghu else 'Data não informada'
                         menu_texto += f"{opcao}️⃣ *CONSULTA* - {consulta.especialidade or 'Especialidade'}\n"
                         menu_texto += f"   📅 {data_str}\n"
                         menu_texto += f"   👨‍⚕️ {consulta.medico_solicitante or consulta.grade_aghu or 'Médico não informado'}\n\n"
@@ -7162,7 +7365,7 @@ def webhook():
                             except Exception as e_menu:
                                 logger.error(f"[AUTO] Erro ao processar comprovante antecipado (menu) para {item.paciente}: {e_menu}")
 
-                        ws.enviar(numero, f"✅ *Consulta confirmada!*\n\n📅 {formatar_data_consulta(item.data_aghu) if item.data_aghu else 'Data não informada'}\n👨‍⚕️ {item.especialidade or 'Especialidade'}\n\nAguarde o envio do comprovante.")
+                        ws.enviar(numero, f"✅ *Consulta confirmada!*\n\n📅 {formatar_data_hora_consulta(item.data_aghu, getattr(item, 'hora_aghu', None)) if item.data_aghu else 'Data não informada'}\n👨‍⚕️ {item.especialidade or 'Especialidade'}\n\nAguarde o envio do comprovante.")
                         logger.info(f"Consulta {item.id} confirmada via menu por {item.paciente}")
 
                         # Log da mensagem recebida
@@ -7199,10 +7402,92 @@ def webhook():
                         db.session.add(log)
                         db.session.commit()
 
-                    # Verificar se ainda há outras pendências
-                    pendencias_restantes = len(todas_pendencias) - 1
-                    if pendencias_restantes > 0:
-                        ws.enviar(numero, f"📋 Você ainda tem *{pendencias_restantes}* agendamento(s) pendente(s). Responda *1* para confirmar ou *2* para recusar.")
+                    # Recarregar pendências do banco para identificar EXATAMENTE quais
+                    # agendamentos ainda estão pendentes (evita repetir item já confirmado)
+                    consultas_rest = []
+                    cirurgias_rest = []
+                    for num_r in numeros_buscar:
+                        for tel_r in TelefoneConsulta.query.filter_by(numero=num_r).all():
+                            if tel_r.consulta and tel_r.consulta.status == 'AGUARDANDO_CONFIRMACAO':
+                                consultas_rest.append((tel_r.consulta, tel_r.numero))
+                        for tel_fr in Telefone.query.filter_by(numero_fmt=num_r).all():
+                            if tel_fr.contato and tel_fr.contato.status in ['enviado', 'pronto_envio']:
+                                cirurgias_rest.append((tel_fr.contato, tel_fr.numero_fmt))
+
+                    consultas_rest = list({c[0].id: c for c in consultas_rest}.values())
+                    cirurgias_rest = list({c[0].id: c for c in cirurgias_rest}.values())
+                    consultas_rest = sorted(consultas_rest, key=lambda c: c[0].data_aghu or '')
+                    pendencias_rest_lista = consultas_rest + cirurgias_rest
+
+                    if len(pendencias_rest_lista) > 1:
+                        # Reenviar menu listando explicitamente os agendamentos restantes
+                        menu_rest = "📋 *Você ainda tem agendamentos pendentes:*\n\n"
+                        opc_r = 1
+                        for c_p, _ in consultas_rest:
+                            data_str_r = formatar_data_hora_consulta(c_p.data_aghu, getattr(c_p, 'hora_aghu', None)) if c_p.data_aghu else 'Data não informada'
+                            menu_rest += f"{opc_r}️⃣ *CONSULTA* - {c_p.especialidade or 'Especialidade'}\n"
+                            menu_rest += f"   📅 {data_str_r}\n"
+                            menu_rest += f"   👨‍⚕️ {c_p.medico_solicitante or c_p.grade_aghu or 'Médico não informado'}\n\n"
+                            opc_r += 1
+                        for cir_p, _ in cirurgias_rest:
+                            proc_r = cir_p.procedimento_normalizado or cir_p.procedimento or 'Procedimento'
+                            menu_rest += f"{opc_r}️⃣ *CIRURGIA* - {proc_r}\n"
+                            menu_rest += f"   📅 Fila cirúrgica\n\n"
+                            opc_r += 1
+                        menu_rest += f"*Qual agendamento deseja confirmar?*\n"
+                        menu_rest += f"Responda com o número (1 a {len(pendencias_rest_lista)}) ou *TODOS* para confirmar todos."
+                        ws.enviar(numero, menu_rest)
+                        if consultas_rest:
+                            db.session.add(LogMsgConsulta(
+                                campanha_id=consultas_rest[0][0].campanha_id,
+                                consulta_id=consultas_rest[0][0].id,
+                                direcao='enviada',
+                                telefone=numero,
+                                mensagem=menu_rest[:500],
+                                status='sucesso'
+                            ))
+                        elif cirurgias_rest:
+                            db.session.add(LogMsg(
+                                campanha_id=cirurgias_rest[0][0].campanha_id,
+                                contato_id=cirurgias_rest[0][0].id,
+                                direcao='enviada',
+                                telefone=numero,
+                                mensagem=menu_rest[:500],
+                                status='ok'
+                            ))
+                        db.session.commit()
+                    elif len(pendencias_rest_lista) == 1:
+                        item_rest, _ = pendencias_rest_lista[0]
+                        if hasattr(item_rest, 'paciente') and hasattr(item_rest, 'campanha_id'):
+                            msg_rest = f"📋 *Você ainda tem 1 agendamento pendente:*\n\n" + formatar_mensagem_consulta_inicial(item_rest)
+                            ws.enviar(numero, msg_rest)
+                            db.session.add(LogMsgConsulta(
+                                campanha_id=item_rest.campanha_id,
+                                consulta_id=item_rest.id,
+                                direcao='enviada',
+                                telefone=numero,
+                                mensagem=msg_rest[:500],
+                                status='sucesso'
+                            ))
+                            db.session.commit()
+                        else:
+                            proc_r = item_rest.procedimento_normalizado or item_rest.procedimento or 'Procedimento'
+                            msg_rest = (
+                                f"📋 *Você ainda tem 1 agendamento pendente:*\n\n"
+                                f"🏥 *CIRURGIA* - {proc_r}\n"
+                                f"📅 Fila cirúrgica\n\n"
+                                f"Responda *1* para confirmar ou *2* para recusar."
+                            )
+                            ws.enviar(numero, msg_rest)
+                            db.session.add(LogMsg(
+                                campanha_id=item_rest.campanha_id,
+                                contato_id=item_rest.id,
+                                direcao='enviada',
+                                telefone=numero,
+                                mensagem=msg_rest[:500],
+                                status='ok'
+                            ))
+                            db.session.commit()
 
                     return jsonify({'status': 'ok'}), 200
 
@@ -8727,7 +9012,7 @@ def cadastro_publico():
             return render_template('cadastro.html')
 
         # Validar tipo_sistema
-        if tipo_sistema not in ['BUSCA_ATIVA', 'AGENDAMENTO_CONSULTA']:
+        if tipo_sistema not in ['BUSCA_ATIVA', 'AGENDAMENTO_CONSULTA', 'PESQUISA_SCIH']:
             tipo_sistema = 'BUSCA_ATIVA'
 
         # Verificar se email já existe
@@ -9015,6 +9300,10 @@ def task_cancel(task_id):
 # Importar e inicializar rotas do modo consulta
 from consultas_routes import init_consultas_routes
 init_consultas_routes(app, db)
+
+# Importar e inicializar rotas do modo SCIH (pesquisa pós-cirúrgica)
+from scih_routes import init_scih_routes
+init_scih_routes(app, db)
 
 # =============================================================================
 # INICIALIZACAO

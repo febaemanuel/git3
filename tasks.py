@@ -169,8 +169,8 @@ def validar_campanha_task(self, campanha_id):
     retry_backoff=True,
     retry_backoff_max=1800,
     retry_jitter=True,
-    time_limit=7200,  # 2 horas máximo
-    soft_time_limit=7000
+    time_limit=86400,  # 24 horas (campanhas longas com intervalo entre envios podem rodar o dia todo)
+    soft_time_limit=86100
 )
 def enviar_campanha_task(self, campanha_id):
     """

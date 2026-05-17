@@ -7199,10 +7199,92 @@ def webhook():
                         db.session.add(log)
                         db.session.commit()
 
-                    # Verificar se ainda há outras pendências
-                    pendencias_restantes = len(todas_pendencias) - 1
-                    if pendencias_restantes > 0:
-                        ws.enviar(numero, f"📋 Você ainda tem *{pendencias_restantes}* agendamento(s) pendente(s). Responda *1* para confirmar ou *2* para recusar.")
+                    # Recarregar pendências do banco para identificar EXATAMENTE quais
+                    # agendamentos ainda estão pendentes (evita repetir item já confirmado)
+                    consultas_rest = []
+                    cirurgias_rest = []
+                    for num_r in numeros_buscar:
+                        for tel_r in TelefoneConsulta.query.filter_by(numero=num_r).all():
+                            if tel_r.consulta and tel_r.consulta.status == 'AGUARDANDO_CONFIRMACAO':
+                                consultas_rest.append((tel_r.consulta, tel_r.numero))
+                        for tel_fr in Telefone.query.filter_by(numero_fmt=num_r).all():
+                            if tel_fr.contato and tel_fr.contato.status in ['enviado', 'pronto_envio']:
+                                cirurgias_rest.append((tel_fr.contato, tel_fr.numero_fmt))
+
+                    consultas_rest = list({c[0].id: c for c in consultas_rest}.values())
+                    cirurgias_rest = list({c[0].id: c for c in cirurgias_rest}.values())
+                    consultas_rest = sorted(consultas_rest, key=lambda c: c[0].data_aghu or '')
+                    pendencias_rest_lista = consultas_rest + cirurgias_rest
+
+                    if len(pendencias_rest_lista) > 1:
+                        # Reenviar menu listando explicitamente os agendamentos restantes
+                        menu_rest = "📋 *Você ainda tem agendamentos pendentes:*\n\n"
+                        opc_r = 1
+                        for c_p, _ in consultas_rest:
+                            data_str_r = formatar_data_consulta(c_p.data_aghu) if c_p.data_aghu else 'Data não informada'
+                            menu_rest += f"{opc_r}️⃣ *CONSULTA* - {c_p.especialidade or 'Especialidade'}\n"
+                            menu_rest += f"   📅 {data_str_r}\n"
+                            menu_rest += f"   👨‍⚕️ {c_p.medico_solicitante or c_p.grade_aghu or 'Médico não informado'}\n\n"
+                            opc_r += 1
+                        for cir_p, _ in cirurgias_rest:
+                            proc_r = cir_p.procedimento_normalizado or cir_p.procedimento or 'Procedimento'
+                            menu_rest += f"{opc_r}️⃣ *CIRURGIA* - {proc_r}\n"
+                            menu_rest += f"   📅 Fila cirúrgica\n\n"
+                            opc_r += 1
+                        menu_rest += f"*Qual agendamento deseja confirmar?*\n"
+                        menu_rest += f"Responda com o número (1 a {len(pendencias_rest_lista)}) ou *TODOS* para confirmar todos."
+                        ws.enviar(numero, menu_rest)
+                        if consultas_rest:
+                            db.session.add(LogMsgConsulta(
+                                campanha_id=consultas_rest[0][0].campanha_id,
+                                consulta_id=consultas_rest[0][0].id,
+                                direcao='enviada',
+                                telefone=numero,
+                                mensagem=menu_rest[:500],
+                                status='sucesso'
+                            ))
+                        elif cirurgias_rest:
+                            db.session.add(LogMsg(
+                                campanha_id=cirurgias_rest[0][0].campanha_id,
+                                contato_id=cirurgias_rest[0][0].id,
+                                direcao='enviada',
+                                telefone=numero,
+                                mensagem=menu_rest[:500],
+                                status='ok'
+                            ))
+                        db.session.commit()
+                    elif len(pendencias_rest_lista) == 1:
+                        item_rest, _ = pendencias_rest_lista[0]
+                        if hasattr(item_rest, 'paciente') and hasattr(item_rest, 'campanha_id'):
+                            msg_rest = f"📋 *Você ainda tem 1 agendamento pendente:*\n\n" + formatar_mensagem_consulta_inicial(item_rest)
+                            ws.enviar(numero, msg_rest)
+                            db.session.add(LogMsgConsulta(
+                                campanha_id=item_rest.campanha_id,
+                                consulta_id=item_rest.id,
+                                direcao='enviada',
+                                telefone=numero,
+                                mensagem=msg_rest[:500],
+                                status='sucesso'
+                            ))
+                            db.session.commit()
+                        else:
+                            proc_r = item_rest.procedimento_normalizado or item_rest.procedimento or 'Procedimento'
+                            msg_rest = (
+                                f"📋 *Você ainda tem 1 agendamento pendente:*\n\n"
+                                f"🏥 *CIRURGIA* - {proc_r}\n"
+                                f"📅 Fila cirúrgica\n\n"
+                                f"Responda *1* para confirmar ou *2* para recusar."
+                            )
+                            ws.enviar(numero, msg_rest)
+                            db.session.add(LogMsg(
+                                campanha_id=item_rest.campanha_id,
+                                contato_id=item_rest.id,
+                                direcao='enviada',
+                                telefone=numero,
+                                mensagem=msg_rest[:500],
+                                status='ok'
+                            ))
+                            db.session.commit()
 
                     return jsonify({'status': 'ok'}), 200
 

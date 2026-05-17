@@ -959,6 +959,7 @@ class AgendamentoConsulta(db.Model):
     data_exata_ou_dias = db.Column(db.String(50))
     estimativa_agendamento = db.Column(db.String(50))
     data_aghu = db.Column(db.String(50))  # Data da consulta
+    hora_aghu = db.Column(db.String(10))  # Horário da consulta (HH:MM), opcional
 
     # Campo específico para INTERCONSULTA
     paciente_voltar_posto_sms = db.Column(db.String(10))  # SIM ou NÃO
@@ -1471,11 +1472,62 @@ def extrair_dados_comprovante(filepath):
 # FUNÇÕES DE MENSAGENS - MODO CONSULTA
 # =============================================================================
 
+def _extrair_hora_da_data(data_str):
+    """
+    Tenta extrair um horário (HH:MM) de uma string de data que pode conter
+    timestamp embutido (ex: "2024-05-20 14:30:00"). Retorna None se não houver
+    horário ou se for 00:00 (que indica "sem horário").
+    """
+    if not data_str:
+        return None
+    s = str(data_str).strip()
+    if ' ' not in s:
+        return None
+    try:
+        parte_hora = s.split(' ', 1)[1].strip()
+        if not parte_hora or ':' not in parte_hora:
+            return None
+        tokens = parte_hora.split(':')
+        hh = int(tokens[0])
+        mm = int(tokens[1]) if len(tokens) > 1 else 0
+        if hh == 0 and mm == 0:
+            return None
+        return f"{hh:02d}:{mm:02d}"
+    except (ValueError, IndexError):
+        return None
+
+
+def formatar_data_hora_consulta(data_str, hora_str=None):
+    """
+    Formata data + horário da consulta de forma amigável.
+    - Se houver horário (separado em `hora_str` ou embutido na `data_str`):
+      retorna "20/05/2024 às 14h30".
+    - Se não houver horário (ou for 00:00): retorna apenas "20/05/2024".
+    """
+    data_fmt = formatar_data_consulta(data_str)
+    hora = (hora_str or '').strip() or _extrair_hora_da_data(data_str)
+    if not hora:
+        return data_fmt
+    # Normalizar hora informada separadamente
+    if ':' in hora:
+        try:
+            hh, mm = hora.split(':')[:2]
+            hh = int(hh); mm = int(mm)
+            if hh == 0 and mm == 0:
+                return data_fmt
+            hora_label = f"{hh:02d}h{mm:02d}" if mm else f"{hh:02d}h"
+        except ValueError:
+            hora_label = hora
+    else:
+        hora_label = hora
+    return f"{data_fmt} às {hora_label}"
+
+
 def formatar_data_consulta(data_str):
     """
     Formata a data da consulta para exibição na mensagem.
     Remove timestamps como "00:00:00" e formata no padrão DD/MM/YYYY.
-    
+
     Exemplos de entrada:
     - "2024-05-20 00:00:00" -> "20/05/2024"
     - "5/20/2024" -> "20/05/2024"
@@ -1574,7 +1626,7 @@ Informamos que sua consulta de *{consulta.especialidade}* com *{consulta.medico_
 📌 *Motivo:* {consulta.motivo_remarcacao or 'Motivo administrativo'}
 
 ❌ Data anterior: *{consulta.data_anterior or 'Não informada'}*
-✅ *Nova data:* *{formatar_data_consulta(consulta.data_aghu)}*
+✅ *Nova data:* *{formatar_data_hora_consulta(consulta.data_aghu, getattr(consulta, "hora_aghu", None))}*
 
 Pode confirmar sua presença na nova data?
 
@@ -1622,7 +1674,7 @@ Sua solicitação de interconsulta do paciente *{consulta.paciente}* para *{cons
         return f"""{saudacao}
 
 Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
-Estamos informando que o *EXAME* do paciente *{consulta.paciente}*, foi *MARCADO* para o dia *{formatar_data_consulta(consulta.data_aghu)}*, exame *{consulta.exames}*, com especialidade em *{consulta.especialidade}*.
+Estamos informando que o *EXAME* do paciente *{consulta.paciente}*, foi *MARCADO* para o dia *{formatar_data_hora_consulta(consulta.data_aghu, getattr(consulta, "hora_aghu", None))}*, exame *{consulta.exames}*, com especialidade em *{consulta.especialidade}*.
 
 Caso não haja confirmação em até *2 dias*, seu exame será cancelado!
 
@@ -1636,7 +1688,7 @@ Posso confirmar o agendamento?
         return f"""{saudacao}
 
 Falamos do *HOSPITAL UNIVERSITÁRIO WALTER CANTÍDIO*.
-Estamos informando que a *CONSULTA* do paciente *{consulta.paciente}*, foi *MARCADA* para o dia *{formatar_data_consulta(consulta.data_aghu)}*, com *{consulta.medico_solicitante}*, com especialidade em *{consulta.especialidade}*.
+Estamos informando que a *CONSULTA* do paciente *{consulta.paciente}*, foi *MARCADA* para o dia *{formatar_data_hora_consulta(consulta.data_aghu, getattr(consulta, "hora_aghu", None))}*, com *{consulta.medico_solicitante}*, com especialidade em *{consulta.especialidade}*.
 
 Caso não haja confirmação em até *2 dias*, sua consulta será cancelada!
 
@@ -1665,7 +1717,7 @@ def formatar_mensagem_consulta_retry1(consulta):
 Ainda não recebemos sua confirmação para a consulta de *{consulta.paciente}*.
 
 *Dados da consulta:*
-📅 Data: *{formatar_data_consulta(consulta.data_aghu)}*
+📅 Data: *{formatar_data_hora_consulta(consulta.data_aghu, getattr(consulta, "hora_aghu", None))}*
 👨‍⚕️ Médico: *{consulta.medico_solicitante}*
 🏥 Especialidade: *{consulta.especialidade}*
 
@@ -1697,7 +1749,7 @@ def formatar_mensagem_consulta_retry2(consulta):
 Esta é nossa *ÚLTIMA TENTATIVA* antes do cancelamento automático da consulta de *{consulta.paciente}*.
 
 *Dados da consulta:*
-📅 Data: *{formatar_data_consulta(consulta.data_aghu)}*
+📅 Data: *{formatar_data_hora_consulta(consulta.data_aghu, getattr(consulta, "hora_aghu", None))}*
 👨‍⚕️ Médico: *{consulta.medico_solicitante}*
 🏥 Especialidade: *{consulta.especialidade}*
 
@@ -1892,7 +1944,7 @@ def formatar_mensagem_cancelamento_sem_resposta(consulta):
 
 Olá, {consulta.paciente}.
 
-Não recebemos sua confirmação para a consulta de *{consulta.especialidade}* marcada para *{formatar_data_consulta(consulta.data_aghu)}*.
+Não recebemos sua confirmação para a consulta de *{consulta.especialidade}* marcada para *{formatar_data_hora_consulta(consulta.data_aghu, getattr(consulta, "hora_aghu", None))}*.
 
 Sua consulta foi *CANCELADA* por falta de resposta.
 
@@ -7115,7 +7167,7 @@ def webhook():
 
                     # Ordenar por data (mais próxima primeiro)
                     for consulta in sorted(consultas_pendentes, key=lambda c: c.data_aghu or ''):
-                        data_str = formatar_data_consulta(consulta.data_aghu) if consulta.data_aghu else 'Data não informada'
+                        data_str = formatar_data_hora_consulta(consulta.data_aghu, getattr(consulta, "hora_aghu", None)) if consulta.data_aghu else 'Data não informada'
                         menu_texto += f"{opcao}️⃣ *CONSULTA* - {consulta.especialidade or 'Especialidade'}\n"
                         menu_texto += f"   📅 {data_str}\n"
                         menu_texto += f"   👨‍⚕️ {consulta.medico_solicitante or consulta.grade_aghu or 'Médico não informado'}\n\n"
@@ -7313,7 +7365,7 @@ def webhook():
                             except Exception as e_menu:
                                 logger.error(f"[AUTO] Erro ao processar comprovante antecipado (menu) para {item.paciente}: {e_menu}")
 
-                        ws.enviar(numero, f"✅ *Consulta confirmada!*\n\n📅 {formatar_data_consulta(item.data_aghu) if item.data_aghu else 'Data não informada'}\n👨‍⚕️ {item.especialidade or 'Especialidade'}\n\nAguarde o envio do comprovante.")
+                        ws.enviar(numero, f"✅ *Consulta confirmada!*\n\n📅 {formatar_data_hora_consulta(item.data_aghu, getattr(item, 'hora_aghu', None)) if item.data_aghu else 'Data não informada'}\n👨‍⚕️ {item.especialidade or 'Especialidade'}\n\nAguarde o envio do comprovante.")
                         logger.info(f"Consulta {item.id} confirmada via menu por {item.paciente}")
 
                         # Log da mensagem recebida
@@ -7372,7 +7424,7 @@ def webhook():
                         menu_rest = "📋 *Você ainda tem agendamentos pendentes:*\n\n"
                         opc_r = 1
                         for c_p, _ in consultas_rest:
-                            data_str_r = formatar_data_consulta(c_p.data_aghu) if c_p.data_aghu else 'Data não informada'
+                            data_str_r = formatar_data_hora_consulta(c_p.data_aghu, getattr(c_p, 'hora_aghu', None)) if c_p.data_aghu else 'Data não informada'
                             menu_rest += f"{opc_r}️⃣ *CONSULTA* - {c_p.especialidade or 'Especialidade'}\n"
                             menu_rest += f"   📅 {data_str_r}\n"
                             menu_rest += f"   👨‍⚕️ {c_p.medico_solicitante or c_p.grade_aghu or 'Médico não informado'}\n\n"

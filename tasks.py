@@ -1089,7 +1089,8 @@ def enviar_campanha_consultas_task(self, campanha_id):
     """
     from app import (
         db, CampanhaConsulta, AgendamentoConsulta, TelefoneConsulta,
-        LogMsgConsulta, WhatsApp, formatar_numero, formatar_mensagem_consulta_inicial
+        LogMsgConsulta, WhatsApp, formatar_numero, formatar_mensagem_consulta_inicial,
+        buscar_comprovante_antecipado, extrair_dados_comprovante
     )
     from datetime import datetime
 
@@ -1244,6 +1245,28 @@ def enviar_campanha_consultas_task(self, campanha_id):
 
                 db.session.commit()
                 db.session.refresh(consulta)
+
+            # HORÁRIO: se a planilha não trouxe o horário, tenta extrair do PDF do
+            # comprovante antecipado da paciente (OCR). Salvamos em consulta.hora_aghu
+            # pra reutilizar nas próximas mensagens (retry, menu, confirmação etc).
+            if not (consulta.hora_aghu or '').strip() and consulta.paciente:
+                try:
+                    comp_ant = buscar_comprovante_antecipado(consulta.campanha_id, consulta.paciente)
+                    if comp_ant and comp_ant.filepath:
+                        dados_ocr = extrair_dados_comprovante(comp_ant.filepath) or {}
+                        hora_ocr = (dados_ocr.get('hora') or '').strip()
+                        if hora_ocr:
+                            consulta.hora_aghu = hora_ocr
+                            db.session.commit()
+                            logger.info(
+                                f"Horário {hora_ocr} extraído do comprovante antecipado "
+                                f"para consulta {consulta.id} ({consulta.paciente})"
+                            )
+                except Exception as e:
+                    logger.warning(
+                        f"Falha ao extrair horário do comprovante antecipado "
+                        f"para consulta {consulta.id}: {e}"
+                    )
 
             # Enviar MSG 1 (confirmação inicial) apenas para o 1º telefone (prioridade 1)
             # Os demais serão tentados após 2h sem resposta ou DESCONHEÇO (via retry task)

@@ -649,6 +649,12 @@ def init_consultas_routes(app, db):
                             data_exata_ou_dias=str(row.get('DATA EXATA OU DIAS', '')).strip(),
                             estimativa_agendamento=str(row.get('ESTIMATIVA AGENDAMENTO', '')).strip(),
                             data_aghu=str(row.get('DATA AGHU', '')).strip(),
+                            hora_aghu=str(
+                                row.get('HORA AGHU', '')
+                                or row.get('HORA', '')
+                                or row.get('HORARIO', '')
+                                or row.get('HORÁRIO', '')
+                            ).strip(),
                             paciente_voltar_posto_sms=str(row.get('PACIENTE_VOLTAR_POSTO_SMS', '')).strip().upper(),
                             # Campos específicos para REMARCACAO
                             motivo_remarcacao=str(row.get('MOTIVO_REMARCACAO', '')).strip(),

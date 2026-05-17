@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% block title %}Nova campanha SCIH{% endblock %}
+
+{% block content %}
+<h3 class="mb-3"><i class="bi bi-upload"></i> Nova campanha SCIH</h3>
+
+<div class="card">
+    <div class="card-body">
+        <form method="POST" enctype="multipart/form-data">
+            <div class="row g-3">
+                <div class="col-md-8">
+                    <label class="form-label">Nome da campanha *</label>
+                    <input type="text" name="nome" class="form-control" required placeholder="Ex: Cesáreas Maio/2026">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Template *</label>
+                    <select name="template" class="form-select" required>
+                        {% for key, info in templates.items() %}
+                        <option value="{{ key }}">{{ info.titulo }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-12">
+                    <label class="form-label">Descrição (opcional)</label>
+                    <input type="text" name="descricao" class="form-control">
+                </div>
+
+                <div class="col-md-4">
+                    <label class="form-label">Hora início (0-23) *</label>
+                    <input type="number" name="hora_inicio" class="form-control" min="0" max="23" value="8">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Hora fim (0-23) *</label>
+                    <input type="number" name="hora_fim" class="form-control" min="0" max="23" value="18">
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Meta diária *</label>
+                    <input type="number" name="meta_diaria" class="form-control" min="1" value="100">
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label">Planilha Excel *</label>
+                    <input type="file" name="arquivo" class="form-control" accept=".xlsx,.xls" required>
+                    <div class="form-text">
+                        Colunas aceitas: <code>NOME</code> (ou NOME COMPLETO / PACIENTE), <code>TELEFONE</code> (ou CELULAR / CONTATO / FONE).
+                        Opcionais: <code>IDADE</code>, <code>DATA CIRURGIA</code>.
+                    </div>
+                </div>
+            </div>
+
+            <hr>
+            <div class="d-flex justify-content-between">
+                <a class="btn btn-outline-secondary" href="{{ url_for('scih_dashboard') }}">Cancelar</a>
+                <button class="btn btn-whatsapp" type="submit"><i class="bi bi-check2"></i> Criar campanha</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

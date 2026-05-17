@@ -193,6 +193,18 @@
                             <i class="bi bi-calendar-check"></i> Consultas
                         </a>
                     </li>
+                    {% elif current_user.tipo_sistema == 'PESQUISA_SCIH' %}
+                    <!-- MODO SCIH -->
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('scih_dashboard') }}">
+                            <i class="bi bi-clipboard-pulse"></i> Pesquisas SCIH
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('scih_importar') }}">
+                            <i class="bi bi-upload"></i> Nova Campanha
+                        </a>
+                    </li>
                     {% else %}
                     <!-- FILA CIRÚRGICA (padrão) -->
                     <li class="nav-item">

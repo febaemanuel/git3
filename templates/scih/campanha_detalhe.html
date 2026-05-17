@@ -1,0 +1,203 @@
+{% extends 'base.html' %}
+{% block title %}{{ campanha.nome }} - SCIH{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+    <div>
+        <h3 class="mb-1">{{ campanha.nome }}</h3>
+        <div>
+            <span class="badge bg-secondary">{{ campanha.template }}</span>
+            {% if campanha.status == 'enviando' %}<span class="badge bg-success">enviando</span>
+            {% elif campanha.status == 'pausado' %}<span class="badge bg-warning text-dark">pausado</span>
+            {% elif campanha.status == 'concluido' %}<span class="badge bg-primary">concluído</span>
+            {% elif campanha.status == 'erro' %}<span class="badge bg-danger">erro</span>
+            {% else %}<span class="badge bg-light text-dark">{{ campanha.status }}</span>{% endif %}
+            {% if campanha.status_msg %}<small class="text-muted ms-2">{{ campanha.status_msg }}</small>{% endif %}
+        </div>
+        {% if campanha.descricao %}<small class="text-muted d-block mt-1">{{ campanha.descricao }}</small>{% endif %}
+    </div>
+    <div class="d-flex gap-2">
+        {% if campanha.status in ['pendente', 'erro'] %}
+        <form method="POST" action="{{ url_for('scih_campanha_iniciar', id=campanha.id) }}">
+            <button class="btn btn-success btn-sm"><i class="bi bi-play-fill"></i> Iniciar envio</button>
+        </form>
+        {% elif campanha.status == 'enviando' %}
+        <form method="POST" action="{{ url_for('scih_campanha_pausar', id=campanha.id) }}">
+            <button class="btn btn-warning btn-sm"><i class="bi bi-pause-fill"></i> Pausar</button>
+        </form>
+        {% elif campanha.status == 'pausado' %}
+        <form method="POST" action="{{ url_for('scih_campanha_continuar', id=campanha.id) }}">
+            <button class="btn btn-success btn-sm"><i class="bi bi-play-fill"></i> Continuar</button>
+        </form>
+        {% endif %}
+        <a class="btn btn-outline-primary btn-sm" href="{{ url_for('scih_campanha_exportar', id=campanha.id) }}">
+            <i class="bi bi-file-earmark-excel"></i> Exportar Excel
+        </a>
+        <form method="POST" action="{{ url_for('scih_campanha_excluir', id=campanha.id) }}" onsubmit="return confirm('Excluir essa campanha e todas as respostas? Essa ação é irreversível.');">
+            <button class="btn btn-outline-danger btn-sm"><i class="bi bi-trash"></i></button>
+        </form>
+    </div>
+</div>
+
+<!-- Métricas -->
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card" style="border-left-color: #128C7E;">
+            <div class="card-body">
+                <small class="text-muted">Pacientes</small>
+                <h3 class="mb-0" id="m-pac">{{ campanha.total_pacientes or 0 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card" style="border-left-color: #0d6efd;">
+            <div class="card-body">
+                <small class="text-muted">Enviadas</small>
+                <h3 class="mb-0" id="m-env">{{ campanha.total_enviados or 0 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card" style="border-left-color: #25D366;">
+            <div class="card-body">
+                <small class="text-muted">Respondidas (<span id="m-pct">{{ campanha.pct_resposta() }}</span>%)</small>
+                <h3 class="mb-0" id="m-resp">{{ campanha.total_respondidos or 0 }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card" style="border-left-color: #dc3545;">
+            <div class="card-body">
+                <small class="text-muted">Erros de envio</small>
+                <h3 class="mb-0" id="m-err">{{ campanha.total_erros or 0 }}</h3>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">Sintomas reportados</div>
+            <div class="card-body">
+                <canvas id="chartSintomas" height="180"></canvas>
+                {% if campanha.total_respondidos == 0 %}
+                <p class="text-muted text-center mt-3 mb-0"><small>Sem respostas ainda</small></p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card h-100">
+            <div class="card-header">Indicadores das respostas</div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Pacientes com algum sintoma</span>
+                    <strong>{{ com_sintoma }} / {{ campanha.total_respondidos }}</strong>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Buscaram atendimento médico</span>
+                    <strong>{{ buscou_atend }} / {{ campanha.total_respondidos }}</strong>
+                </div>
+                <div class="d-flex justify-content-between mb-2">
+                    <span>Usaram algum remédio</span>
+                    <strong>{{ usou_remedio }} / {{ campanha.total_respondidos }}</strong>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lista de pacientes -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Pacientes da campanha</span>
+        <small class="text-muted">{{ pacientes|length }} pacientes</small>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Nome</th>
+                        <th>Telefone</th>
+                        <th>Idade</th>
+                        <th>Data cirurgia</th>
+                        <th>Status</th>
+                        <th>Enviado</th>
+                        <th>Respondido</th>
+                        <th>Link</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for p in pacientes %}
+                    <tr>
+                        <td>{{ p.nome }}</td>
+                        <td>{{ p.telefone }}</td>
+                        <td>{{ p.idade or '-' }}</td>
+                        <td>{{ p.data_cirurgia or '-' }}</td>
+                        <td>
+                            {% if p.status == 'AGUARDANDO_ENVIO' %}<span class="badge bg-light text-dark">aguardando</span>
+                            {% elif p.status == 'ENVIADO' %}<span class="badge bg-info text-dark">enviado</span>
+                            {% elif p.status == 'RESPONDIDO' %}<span class="badge bg-success">respondido</span>
+                            {% elif p.status == 'ERRO' %}<span class="badge bg-danger" title="{{ p.erro_envio or '' }}">erro</span>
+                            {% else %}<span class="badge bg-secondary">{{ p.status }}</span>{% endif %}
+                        </td>
+                        <td><small>{{ p.data_envio_mensagem.strftime('%d/%m %H:%M') if p.data_envio_mensagem else '-' }}</small></td>
+                        <td><small>{{ p.data_resposta.strftime('%d/%m %H:%M') if p.data_resposta else '-' }}</small></td>
+                        <td>
+                            <a class="btn btn-sm btn-outline-secondary py-0" href="{{ url_for('pesquisa_publica', token=p.token) }}" target="_blank" title="Abrir formulário">
+                                <i class="bi bi-box-arrow-up-right"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const ctx = document.getElementById('chartSintomas');
+if (ctx) {
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: {{ chart.labels|tojson }},
+            datasets: [{
+                label: 'Pacientes que reportaram',
+                data: {{ chart.data|tojson }},
+                backgroundColor: '#128C7E',
+            }]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            plugins: { legend: { display: false } },
+            scales: { x: { beginAtZero: true, ticks: { precision: 0 } } }
+        }
+    });
+}
+
+// Auto-refresh progresso quando enviando
+{% if campanha.status == 'enviando' %}
+setInterval(async () => {
+    try {
+        const r = await fetch('{{ url_for("scih_campanha_progresso", id=campanha.id) }}');
+        if (!r.ok) return;
+        const d = await r.json();
+        document.getElementById('m-pac').textContent = d.total_pacientes;
+        document.getElementById('m-env').textContent = d.total_enviados;
+        document.getElementById('m-resp').textContent = d.total_respondidos;
+        document.getElementById('m-pct').textContent = d.pct_resposta;
+        document.getElementById('m-err').textContent = d.total_erros;
+        if (d.status !== 'enviando') location.reload();
+    } catch (e) {}
+}, 5000);
+{% endif %}
+</script>
+{% endblock %}

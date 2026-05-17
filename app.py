@@ -1176,6 +1176,155 @@ class HistoricoConsulta(db.Model):
     consulta = db.relationship('AgendamentoConsulta', backref='historico')
     usuario = db.relationship('Usuario', backref='historico_consultas')
 
+
+# =============================================================================
+# MODELOS - MODO SCIH (Pesquisa pós-cirúrgica de infecção hospitalar)
+# =============================================================================
+
+class CampanhaSCIH(db.Model):
+    """Campanha de pesquisa SCIH (questionário pós-cirúrgico)"""
+    __tablename__ = 'campanhas_scih'
+    id = db.Column(db.Integer, primary_key=True)
+    criador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+    nome = db.Column(db.String(200), nullable=False)
+    descricao = db.Column(db.Text)
+    # Template fixo: 'CESARIANA' ou 'MASTOLOGIA'
+    template = db.Column(db.String(30), nullable=False)
+
+    hora_inicio = db.Column(db.Integer, default=8)
+    hora_fim = db.Column(db.Integer, default=18)
+    meta_diaria = db.Column(db.Integer, default=100)
+
+    status = db.Column(db.String(50), default='pendente')
+    status_msg = db.Column(db.String(200))
+
+    total_pacientes = db.Column(db.Integer, default=0)
+    total_enviados = db.Column(db.Integer, default=0)
+    total_respondidos = db.Column(db.Integer, default=0)
+    total_erros = db.Column(db.Integer, default=0)
+
+    enviados_hoje = db.Column(db.Integer, default=0)
+    data_ultimo_envio = db.Column(db.Date)
+
+    data_inicio = db.Column(db.DateTime)
+    data_fim = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    celery_task_id = db.Column(db.String(100))
+
+    criador = db.relationship('Usuario', backref='campanhas_scih')
+
+    def pode_enviar_hoje(self):
+        hoje = obter_hoje_fortaleza()
+        if self.data_ultimo_envio != hoje:
+            self.enviados_hoje = 0
+            self.data_ultimo_envio = hoje
+            db.session.commit()
+        return self.enviados_hoje < self.meta_diaria
+
+    def pode_enviar_agora(self):
+        hora_atual = obter_hora_fortaleza()
+        if self.hora_inicio <= self.hora_fim:
+            return self.hora_inicio <= hora_atual < self.hora_fim
+        return hora_atual >= self.hora_inicio or hora_atual < self.hora_fim
+
+    def calcular_intervalo(self):
+        if self.meta_diaria <= 0:
+            return 30
+        if self.hora_inicio <= self.hora_fim:
+            horas = self.hora_fim - self.hora_inicio
+        else:
+            horas = (24 - self.hora_inicio) + self.hora_fim
+        segundos = max(horas, 1) * 3600
+        return max(int(segundos / self.meta_diaria), 5)
+
+    def registrar_envio(self):
+        hoje = obter_hoje_fortaleza()
+        if self.data_ultimo_envio != hoje:
+            self.enviados_hoje = 1
+            self.data_ultimo_envio = hoje
+        else:
+            self.enviados_hoje += 1
+        db.session.commit()
+
+    def atualizar_stats(self):
+        base = PacienteSCIH.query.filter_by(campanha_id=self.id)
+        self.total_pacientes = base.count()
+        self.total_enviados = base.filter(PacienteSCIH.status.in_(['ENVIADO', 'RESPONDIDO'])).count()
+        self.total_respondidos = base.filter_by(status='RESPONDIDO').count()
+        self.total_erros = base.filter_by(status='ERRO').count()
+        db.session.commit()
+
+    def pct_resposta(self):
+        if not self.total_enviados:
+            return 0
+        return round(self.total_respondidos / self.total_enviados * 100, 1)
+
+
+class PacienteSCIH(db.Model):
+    """Paciente alvo de uma campanha SCIH"""
+    __tablename__ = 'pacientes_scih'
+    id = db.Column(db.Integer, primary_key=True)
+    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas_scih.id', ondelete='CASCADE'), nullable=False)
+    criador_id = db.Column(db.Integer, db.ForeignKey('usuarios.id'), nullable=False)
+
+    nome = db.Column(db.String(200), nullable=False)
+    telefone = db.Column(db.String(20))
+    idade = db.Column(db.String(10))
+    data_cirurgia = db.Column(db.String(50))
+
+    token = db.Column(db.String(64), unique=True, nullable=False, index=True)
+
+    status = db.Column(db.String(30), default='AGUARDANDO_ENVIO')
+    mensagem_enviada = db.Column(db.Boolean, default=False)
+    data_envio_mensagem = db.Column(db.DateTime)
+    msg_id = db.Column(db.String(100))
+    erro_envio = db.Column(db.String(500))
+    data_resposta = db.Column(db.DateTime)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    campanha = db.relationship('CampanhaSCIH', backref=db.backref('pacientes', lazy='dynamic', cascade='all, delete-orphan'))
+
+
+class RespostaSCIH(db.Model):
+    """Resposta de um paciente ao questionário SCIH"""
+    __tablename__ = 'respostas_scih'
+    id = db.Column(db.Integer, primary_key=True)
+    paciente_id = db.Column(db.Integer, db.ForeignKey('pacientes_scih.id', ondelete='CASCADE'), nullable=False, unique=True)
+    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas_scih.id', ondelete='CASCADE'), nullable=False)
+
+    # JSON serializado com todos os campos respondidos
+    dados_json = db.Column(db.Text, nullable=False)
+
+    # Campos espelhados pra facilitar agregação no dashboard sem ter que parsear JSON
+    apresentou_sintoma = db.Column(db.Boolean)
+    buscou_atendimento = db.Column(db.Boolean)
+    usou_remedio = db.Column(db.Boolean)
+
+    ip = db.Column(db.String(45))
+    user_agent = db.Column(db.String(500))
+    data_resposta = db.Column(db.DateTime, default=datetime.utcnow)
+
+    paciente = db.relationship('PacienteSCIH', backref=db.backref('resposta', uselist=False, cascade='all, delete-orphan'))
+
+
+class LogMsgSCIH(db.Model):
+    """Log de mensagens trocadas em campanhas SCIH"""
+    __tablename__ = 'logs_msg_scih'
+    id = db.Column(db.Integer, primary_key=True)
+    campanha_id = db.Column(db.Integer, db.ForeignKey('campanhas_scih.id', ondelete='CASCADE'))
+    paciente_id = db.Column(db.Integer, db.ForeignKey('pacientes_scih.id', ondelete='CASCADE'))
+    direcao = db.Column(db.String(10))
+    telefone = db.Column(db.String(20))
+    mensagem = db.Column(db.Text)
+    msg_id = db.Column(db.String(100))
+    status = db.Column(db.String(20))
+    erro = db.Column(db.String(500))
+    data = db.Column(db.DateTime, default=datetime.utcnow)
+
+
 # =============================================================================
 # FUNÇÕES DE OCR - EXTRAÇÃO DE DADOS DO COMPROVANTE
 # =============================================================================
@@ -2846,6 +2995,8 @@ def get_dashboard_route():
         tipo = getattr(current_user, 'tipo_sistema', 'BUSCA_ATIVA')
         if tipo == 'AGENDAMENTO_CONSULTA':
             return 'consultas_dashboard'
+        if tipo == 'PESQUISA_SCIH':
+            return 'scih_dashboard'
         # Aceita tanto BUSCA_ATIVA quanto FILA_CIRURGICA (compatibilidade)
         return 'dashboard'
     return 'login'
@@ -8809,7 +8960,7 @@ def cadastro_publico():
             return render_template('cadastro.html')
 
         # Validar tipo_sistema
-        if tipo_sistema not in ['BUSCA_ATIVA', 'AGENDAMENTO_CONSULTA']:
+        if tipo_sistema not in ['BUSCA_ATIVA', 'AGENDAMENTO_CONSULTA', 'PESQUISA_SCIH']:
             tipo_sistema = 'BUSCA_ATIVA'
 
         # Verificar se email já existe
@@ -9097,6 +9248,10 @@ def task_cancel(task_id):
 # Importar e inicializar rotas do modo consulta
 from consultas_routes import init_consultas_routes
 init_consultas_routes(app, db)
+
+# Importar e inicializar rotas do modo SCIH (pesquisa pós-cirúrgica)
+from scih_routes import init_scih_routes
+init_scih_routes(app, db)
 
 # =============================================================================
 # INICIALIZACAO

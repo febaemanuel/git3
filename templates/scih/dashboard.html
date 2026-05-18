@@ -80,7 +80,7 @@
                         <td class="text-center">{{ c.total_enviados or 0 }}</td>
                         <td class="text-center">{{ c.total_respondidos or 0 }}</td>
                         <td class="text-center">{{ c.pct_resposta() }}%</td>
-                        <td><small>{{ c.created_at.strftime('%d/%m/%Y %H:%M') if c.created_at else '' }}</small></td>
+                        <td><small>{{ c.created_at|fortaleza_dt }}</small></td>
                         <td>
                             <a class="btn btn-sm btn-outline-primary" href="{{ url_for('scih_campanha_detalhe', id=c.id) }}">
                                 <i class="bi bi-arrow-right"></i> Abrir

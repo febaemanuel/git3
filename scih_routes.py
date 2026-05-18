@@ -525,14 +525,9 @@ def init_scih_routes(app, db):
             'status_paciente': status_paciente,
         }
 
-    # Sintomas considerados de "atenção" para o Dr. Marcus (suspeita forte de ISC)
-    SINTOMAS_ATENCAO = {
-        'Febre',
-        'Ferida cirúrgica com secreção',
-        'Ferida cirúrgica com pus',
-        'Ferida cirúrgica com sangramento',
-        'Ferida cirúrgica com mau cheiro',
-    }
+    # Classificação automática de sintomas sugestivos de ISC desativada.
+    # Quem decide o que é "caso de atenção" é o Dr. Marcus na análise manual.
+    SINTOMAS_ATENCAO = set()
 
     @app.route('/scih/respostas')
     @login_required

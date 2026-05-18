@@ -39,13 +39,18 @@
                     <input type="number" name="meta_diaria" class="form-control" min="1" value="100">
                 </div>
 
-                <div class="col-12">
+                <div class="col-md-8">
                     <label class="form-label">Planilha Excel *</label>
                     <input type="file" name="arquivo" class="form-control" accept=".xlsx,.xls" required>
                     <div class="form-text">
-                        Colunas aceitas: <code>NOME</code> (ou NOME COMPLETO / PACIENTE), <code>TELEFONE</code> (ou CELULAR / CONTATO / FONE).
-                        Opcionais: <code>IDADE</code>, <code>DATA CIRURGIA</code>.
+                        Colunas aceitas: <code>PACIENTE</code> (ou NOME / NOME COMPLETO), <code>FONE</code> (ou TELEFONE / CELULAR).
+                        Opcionais: <code>IDADE</code>, <code>DATA CIRURGIA</code>, <code>CIRURGIA</code>, <code>OBSERVAÇÕES</code>.
                     </div>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Aba da planilha</label>
+                    <input type="text" name="aba" class="form-control" placeholder="(primeira aba)">
+                    <div class="form-text">Deixe em branco pra usar a primeira aba do arquivo.</div>
                 </div>
             </div>
 

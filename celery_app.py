@@ -88,6 +88,14 @@ celery.conf.beat_schedule = {
         'options': {'expires': 1800}  # Task expira em 30min se não executar
     },
 
+    # Retry automático SCIH: reenvia 1x após 2 dias sem resposta,
+    # marca como SEM_RESPOSTA após +2 dias do retry sem resposta
+    'retry-scih-sem-resposta': {
+        'task': 'tasks.retry_scih_sem_resposta',
+        'schedule': crontab(minute=15, hour='8-21'),  # A cada hora (15min após), das 8h15 às 21h15
+        'options': {'expires': 1800}
+    },
+
     # Limpar tasks antigas a cada 6 horas
     'limpar-tasks-antigas': {
         'task': 'tasks.limpar_tasks_antigas',

@@ -1,0 +1,159 @@
+{% extends 'base.html' %}
+{% block title %}Respostas das pesquisas - SCIH{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3 class="mb-0"><i class="bi bi-list-check"></i> Respostas das pesquisas</h3>
+    <a class="btn btn-outline-success" href="{{ url_for('scih_respostas_exportar', **request.args) }}">
+        <i class="bi bi-file-earmark-excel"></i> Exportar Excel (filtrado)
+    </a>
+</div>
+
+<!-- FILTROS -->
+<div class="card mb-3">
+    <div class="card-header">Filtros</div>
+    <div class="card-body">
+        <form method="GET" class="row g-2">
+            <div class="col-md-4">
+                <label class="form-label small mb-0">Campanha</label>
+                <select name="campanha_id" class="form-select form-select-sm">
+                    <option value="">Todas</option>
+                    {% for c in campanhas %}
+                    <option value="{{ c.id }}" {% if f.campanha_id == c.id|string %}selected{% endif %}>
+                        {{ c.nome }} ({{ c.template }})
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-0">Template</label>
+                <select name="template" class="form-select form-select-sm">
+                    <option value="">Todos</option>
+                    {% for key, info in templates.items() %}
+                    <option value="{{ key }}" {% if f.template == key %}selected{% endif %}>{{ info.titulo }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label small mb-0">Sintoma específico</label>
+                <select name="sintoma" class="form-select form-select-sm">
+                    <option value="">Qualquer</option>
+                    {% for s in sintomas_opcoes %}
+                    <option value="{{ s }}" {% if f.sintoma == s %}selected{% endif %}>{{ s }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="col-md-3">
+                <label class="form-label small mb-0">Apresentou sintomas?</label>
+                <select name="apresentou" class="form-select form-select-sm">
+                    <option value="">Todas</option>
+                    <option value="SIM" {% if f.apresentou == 'SIM' %}selected{% endif %}>Sim</option>
+                    <option value="NAO" {% if f.apresentou == 'NAO' %}selected{% endif %}>Não</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-0">Buscou atendimento?</label>
+                <select name="buscou" class="form-select form-select-sm">
+                    <option value="">Todas</option>
+                    <option value="SIM" {% if f.buscou == 'SIM' %}selected{% endif %}>Sim</option>
+                    <option value="NAO" {% if f.buscou == 'NAO' %}selected{% endif %}>Não</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small mb-0">Usou remédio?</label>
+                <select name="usou" class="form-select form-select-sm">
+                    <option value="">Todas</option>
+                    <option value="SIM" {% if f.usou == 'SIM' %}selected{% endif %}>Sim</option>
+                    <option value="NAO" {% if f.usou == 'NAO' %}selected{% endif %}>Não</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <div class="row g-1">
+                    <div class="col">
+                        <label class="form-label small mb-0">De</label>
+                        <input type="date" name="data_de" class="form-control form-control-sm" value="{{ f.data_de }}">
+                    </div>
+                    <div class="col">
+                        <label class="form-label small mb-0">Até</label>
+                        <input type="date" name="data_ate" class="form-control form-control-sm" value="{{ f.data_ate }}">
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 d-flex justify-content-end gap-2 mt-2">
+                <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('scih_respostas') }}">Limpar</a>
+                <button class="btn btn-sm btn-whatsapp" type="submit"><i class="bi bi-funnel"></i> Filtrar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- TABELA DE RESPOSTAS -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>Resultados</span>
+        <span class="badge bg-secondary">{{ total }} resposta(s)</span>
+    </div>
+    <div class="card-body p-0">
+        {% if respostas %}
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Paciente</th>
+                        <th>Telefone</th>
+                        <th>Campanha</th>
+                        <th>Cirurgia</th>
+                        <th>Data cirurgia</th>
+                        <th>Resposta</th>
+                        <th>Sintomas</th>
+                        <th class="text-center">Atend.</th>
+                        <th class="text-center">Remédio</th>
+                        <th>Observações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in respostas %}
+                    {% set r = item.r %}
+                    {% set d = item.dados %}
+                    {% set p = r.paciente %}
+                    {% set c = p.campanha if p else None %}
+                    <tr>
+                        <td><strong>{{ p.nome if p else '?' }}</strong></td>
+                        <td>{{ p.telefone if p else '' }}</td>
+                        <td><small>{{ c.nome if c else '' }}</small></td>
+                        <td><small>{{ c.template if c else '' }}</small></td>
+                        <td><small>{{ (p.data_cirurgia if p else '') or d.data_cirurgia or '-' }}</small></td>
+                        <td><small>{{ r.data_resposta.strftime('%d/%m/%Y %H:%M') if r.data_resposta else '-' }}</small></td>
+                        <td>
+                            {% if r.apresentou_sintoma %}
+                                {% for s in d.sintomas or [] %}
+                                    <span class="badge bg-danger me-1 mb-1">{{ s }}</span>
+                                {% endfor %}
+                            {% else %}
+                                <span class="text-muted small">— sem sintomas —</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if r.buscou_atendimento %}<i class="bi bi-check-circle-fill text-success"></i>
+                            {% else %}<i class="bi bi-dash-circle text-muted"></i>{% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if r.usou_remedio %}
+                                <i class="bi bi-check-circle-fill text-warning" title="{{ d.qual_remedio or '' }}"></i>
+                                {% if d.qual_remedio %}<br><small class="text-muted">{{ d.qual_remedio }}</small>{% endif %}
+                            {% else %}<i class="bi bi-dash-circle text-muted"></i>{% endif %}
+                        </td>
+                        <td><small>{{ d.observacoes or '' }}</small></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="p-4 text-center text-muted">Nenhuma resposta encontrada para os filtros selecionados.</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

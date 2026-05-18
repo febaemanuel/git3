@@ -231,7 +231,7 @@
                         <td><strong>{{ p.nome if p else '?' }}</strong></td>
                         <td>{{ p.telefone if p else '' }}</td>
                         <td><small>{{ c.nome if c else '' }}</small></td>
-                        <td><small>{{ r.data_resposta.strftime('%d/%m %H:%M') if r.data_resposta else '' }}</small></td>
+                        <td><small>{{ r.data_resposta|fortaleza_dt('%d/%m %H:%M') }}</small></td>
                         <td>
                             {% for s in item.severos %}
                                 <span class="badge badge-atencao badge-sintoma">{{ s }}</span>
@@ -256,8 +256,8 @@
                                         "campanha": c.nome if c else "",
                                         "template": c.template if c else "",
                                         "data_cirurgia": (p.data_cirurgia if p else "") or d.data_cirurgia or "",
-                                        "data_resposta": r.data_resposta.strftime("%d/%m/%Y %H:%M") if r.data_resposta else "",
-                                        "data_envio": p.data_envio_mensagem.strftime("%d/%m/%Y %H:%M") if p and p.data_envio_mensagem else "",
+                                        "data_resposta": r.data_resposta|fortaleza_dt('%d/%m/%Y %H:%M'),
+                                        "data_envio": (p.data_envio_mensagem|fortaleza_dt('%d/%m/%Y %H:%M')) if p else "",
                                         "apresentou_sintoma": r.apresentou_sintoma,
                                         "sintomas": d.sintomas or [],
                                         "severos": item.severos,
@@ -313,7 +313,7 @@
                         <td><small>{{ c.nome if c else '' }}</small></td>
                         <td><small>{{ c.template if c else '' }}</small></td>
                         <td><small>{{ (p.data_cirurgia if p else '') or d.data_cirurgia or '' }}</small></td>
-                        <td><small>{{ r.data_resposta.strftime('%d/%m %H:%M') if r.data_resposta else '' }}</small></td>
+                        <td><small>{{ r.data_resposta|fortaleza_dt('%d/%m %H:%M') }}</small></td>
                         <td>
                             {% if r.apresentou_sintoma %}
                                 {% for s in d.sintomas or [] %}
@@ -340,8 +340,8 @@
                                         "campanha": c.nome if c else "",
                                         "template": c.template if c else "",
                                         "data_cirurgia": (p.data_cirurgia if p else "") or d.data_cirurgia or "",
-                                        "data_resposta": r.data_resposta.strftime("%d/%m/%Y %H:%M") if r.data_resposta else "",
-                                        "data_envio": p.data_envio_mensagem.strftime("%d/%m/%Y %H:%M") if p and p.data_envio_mensagem else "",
+                                        "data_resposta": r.data_resposta|fortaleza_dt('%d/%m/%Y %H:%M'),
+                                        "data_envio": (p.data_envio_mensagem|fortaleza_dt('%d/%m/%Y %H:%M')) if p else "",
                                         "apresentou_sintoma": r.apresentou_sintoma,
                                         "sintomas": d.sintomas or [],
                                         "severos": item.severos,

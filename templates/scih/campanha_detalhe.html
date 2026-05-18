@@ -150,8 +150,8 @@
                             {% elif p.status == 'ERRO' %}<span class="badge bg-danger" title="{{ p.erro_envio or '' }}">erro</span>
                             {% else %}<span class="badge bg-secondary">{{ p.status }}</span>{% endif %}
                         </td>
-                        <td><small>{{ p.data_envio_mensagem.strftime('%d/%m %H:%M') if p.data_envio_mensagem else '-' }}</small></td>
-                        <td><small>{{ p.data_resposta.strftime('%d/%m %H:%M') if p.data_resposta else '-' }}</small></td>
+                        <td><small>{{ (p.data_envio_mensagem|fortaleza_dt('%d/%m %H:%M')) or '-' }}</small></td>
+                        <td><small>{{ (p.data_resposta|fortaleza_dt('%d/%m %H:%M')) or '-' }}</small></td>
                         <td>
                             <a class="btn btn-sm btn-outline-secondary py-0" href="{{ url_for('pesquisa_publica', token=p.token) }}" target="_blank" title="Abrir formulário">
                                 <i class="bi bi-box-arrow-up-right"></i>

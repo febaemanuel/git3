@@ -66,8 +66,23 @@ def init_scih_routes(app, db):
 
     from app import (
         CampanhaSCIH, PacienteSCIH, RespostaSCIH, LogMsgSCIH,
-        WhatsApp, ConfigWhatsApp, formatar_numero, csrf
+        WhatsApp, ConfigWhatsApp, formatar_numero, csrf, TZ_FORTALEZA
     )
+
+    # Filtro Jinja: converte um datetime salvo em UTC para o horário de
+    # Fortaleza (UTC-3) na hora de exibir. Datetimes naive são tratados como UTC.
+    def _fortaleza_dt(dt, fmt='%d/%m/%Y %H:%M'):
+        if not dt:
+            return ''
+        try:
+            import pytz
+            if dt.tzinfo is None:
+                dt = pytz.utc.localize(dt)
+            return dt.astimezone(TZ_FORTALEZA).strftime(fmt)
+        except Exception:
+            return dt.strftime(fmt)
+
+    app.jinja_env.filters['fortaleza_dt'] = _fortaleza_dt
 
     try:
         from tasks import enviar_campanha_scih_task
@@ -388,10 +403,10 @@ def init_scih_routes(app, db):
                 'Idade': p.idade or '',
                 'Data Cirurgia': p.data_cirurgia or '',
                 'Status': p.status,
-                'Enviado em': p.data_envio_mensagem.strftime('%d/%m/%Y %H:%M') if p.data_envio_mensagem else '',
+                'Enviado em': _fortaleza_dt(p.data_envio_mensagem),
                 'Erro Envio': p.erro_envio or '',
                 'Respondida': 'Sim' if resp else 'Não',
-                'Data Resposta': resp.data_resposta.strftime('%d/%m/%Y %H:%M') if resp and resp.data_resposta else '',
+                'Data Resposta': _fortaleza_dt(resp.data_resposta) if resp else '',
                 'Apresentou Sintomas': 'Sim' if resp and resp.apresentou_sintoma else ('Não' if resp else ''),
                 'Sintomas': ', '.join(dados.get('sintomas', []) or []) if resp else '',
                 'Buscou Atendimento': 'Sim' if resp and resp.buscou_atendimento else ('Não' if resp else ''),
@@ -555,7 +570,13 @@ def init_scih_routes(app, db):
             if r.usou_remedio:
                 usou_remedio += 1
             if r.data_resposta:
-                dia = r.data_resposta.strftime('%Y-%m-%d')
+                # Agregação por dia também em horário de Fortaleza
+                try:
+                    import pytz
+                    d_local = (pytz.utc.localize(r.data_resposta) if r.data_resposta.tzinfo is None else r.data_resposta).astimezone(TZ_FORTALEZA)
+                except Exception:
+                    d_local = r.data_resposta
+                dia = d_local.strftime('%Y-%m-%d')
                 por_dia[dia] = por_dia.get(dia, 0) + 1
             if c and c.template in por_template:
                 por_template[c.template] += 1
@@ -649,7 +670,7 @@ def init_scih_routes(app, db):
                 'Telefone': p.telefone if p else '',
                 'Idade': (p.idade if p else '') or dados.get('idade', ''),
                 'Data Cirurgia': (p.data_cirurgia if p else '') or dados.get('data_cirurgia', ''),
-                'Data Resposta': r.data_resposta.strftime('%d/%m/%Y %H:%M') if r.data_resposta else '',
+                'Data Resposta': _fortaleza_dt(r.data_resposta),
                 'Apresentou Sintomas': 'Sim' if r.apresentou_sintoma else 'Não',
                 'Sintomas': ', '.join(dados.get('sintomas', []) or []),
                 'Buscou Atendimento': 'Sim' if r.buscou_atendimento else 'Não',
@@ -708,10 +729,17 @@ def init_scih_routes(app, db):
                 qual_remedio = form.get('qual_remedio', '').strip() if usou else ''
                 observacoes = form.get('observacoes', '').strip()
 
+                # Data da "ligação" em horário de Fortaleza (não UTC)
+                try:
+                    import pytz as _pytz
+                    _hoje_local = datetime.utcnow().replace(tzinfo=_pytz.utc).astimezone(TZ_FORTALEZA).strftime('%Y-%m-%d')
+                except Exception:
+                    _hoje_local = datetime.utcnow().strftime('%Y-%m-%d')
+
                 dados = {
                     'nome': form.get('nome', '').strip(),
                     'idade': form.get('idade', '').strip(),
-                    'data_ligacao': datetime.utcnow().strftime('%Y-%m-%d'),
+                    'data_ligacao': _hoje_local,
                     'data_cirurgia': form.get('data_cirurgia', '').strip(),
                     'apresentou_sintoma': apresentou,
                     'sintomas': [s for s in sintomas if s in SINTOMAS_OPCOES],
@@ -752,7 +780,7 @@ def init_scih_routes(app, db):
             campanha=campanha,
             template_info=template_info,
             sintomas_opcoes=SINTOMAS_OPCOES,
-            data_hoje=datetime.now().strftime('%d/%m/%Y'),
+            data_hoje=_fortaleza_dt(datetime.utcnow(), '%d/%m/%Y'),
         )
 
     logger.info("Rotas SCIH registradas")

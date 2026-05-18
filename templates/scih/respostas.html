@@ -1,40 +1,54 @@
 {% extends 'base.html' %}
-{% block title %}Respostas das pesquisas - SCIH{% endblock %}
+{% block title %}Análise de Respostas - SCIH{% endblock %}
+
+{% block extra_css %}
+<style>
+    .metric-card { border-left: 4px solid; transition: transform 0.15s; }
+    .metric-card:hover { transform: translateY(-2px); }
+    .chart-card { min-height: 280px; }
+    .badge-sintoma { font-size: 0.75rem; margin: 1px; }
+    .badge-atencao { background: #dc3545; }
+    .tabela-respostas td { vertical-align: middle; }
+    .tag-top { background: #fff3cd; color: #664d03; padding: 4px 10px; border-radius: 12px; font-size: 0.85rem; }
+    .atencao-row { background: #fff5f5 !important; }
+</style>
+{% endblock %}
 
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-    <h3 class="mb-0"><i class="bi bi-list-check"></i> Respostas das pesquisas</h3>
+    <div>
+        <h3 class="mb-0"><i class="bi bi-graph-up"></i> Análise de Respostas</h3>
+        <small class="text-muted">Painel de análise para classificação de ISC (Infecção do Sítio Cirúrgico)</small>
+    </div>
     <a class="btn btn-outline-success" href="{{ url_for('scih_respostas_exportar', **request.args) }}">
-        <i class="bi bi-file-earmark-excel"></i> Exportar Excel (filtrado)
+        <i class="bi bi-file-earmark-excel"></i> Exportar (filtrado)
     </a>
 </div>
 
 <!-- FILTROS -->
 <div class="card mb-3">
-    <div class="card-header">Filtros</div>
-    <div class="card-body">
+    <div class="card-header py-2"><strong><i class="bi bi-funnel"></i> Filtros</strong></div>
+    <div class="card-body py-2">
         <form method="GET" class="row g-2">
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label class="form-label small mb-0">Campanha</label>
                 <select name="campanha_id" class="form-select form-select-sm">
                     <option value="">Todas</option>
                     {% for c in campanhas %}
-                    <option value="{{ c.id }}" {% if f.campanha_id == c.id|string %}selected{% endif %}>
-                        {{ c.nome }} ({{ c.template }})
-                    </option>
+                    <option value="{{ c.id }}" {% if f.campanha_id == c.id|string %}selected{% endif %}>{{ c.nome }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label small mb-0">Template</label>
                 <select name="template" class="form-select form-select-sm">
                     <option value="">Todos</option>
                     {% for key, info in templates.items() %}
-                    <option value="{{ key }}" {% if f.template == key %}selected{% endif %}>{{ info.titulo }}</option>
+                    <option value="{{ key }}" {% if f.template == key %}selected{% endif %}>{{ key|title }}</option>
                     {% endfor %}
                 </select>
             </div>
-            <div class="col-md-5">
+            <div class="col-md-3">
                 <label class="form-label small mb-0">Sintoma específico</label>
                 <select name="sintoma" class="form-select form-select-sm">
                     <option value="">Qualquer</option>
@@ -43,24 +57,23 @@
                     {% endfor %}
                 </select>
             </div>
-
-            <div class="col-md-3">
-                <label class="form-label small mb-0">Apresentou sintomas?</label>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Apresentou?</label>
                 <select name="apresentou" class="form-select form-select-sm">
                     <option value="">Todas</option>
                     <option value="SIM" {% if f.apresentou == 'SIM' %}selected{% endif %}>Sim</option>
                     <option value="NAO" {% if f.apresentou == 'NAO' %}selected{% endif %}>Não</option>
                 </select>
             </div>
-            <div class="col-md-3">
-                <label class="form-label small mb-0">Buscou atendimento?</label>
+            <div class="col-md-2">
+                <label class="form-label small mb-0">Buscou atend.?</label>
                 <select name="buscou" class="form-select form-select-sm">
                     <option value="">Todas</option>
                     <option value="SIM" {% if f.buscou == 'SIM' %}selected{% endif %}>Sim</option>
                     <option value="NAO" {% if f.buscou == 'NAO' %}selected{% endif %}>Não</option>
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <label class="form-label small mb-0">Usou remédio?</label>
                 <select name="usou" class="form-select form-select-sm">
                     <option value="">Todas</option>
@@ -69,81 +82,226 @@
                 </select>
             </div>
             <div class="col-md-3">
-                <div class="row g-1">
-                    <div class="col">
-                        <label class="form-label small mb-0">De</label>
-                        <input type="date" name="data_de" class="form-control form-control-sm" value="{{ f.data_de }}">
-                    </div>
-                    <div class="col">
-                        <label class="form-label small mb-0">Até</label>
-                        <input type="date" name="data_ate" class="form-control form-control-sm" value="{{ f.data_ate }}">
-                    </div>
-                </div>
+                <label class="form-label small mb-0">De</label>
+                <input type="date" name="data_de" class="form-control form-control-sm" value="{{ f.data_de }}">
             </div>
-
-            <div class="col-12 d-flex justify-content-end gap-2 mt-2">
+            <div class="col-md-3">
+                <label class="form-label small mb-0">Até</label>
+                <input type="date" name="data_ate" class="form-control form-control-sm" value="{{ f.data_ate }}">
+            </div>
+            <div class="col-md-4 d-flex align-items-end justify-content-end gap-2">
                 <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('scih_respostas') }}">Limpar</a>
-                <button class="btn btn-sm btn-whatsapp" type="submit"><i class="bi bi-funnel"></i> Filtrar</button>
+                <button class="btn btn-sm btn-whatsapp" type="submit"><i class="bi bi-search"></i> Aplicar</button>
             </div>
         </form>
     </div>
 </div>
 
-<!-- TABELA DE RESPOSTAS -->
-<div class="card">
-    <div class="card-header d-flex justify-content-between align-items-center">
-        <span>Resultados</span>
-        <span class="badge bg-secondary">{{ total }} resposta(s)</span>
+<!-- CARDS DE MÉTRICAS -->
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card metric-card" style="border-left-color:#128C7E;">
+            <div class="card-body py-3">
+                <small class="text-muted">Total respondidos</small>
+                <h2 class="mb-0">{{ total }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card" style="border-left-color:#dc3545;">
+            <div class="card-body py-3">
+                <small class="text-muted">Com sintomas</small>
+                <h2 class="mb-0">{{ com_sintoma }} <small class="text-muted fs-6">({{ pct_sintoma }}%)</small></h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card" style="border-left-color:#0d6efd;">
+            <div class="card-body py-3">
+                <small class="text-muted">Buscaram atendimento</small>
+                <h2 class="mb-0">{{ buscou_atend }} <small class="text-muted fs-6">({{ pct_buscou }}%)</small></h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card" style="border-left-color:#fd7e14;">
+            <div class="card-body py-3">
+                <small class="text-muted">Usaram remédio</small>
+                <h2 class="mb-0">{{ usou_remedio }} <small class="text-muted fs-6">({{ pct_remedio }}%)</small></h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- TOP SINTOMAS -->
+{% if top_sintomas %}
+<div class="card mb-3">
+    <div class="card-body py-2">
+        <small class="text-muted me-2">Top sintomas reportados:</small>
+        {% for s, n in top_sintomas %}
+            <span class="tag-top me-1"><strong>{{ n }}×</strong> {{ s }}</span>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- GRÁFICOS -->
+<div class="row g-3 mb-3">
+    <div class="col-md-7">
+        <div class="card chart-card">
+            <div class="card-header py-2"><strong>Sintomas reportados</strong></div>
+            <div class="card-body">
+                <canvas id="chartSintomas" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-5">
+        <div class="card chart-card">
+            <div class="card-header py-2"><strong>Respostas ao longo do tempo</strong></div>
+            <div class="card-body">
+                <canvas id="chartTimeline" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-4">
+        <div class="card chart-card">
+            <div class="card-header py-2"><strong>Apresentou sintomas?</strong></div>
+            <div class="card-body"><canvas id="chartApresentou" height="180"></canvas></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card chart-card">
+            <div class="card-header py-2"><strong>Buscou atendimento?</strong></div>
+            <div class="card-body"><canvas id="chartBuscou" height="180"></canvas></div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card chart-card">
+            <div class="card-header py-2"><strong>Usou remédio?</strong></div>
+            <div class="card-body"><canvas id="chartRemedio" height="180"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-6">
+        <div class="card chart-card">
+            <div class="card-header py-2"><strong>Distribuição por procedimento</strong></div>
+            <div class="card-body"><canvas id="chartTemplate" height="180"></canvas></div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card chart-card">
+            <div class="card-header py-2"><strong>Respostas por campanha</strong></div>
+            <div class="card-body"><canvas id="chartCampanha" height="180"></canvas></div>
+        </div>
+    </div>
+</div>
+
+<!-- CASOS DE ATENÇÃO -->
+{% if atencao %}
+<div class="card mb-3 border-danger">
+    <div class="card-header bg-danger text-white py-2">
+        <strong><i class="bi bi-exclamation-triangle-fill"></i> Casos de atenção ({{ atencao|length }})</strong>
+        — pacientes que reportaram sintomas sugestivos de ISC (febre, secreção, pus, sangramento ou mau cheiro)
     </div>
     <div class="card-body p-0">
-        {% if respostas %}
         <div class="table-responsive">
-            <table class="table table-sm table-hover align-middle mb-0">
+            <table class="table table-sm tabela-respostas mb-0">
                 <thead class="table-light">
                     <tr>
                         <th>Paciente</th>
                         <th>Telefone</th>
                         <th>Campanha</th>
-                        <th>Cirurgia</th>
-                        <th>Data cirurgia</th>
-                        <th>Resposta</th>
-                        <th>Sintomas</th>
+                        <th>Data resposta</th>
+                        <th>Sintomas críticos</th>
                         <th class="text-center">Atend.</th>
                         <th class="text-center">Remédio</th>
                         <th>Observações</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for item in respostas %}
-                    {% set r = item.r %}
-                    {% set d = item.dados %}
-                    {% set p = r.paciente %}
-                    {% set c = p.campanha if p else None %}
+                    {% for item in atencao %}
+                    {% set r = item.r %}{% set d = item.dados %}{% set p = r.paciente %}{% set c = p.campanha if p else None %}
+                    <tr class="atencao-row">
+                        <td><strong>{{ p.nome if p else '?' }}</strong></td>
+                        <td>{{ p.telefone if p else '' }}</td>
+                        <td><small>{{ c.nome if c else '' }}</small></td>
+                        <td><small>{{ r.data_resposta.strftime('%d/%m %H:%M') if r.data_resposta else '' }}</small></td>
+                        <td>
+                            {% for s in item.severos %}
+                                <span class="badge badge-atencao badge-sintoma">{{ s }}</span>
+                            {% endfor %}
+                        </td>
+                        <td class="text-center">
+                            {% if r.buscou_atendimento %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<i class="bi bi-x-circle text-muted"></i>{% endif %}
+                        </td>
+                        <td class="text-center">
+                            {% if r.usou_remedio %}<i class="bi bi-capsule-pill text-warning" title="{{ d.qual_remedio or '' }}"></i>
+                            {% if d.qual_remedio %}<br><small>{{ d.qual_remedio }}</small>{% endif %}
+                            {% else %}<i class="bi bi-dash-circle text-muted"></i>{% endif %}
+                        </td>
+                        <td><small>{{ d.observacoes or '' }}</small></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- TABELA COMPLETA -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center py-2">
+        <strong>Todas as respostas</strong>
+        <span class="badge bg-secondary">{{ total }}</span>
+    </div>
+    <div class="card-body p-0">
+        {% if respostas %}
+        <div class="table-responsive">
+            <table class="table table-sm table-hover tabela-respostas mb-0">
+                <thead class="table-light">
                     <tr>
+                        <th>Paciente</th>
+                        <th>Telefone</th>
+                        <th>Campanha</th>
+                        <th>Cirurgia</th>
+                        <th>Data cir.</th>
+                        <th>Resposta</th>
+                        <th>Sintomas</th>
+                        <th class="text-center">Atend.</th>
+                        <th class="text-center">Remédio</th>
+                        <th>Obs.</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in respostas %}
+                    {% set r = item.r %}{% set d = item.dados %}{% set p = r.paciente %}{% set c = p.campanha if p else None %}
+                    <tr {% if item.severos %}class="atencao-row"{% endif %}>
                         <td><strong>{{ p.nome if p else '?' }}</strong></td>
                         <td>{{ p.telefone if p else '' }}</td>
                         <td><small>{{ c.nome if c else '' }}</small></td>
                         <td><small>{{ c.template if c else '' }}</small></td>
-                        <td><small>{{ (p.data_cirurgia if p else '') or d.data_cirurgia or '-' }}</small></td>
-                        <td><small>{{ r.data_resposta.strftime('%d/%m/%Y %H:%M') if r.data_resposta else '-' }}</small></td>
+                        <td><small>{{ (p.data_cirurgia if p else '') or d.data_cirurgia or '' }}</small></td>
+                        <td><small>{{ r.data_resposta.strftime('%d/%m %H:%M') if r.data_resposta else '' }}</small></td>
                         <td>
                             {% if r.apresentou_sintoma %}
                                 {% for s in d.sintomas or [] %}
-                                    <span class="badge bg-danger me-1 mb-1">{{ s }}</span>
+                                    <span class="badge badge-sintoma {% if s in sintomas_atencao %}badge-atencao{% else %}bg-secondary{% endif %}">{{ s }}</span>
                                 {% endfor %}
                             {% else %}
-                                <span class="text-muted small">— sem sintomas —</span>
+                                <span class="text-muted small">—</span>
                             {% endif %}
                         </td>
                         <td class="text-center">
-                            {% if r.buscou_atendimento %}<i class="bi bi-check-circle-fill text-success"></i>
-                            {% else %}<i class="bi bi-dash-circle text-muted"></i>{% endif %}
+                            {% if r.buscou_atendimento %}<i class="bi bi-check-circle-fill text-success"></i>{% else %}<i class="bi bi-dash-circle text-muted"></i>{% endif %}
                         </td>
                         <td class="text-center">
-                            {% if r.usou_remedio %}
-                                <i class="bi bi-check-circle-fill text-warning" title="{{ d.qual_remedio or '' }}"></i>
-                                {% if d.qual_remedio %}<br><small class="text-muted">{{ d.qual_remedio }}</small>{% endif %}
-                            {% else %}<i class="bi bi-dash-circle text-muted"></i>{% endif %}
+                            {% if r.usou_remedio %}<i class="bi bi-capsule-pill text-warning" title="{{ d.qual_remedio or '' }}"></i>{% else %}<i class="bi bi-dash-circle text-muted"></i>{% endif %}
                         </td>
                         <td><small>{{ d.observacoes or '' }}</small></td>
                     </tr>
@@ -156,4 +314,79 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+const COR_PRIM = '#128C7E', COR_SEC = '#25D366', COR_VERM = '#dc3545', COR_AZUL = '#0d6efd', COR_AMAR = '#fd7e14', COR_CINZA = '#adb5bd';
+const opcoesBase = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } } };
+
+// Sintomas (barras horizontais)
+new Chart(document.getElementById('chartSintomas'), {
+    type: 'bar',
+    data: {
+        labels: {{ chart.sintomas_labels|tojson }},
+        datasets: [{
+            label: 'Pacientes',
+            data: {{ chart.sintomas_data|tojson }},
+            backgroundColor: COR_VERM,
+        }]
+    },
+    options: {
+        ...opcoesBase,
+        indexAxis: 'y',
+        plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true, ticks: { precision: 0 } } }
+    }
+});
+
+// Timeline
+new Chart(document.getElementById('chartTimeline'), {
+    type: 'line',
+    data: {
+        labels: {{ chart.timeline_labels|tojson }},
+        datasets: [{
+            label: 'Respostas',
+            data: {{ chart.timeline_data|tojson }},
+            borderColor: COR_PRIM,
+            backgroundColor: 'rgba(18,140,126,0.15)',
+            fill: true,
+            tension: 0.3,
+        }]
+    },
+    options: {
+        ...opcoesBase,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+    }
+});
+
+// Donuts
+function donut(elId, labels, data, cores) {
+    return new Chart(document.getElementById(elId), {
+        type: 'doughnut',
+        data: { labels: labels, datasets: [{ data: data, backgroundColor: cores, borderWidth: 1 }] },
+        options: opcoesBase
+    });
+}
+donut('chartApresentou', ['Sim', 'Não'], {{ chart.apresentou_data|tojson }}, [COR_VERM, COR_CINZA]);
+donut('chartBuscou', ['Sim', 'Não'], {{ chart.buscou_data|tojson }}, [COR_AZUL, COR_CINZA]);
+donut('chartRemedio', ['Sim', 'Não'], {{ chart.remedio_data|tojson }}, [COR_AMAR, COR_CINZA]);
+donut('chartTemplate', {{ chart.template_labels|tojson }}, {{ chart.template_data|tojson }}, [COR_PRIM, COR_SEC]);
+
+// Campanhas (bar vertical)
+new Chart(document.getElementById('chartCampanha'), {
+    type: 'bar',
+    data: {
+        labels: {{ chart.campanha_labels|tojson }},
+        datasets: [{ label: 'Respostas', data: {{ chart.campanha_data|tojson }}, backgroundColor: COR_PRIM }]
+    },
+    options: {
+        ...opcoesBase,
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
+    }
+});
+</script>
 {% endblock %}

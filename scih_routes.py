@@ -510,6 +510,15 @@ def init_scih_routes(app, db):
             'status_paciente': status_paciente,
         }
 
+    # Sintomas considerados de "atenção" para o Dr. Marcus (suspeita forte de ISC)
+    SINTOMAS_ATENCAO = {
+        'Febre',
+        'Ferida cirúrgica com secreção',
+        'Ferida cirúrgica com pus',
+        'Ferida cirúrgica com sangramento',
+        'Ferida cirúrgica com mau cheiro',
+    }
+
     @app.route('/scih/respostas')
     @login_required
     def scih_respostas():
@@ -518,17 +527,79 @@ def init_scih_routes(app, db):
 
         respostas, filtros = _coletar_respostas_filtradas()
 
-        # Enriquecer com dados parseados pra exibição
+        # Enriquecer com dados parseados + agregações
         respostas_view = []
+        sintoma_counts = {s: 0 for s in SINTOMAS_OPCOES}
+        com_sintoma = 0
+        buscou_atend = 0
+        usou_remedio = 0
+        atencao = []  # casos com pelo menos um sintoma de atenção
+        por_dia = {}  # YYYY-MM-DD -> int
+        por_template = {'CESARIANA': 0, 'MASTOLOGIA': 0}
+        por_campanha = {}  # campanha_id -> {'nome':..., 'count': N}
+
         for r in respostas:
             try:
                 dados = json.loads(r.dados_json or '{}')
             except Exception:
                 dados = {}
-            respostas_view.append({
+            p = r.paciente
+            c = p.campanha if p else None
+            sintomas_pac = [s for s in (dados.get('sintomas') or []) if s in sintoma_counts]
+            for s in sintomas_pac:
+                sintoma_counts[s] += 1
+            if r.apresentou_sintoma:
+                com_sintoma += 1
+            if r.buscou_atendimento:
+                buscou_atend += 1
+            if r.usou_remedio:
+                usou_remedio += 1
+            if r.data_resposta:
+                dia = r.data_resposta.strftime('%Y-%m-%d')
+                por_dia[dia] = por_dia.get(dia, 0) + 1
+            if c and c.template in por_template:
+                por_template[c.template] += 1
+            if c:
+                if c.id not in por_campanha:
+                    por_campanha[c.id] = {'nome': c.nome, 'count': 0}
+                por_campanha[c.id]['count'] += 1
+
+            severos = [s for s in sintomas_pac if s in SINTOMAS_ATENCAO]
+            item = {
                 'r': r,
                 'dados': dados,
-            })
+                'severos': severos,
+            }
+            respostas_view.append(item)
+            if severos:
+                atencao.append(item)
+
+        total = len(respostas_view)
+        pct_sintoma = round(com_sintoma / total * 100, 1) if total else 0
+        pct_buscou = round(buscou_atend / total * 100, 1) if total else 0
+        pct_remedio = round(usou_remedio / total * 100, 1) if total else 0
+
+        # Top 5 sintomas mais reportados (para destaque)
+        top_sintomas = sorted(
+            ((s, n) for s, n in sintoma_counts.items() if n > 0),
+            key=lambda x: x[1], reverse=True
+        )[:5]
+
+        # Series ordenadas para Chart.js
+        dias_ordenados = sorted(por_dia.keys())
+        chart = {
+            'sintomas_labels': list(sintoma_counts.keys()),
+            'sintomas_data': list(sintoma_counts.values()),
+            'apresentou_data': [com_sintoma, max(total - com_sintoma, 0)],
+            'buscou_data': [buscou_atend, max(total - buscou_atend, 0)],
+            'remedio_data': [usou_remedio, max(total - usou_remedio, 0)],
+            'timeline_labels': [datetime.strptime(d, '%Y-%m-%d').strftime('%d/%m') for d in dias_ordenados],
+            'timeline_data': [por_dia[d] for d in dias_ordenados],
+            'template_labels': list(por_template.keys()),
+            'template_data': list(por_template.values()),
+            'campanha_labels': [v['nome'] for v in por_campanha.values()],
+            'campanha_data': [v['count'] for v in por_campanha.values()],
+        }
 
         # Lista de campanhas para o select do filtro
         camp_q = CampanhaSCIH.query
@@ -539,11 +610,21 @@ def init_scih_routes(app, db):
         return render_template(
             'scih/respostas.html',
             respostas=respostas_view,
+            atencao=atencao,
             campanhas=campanhas,
             sintomas_opcoes=SINTOMAS_OPCOES,
+            sintomas_atencao=SINTOMAS_ATENCAO,
             templates=TEMPLATES_PESQUISA,
             f=filtros,
-            total=len(respostas_view),
+            total=total,
+            com_sintoma=com_sintoma,
+            buscou_atend=buscou_atend,
+            usou_remedio=usou_remedio,
+            pct_sintoma=pct_sintoma,
+            pct_buscou=pct_buscou,
+            pct_remedio=pct_remedio,
+            top_sintomas=top_sintomas,
+            chart=chart,
         )
 
     @app.route('/scih/respostas/exportar')

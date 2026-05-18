@@ -1576,6 +1576,122 @@ def enviar_campanha_scih_task(self, campanha_id, base_url):
         raise
 
 
+# =============================================================================
+# TASK PERIÓDICA - RETRY SCIH SEM RESPOSTA
+# =============================================================================
+# Regra de negócio:
+#  - 2 dias após o envio inicial sem resposta → manda 1 retry
+#  - 2 dias após o retry sem resposta → marca como SEM_RESPOSTA (não tenta mais)
+# Roda de hora em hora via Celery Beat (configurado em celery_app.py).
+
+@celery.task(
+    base=DatabaseTask,
+    name='tasks.retry_scih_sem_resposta'
+)
+def retry_scih_sem_resposta():
+    from app import (
+        db, CampanhaSCIH, PacienteSCIH, LogMsgSCIH, WhatsApp, formatar_numero
+    )
+    from datetime import datetime, timedelta
+
+    logger.info("Verificando pacientes SCIH sem resposta")
+    agora = datetime.utcnow()
+    dois_dias = timedelta(days=2)
+    reenviados = 0
+    marcados_sem_resposta = 0
+
+    # 1) Envia retry pra quem foi ENVIADO há >=2 dias e ainda não recebeu retry
+    candidatos_retry = PacienteSCIH.query.filter(
+        PacienteSCIH.status == 'ENVIADO',
+        PacienteSCIH.retry_enviado == False,
+        PacienteSCIH.data_envio_mensagem.isnot(None),
+        PacienteSCIH.data_envio_mensagem <= agora - dois_dias,
+    ).all()
+
+    for paciente in candidatos_retry:
+        camp = paciente.campanha
+        if not camp or camp.status in ('pausado', 'erro'):
+            continue
+        try:
+            ws = WhatsApp(camp.criador_id)
+            if not ws.ok():
+                continue
+            numero_fmt = formatar_numero(paciente.telefone)
+            if not numero_fmt:
+                paciente.retry_enviado = True
+                paciente.data_retry = agora
+                db.session.commit()
+                continue
+            cirurgia_label = 'cesárea' if camp.template == 'CESARIANA' else 'mastologia'
+            nome_disp = paciente.nome.strip().title() if paciente.nome else 'paciente'
+            # Reenvia a mesma mensagem (já temos o token, mantém o link)
+            # Reconstroi base_url a partir do host configurado — pegamos do log
+            # mais recente da campanha, fallback pro env BASE_URL.
+            log_anterior = LogMsgSCIH.query.filter_by(
+                paciente_id=paciente.id, direcao='enviada'
+            ).order_by(LogMsgSCIH.id.desc()).first()
+            base_url = None
+            if log_anterior and log_anterior.mensagem:
+                # Procura URL na mensagem anterior
+                import re as _re
+                m = _re.search(r'(https?://[^\s]+)', log_anterior.mensagem)
+                if m:
+                    base_url = m.group(1).rsplit('/p/', 1)[0]
+            if not base_url:
+                import os as _os
+                base_url = _os.environ.get('BASE_URL', '').rstrip('/')
+            link = f"{base_url}/p/{paciente.token}" if base_url else f"/p/{paciente.token}"
+            msg = (
+                f"Olá {nome_disp}, ainda não recebemos sua resposta para o questionário do "
+                f"*Serviço de Controle de Infecção Hospitalar* da MEAC sobre sua {cirurgia_label}.\n\n"
+                f"Sua participação ajuda muito! Por favor, clique no link abaixo:\n{link}"
+            )
+            ok, result = ws.enviar(numero_fmt, msg)
+            paciente.retry_enviado = True
+            paciente.data_retry = agora
+            db.session.add(LogMsgSCIH(
+                campanha_id=camp.id, paciente_id=paciente.id,
+                direcao='enviada', telefone=numero_fmt,
+                mensagem=msg[:500], msg_id=result if ok else None,
+                status='sucesso' if ok else 'erro',
+                erro=None if ok else str(result)[:500]
+            ))
+            db.session.commit()
+            reenviados += 1
+            logger.info(f"[SCIH RETRY] reenviado para {paciente.nome} ({paciente.telefone})")
+        except Exception as e:
+            logger.warning(f"[SCIH RETRY] erro com paciente {paciente.id}: {e}")
+            db.session.rollback()
+
+    # 2) Marca como SEM_RESPOSTA quem já recebeu retry e está há >=2 dias sem responder
+    candidatos_final = PacienteSCIH.query.filter(
+        PacienteSCIH.status == 'ENVIADO',
+        PacienteSCIH.retry_enviado == True,
+        PacienteSCIH.data_retry.isnot(None),
+        PacienteSCIH.data_retry <= agora - dois_dias,
+    ).all()
+    for paciente in candidatos_final:
+        paciente.status = 'SEM_RESPOSTA'
+        marcados_sem_resposta += 1
+    if candidatos_final:
+        db.session.commit()
+        # Atualizar stats das campanhas afetadas
+        for camp_id in {p.campanha_id for p in candidatos_final}:
+            camp = db.session.get(CampanhaSCIH, camp_id)
+            if camp:
+                camp.atualizar_stats()
+        db.session.commit()
+
+    logger.info(
+        f"SCIH retry: {reenviados} reenviados, {marcados_sem_resposta} marcados como SEM_RESPOSTA"
+    )
+    return {
+        'sucesso': True,
+        'reenviados': reenviados,
+        'sem_resposta': marcados_sem_resposta,
+    }
+
+
 @celery.task(
     base=DatabaseTask,
     name='tasks.retry_consultas_sem_resposta'

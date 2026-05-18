@@ -1284,6 +1284,11 @@ class PacienteSCIH(db.Model):
     erro_envio = db.Column(db.String(500))
     data_resposta = db.Column(db.DateTime)
 
+    # Retry de não-resposta: tenta 1x depois de 2 dias; após +2 dias sem resposta,
+    # status muda para SEM_RESPOSTA
+    retry_enviado = db.Column(db.Boolean, default=False)
+    data_retry = db.Column(db.DateTime)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     campanha = db.relationship('CampanhaSCIH', backref=db.backref('pacientes', lazy='dynamic', cascade='all, delete-orphan'))

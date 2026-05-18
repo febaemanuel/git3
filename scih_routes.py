@@ -66,7 +66,7 @@ def init_scih_routes(app, db):
 
     from app import (
         CampanhaSCIH, PacienteSCIH, RespostaSCIH, LogMsgSCIH,
-        WhatsApp, ConfigWhatsApp, formatar_numero
+        WhatsApp, ConfigWhatsApp, formatar_numero, csrf
     )
 
     try:
@@ -130,6 +130,7 @@ def init_scih_routes(app, db):
                 hora_inicio = int(request.form.get('hora_inicio', 8))
                 hora_fim = int(request.form.get('hora_fim', 18))
                 meta_diaria = int(request.form.get('meta_diaria', 100))
+                aba = request.form.get('aba', '').strip()
 
                 if not nome:
                     flash('Informe o nome da campanha', 'danger')
@@ -146,18 +147,46 @@ def init_scih_routes(app, db):
                     flash('WhatsApp não está configurado corretamente.', 'danger')
                     return redirect(url_for('scih_dashboard'))
 
-                df = pd.read_excel(arquivo, dtype=str).fillna('')
+                # Detectar abas disponíveis e ler a escolhida (ou a primeira)
+                try:
+                    xls = pd.ExcelFile(arquivo)
+                    abas_disponiveis = xls.sheet_names
+                except Exception as e:
+                    flash(f'Não consegui abrir o arquivo Excel: {e}', 'danger')
+                    return redirect(request.url)
+
+                if aba:
+                    # Tenta match case-insensitive
+                    match = next((s for s in abas_disponiveis if s.strip().lower() == aba.lower()), None)
+                    if not match:
+                        flash(
+                            f'Aba "{aba}" não encontrada. Abas disponíveis: '
+                            + ', '.join(abas_disponiveis),
+                            'danger'
+                        )
+                        return redirect(request.url)
+                    aba_usada = match
+                else:
+                    aba_usada = abas_disponiveis[0]
+
+                df = pd.read_excel(xls, sheet_name=aba_usada, dtype=str).fillna('')
 
                 # Normalizar nomes de colunas (uppercase, sem espaços extras)
                 df.columns = [str(c).strip().upper() for c in df.columns]
 
-                col_nome = next((c for c in df.columns if c in ['NOME', 'NOME COMPLETO', 'PACIENTE']), None)
-                col_tel = next((c for c in df.columns if c in ['TELEFONE', 'CELULAR', 'CONTATO', 'FONE']), None)
+                col_nome = next((c for c in df.columns if c in ['PACIENTE', 'NOME', 'NOME COMPLETO']), None)
+                col_tel = next((c for c in df.columns if c in ['FONE', 'TELEFONE', 'CELULAR', 'CONTATO']), None)
                 col_data = next((c for c in df.columns if c in ['DATA CIRURGIA', 'DATA DA CIRURGIA', 'DATA']), None)
                 col_idade = next((c for c in df.columns if c in ['IDADE']), None)
+                col_cirurgia = next((c for c in df.columns if c in ['CIRURGIA', 'PROCEDIMENTO']), None)
+                col_obs = next((c for c in df.columns if c in ['OBSERVACOES', 'OBSERVAÇÕES', 'OBS']), None)
 
                 if not col_nome or not col_tel:
-                    flash('Planilha precisa ter pelo menos as colunas NOME e TELEFONE.', 'danger')
+                    flash(
+                        'Planilha precisa ter pelo menos as colunas PACIENTE (ou NOME) e FONE (ou TELEFONE). '
+                        f'Colunas detectadas na aba "{aba_usada}": {", ".join(df.columns)}',
+                        'danger'
+                    )
                     return redirect(request.url)
 
                 camp = CampanhaSCIH(
@@ -406,9 +435,249 @@ def init_scih_routes(app, db):
         })
 
     # =========================================================================
+    # RESULTADOS COM FILTROS (pra Dr. Marcus classificar infecções)
+    # =========================================================================
+    def _coletar_respostas_filtradas():
+        """Aplica os filtros vindos da query string e retorna lista de respostas."""
+        campanha_id = request.args.get('campanha_id', '').strip()
+        sintoma = request.args.get('sintoma', '').strip()
+        apresentou = request.args.get('apresentou', '').strip()  # SIM/NAO/''
+        buscou = request.args.get('buscou', '').strip()
+        usou = request.args.get('usou', '').strip()
+        data_de = request.args.get('data_de', '').strip()
+        data_ate = request.args.get('data_ate', '').strip()
+        template_filtro = request.args.get('template', '').strip().upper()
+        status_paciente = request.args.get('status_paciente', '').strip()
+
+        # Base: respostas das campanhas do usuário (ou todas se admin)
+        q = RespostaSCIH.query.join(CampanhaSCIH, RespostaSCIH.campanha_id == CampanhaSCIH.id)
+        if not current_user.is_admin:
+            q = q.filter(CampanhaSCIH.criador_id == current_user.id)
+        if campanha_id.isdigit():
+            q = q.filter(RespostaSCIH.campanha_id == int(campanha_id))
+        if template_filtro in TEMPLATES_PESQUISA:
+            q = q.filter(CampanhaSCIH.template == template_filtro)
+        if apresentou == 'SIM':
+            q = q.filter(RespostaSCIH.apresentou_sintoma.is_(True))
+        elif apresentou == 'NAO':
+            q = q.filter(RespostaSCIH.apresentou_sintoma.is_(False))
+        if buscou == 'SIM':
+            q = q.filter(RespostaSCIH.buscou_atendimento.is_(True))
+        elif buscou == 'NAO':
+            q = q.filter(RespostaSCIH.buscou_atendimento.is_(False))
+        if usou == 'SIM':
+            q = q.filter(RespostaSCIH.usou_remedio.is_(True))
+        elif usou == 'NAO':
+            q = q.filter(RespostaSCIH.usou_remedio.is_(False))
+        if data_de:
+            try:
+                d = datetime.strptime(data_de, '%Y-%m-%d')
+                q = q.filter(RespostaSCIH.data_resposta >= d)
+            except ValueError:
+                pass
+        if data_ate:
+            try:
+                d = datetime.strptime(data_ate, '%Y-%m-%d')
+                # incluir o dia inteiro
+                d = d.replace(hour=23, minute=59, second=59)
+                q = q.filter(RespostaSCIH.data_resposta <= d)
+            except ValueError:
+                pass
+
+        respostas = q.order_by(RespostaSCIH.data_resposta.desc()).all()
+
+        # Filtro por sintoma específico precisa parsear o JSON (não dá pra fazer no SQL portável)
+        if sintoma and sintoma in SINTOMAS_OPCOES:
+            filtradas = []
+            for r in respostas:
+                try:
+                    dados = json.loads(r.dados_json or '{}')
+                except Exception:
+                    dados = {}
+                if sintoma in (dados.get('sintomas') or []):
+                    filtradas.append(r)
+            respostas = filtradas
+
+        return respostas, {
+            'campanha_id': campanha_id,
+            'sintoma': sintoma,
+            'apresentou': apresentou,
+            'buscou': buscou,
+            'usou': usou,
+            'data_de': data_de,
+            'data_ate': data_ate,
+            'template': template_filtro,
+            'status_paciente': status_paciente,
+        }
+
+    # Sintomas considerados de "atenção" para o Dr. Marcus (suspeita forte de ISC)
+    SINTOMAS_ATENCAO = {
+        'Febre',
+        'Ferida cirúrgica com secreção',
+        'Ferida cirúrgica com pus',
+        'Ferida cirúrgica com sangramento',
+        'Ferida cirúrgica com mau cheiro',
+    }
+
+    @app.route('/scih/respostas')
+    @login_required
+    def scih_respostas():
+        if not _exige_scih():
+            return redirect(url_for('login'))
+
+        respostas, filtros = _coletar_respostas_filtradas()
+
+        # Enriquecer com dados parseados + agregações
+        respostas_view = []
+        sintoma_counts = {s: 0 for s in SINTOMAS_OPCOES}
+        com_sintoma = 0
+        buscou_atend = 0
+        usou_remedio = 0
+        atencao = []  # casos com pelo menos um sintoma de atenção
+        por_dia = {}  # YYYY-MM-DD -> int
+        por_template = {'CESARIANA': 0, 'MASTOLOGIA': 0}
+        por_campanha = {}  # campanha_id -> {'nome':..., 'count': N}
+
+        for r in respostas:
+            try:
+                dados = json.loads(r.dados_json or '{}')
+            except Exception:
+                dados = {}
+            p = r.paciente
+            c = p.campanha if p else None
+            sintomas_pac = [s for s in (dados.get('sintomas') or []) if s in sintoma_counts]
+            for s in sintomas_pac:
+                sintoma_counts[s] += 1
+            if r.apresentou_sintoma:
+                com_sintoma += 1
+            if r.buscou_atendimento:
+                buscou_atend += 1
+            if r.usou_remedio:
+                usou_remedio += 1
+            if r.data_resposta:
+                dia = r.data_resposta.strftime('%Y-%m-%d')
+                por_dia[dia] = por_dia.get(dia, 0) + 1
+            if c and c.template in por_template:
+                por_template[c.template] += 1
+            if c:
+                if c.id not in por_campanha:
+                    por_campanha[c.id] = {'nome': c.nome, 'count': 0}
+                por_campanha[c.id]['count'] += 1
+
+            severos = [s for s in sintomas_pac if s in SINTOMAS_ATENCAO]
+            item = {
+                'r': r,
+                'dados': dados,
+                'severos': severos,
+            }
+            respostas_view.append(item)
+            if severos:
+                atencao.append(item)
+
+        total = len(respostas_view)
+        pct_sintoma = round(com_sintoma / total * 100, 1) if total else 0
+        pct_buscou = round(buscou_atend / total * 100, 1) if total else 0
+        pct_remedio = round(usou_remedio / total * 100, 1) if total else 0
+
+        # Top 5 sintomas mais reportados (para destaque)
+        top_sintomas = sorted(
+            ((s, n) for s, n in sintoma_counts.items() if n > 0),
+            key=lambda x: x[1], reverse=True
+        )[:5]
+
+        # Series ordenadas para Chart.js
+        dias_ordenados = sorted(por_dia.keys())
+        chart = {
+            'sintomas_labels': list(sintoma_counts.keys()),
+            'sintomas_data': list(sintoma_counts.values()),
+            'apresentou_data': [com_sintoma, max(total - com_sintoma, 0)],
+            'buscou_data': [buscou_atend, max(total - buscou_atend, 0)],
+            'remedio_data': [usou_remedio, max(total - usou_remedio, 0)],
+            'timeline_labels': [datetime.strptime(d, '%Y-%m-%d').strftime('%d/%m') for d in dias_ordenados],
+            'timeline_data': [por_dia[d] for d in dias_ordenados],
+            'template_labels': list(por_template.keys()),
+            'template_data': list(por_template.values()),
+            'campanha_labels': [v['nome'] for v in por_campanha.values()],
+            'campanha_data': [v['count'] for v in por_campanha.values()],
+        }
+
+        # Lista de campanhas para o select do filtro
+        camp_q = CampanhaSCIH.query
+        if not current_user.is_admin:
+            camp_q = camp_q.filter_by(criador_id=current_user.id)
+        campanhas = camp_q.order_by(CampanhaSCIH.id.desc()).all()
+
+        return render_template(
+            'scih/respostas.html',
+            respostas=respostas_view,
+            atencao=atencao,
+            campanhas=campanhas,
+            sintomas_opcoes=SINTOMAS_OPCOES,
+            sintomas_atencao=SINTOMAS_ATENCAO,
+            templates=TEMPLATES_PESQUISA,
+            f=filtros,
+            total=total,
+            com_sintoma=com_sintoma,
+            buscou_atend=buscou_atend,
+            usou_remedio=usou_remedio,
+            pct_sintoma=pct_sintoma,
+            pct_buscou=pct_buscou,
+            pct_remedio=pct_remedio,
+            top_sintomas=top_sintomas,
+            chart=chart,
+        )
+
+    @app.route('/scih/respostas/exportar')
+    @login_required
+    def scih_respostas_exportar():
+        if not _exige_scih():
+            return redirect(url_for('login'))
+
+        respostas, _f = _coletar_respostas_filtradas()
+        rows = []
+        for r in respostas:
+            try:
+                dados = json.loads(r.dados_json or '{}')
+            except Exception:
+                dados = {}
+            p = r.paciente
+            c = r.paciente.campanha if r.paciente else None
+            rows.append({
+                'Campanha': c.nome if c else '',
+                'Template': c.template if c else '',
+                'Paciente': p.nome if p else '',
+                'Telefone': p.telefone if p else '',
+                'Idade': (p.idade if p else '') or dados.get('idade', ''),
+                'Data Cirurgia': (p.data_cirurgia if p else '') or dados.get('data_cirurgia', ''),
+                'Data Resposta': r.data_resposta.strftime('%d/%m/%Y %H:%M') if r.data_resposta else '',
+                'Apresentou Sintomas': 'Sim' if r.apresentou_sintoma else 'Não',
+                'Sintomas': ', '.join(dados.get('sintomas', []) or []),
+                'Buscou Atendimento': 'Sim' if r.buscou_atendimento else 'Não',
+                'Usou Remédio': 'Sim' if r.usou_remedio else 'Não',
+                'Qual Remédio': dados.get('qual_remedio', '') or '',
+                'Observações': dados.get('observacoes', '') or '',
+            })
+
+        df = pd.DataFrame(rows)
+        out = BytesIO()
+        with pd.ExcelWriter(out, engine='openpyxl') as w:
+            df.to_excel(w, sheet_name='Respostas', index=False)
+        out.seek(0)
+        return send_file(
+            out,
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            as_attachment=True,
+            download_name=f'scih_respostas_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+        )
+
+    # =========================================================================
     # PÁGINA PÚBLICA DA PESQUISA (sem login, acesso por token)
     # =========================================================================
+    # CSRF isento: a autenticação aqui é o token único na URL (já é um secret
+    # que só a paciente recebeu). Manter o CSRF causaria falsos negativos quando
+    # a paciente abre o link, fecha o navegador e volta depois.
     @app.route('/p/<token>', methods=['GET', 'POST'])
+    @csrf.exempt
     def pesquisa_publica(token):
         paciente = PacienteSCIH.query.filter_by(token=token).first()
         if not paciente:

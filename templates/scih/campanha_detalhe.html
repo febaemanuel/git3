@@ -142,8 +142,11 @@
                         <td>{{ p.data_cirurgia or '-' }}</td>
                         <td>
                             {% if p.status == 'AGUARDANDO_ENVIO' %}<span class="badge bg-light text-dark">aguardando</span>
-                            {% elif p.status == 'ENVIADO' %}<span class="badge bg-info text-dark">enviado</span>
+                            {% elif p.status == 'ENVIADO' %}
+                                <span class="badge bg-info text-dark">enviado</span>
+                                {% if p.retry_enviado %}<br><small class="text-muted">retry</small>{% endif %}
                             {% elif p.status == 'RESPONDIDO' %}<span class="badge bg-success">respondido</span>
+                            {% elif p.status == 'SEM_RESPOSTA' %}<span class="badge bg-warning text-dark" title="Não respondeu após 4 dias">sem resposta</span>
                             {% elif p.status == 'ERRO' %}<span class="badge bg-danger" title="{{ p.erro_envio or '' }}">erro</span>
                             {% else %}<span class="badge bg-secondary">{{ p.status }}</span>{% endif %}
                         </td>

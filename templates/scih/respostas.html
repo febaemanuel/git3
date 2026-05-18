@@ -221,6 +221,7 @@
                         <th class="text-center">Atend.</th>
                         <th class="text-center">Remédio</th>
                         <th>Observações</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -244,7 +245,31 @@
                             {% if d.qual_remedio %}<br><small>{{ d.qual_remedio }}</small>{% endif %}
                             {% else %}<i class="bi bi-dash-circle text-muted"></i>{% endif %}
                         </td>
-                        <td><small>{{ d.observacoes or '' }}</small></td>
+                        <td><small>{{ (d.observacoes or '')|truncate(60) }}</small></td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-outline-danger btn-ver-detalhes"
+                                    data-bs-toggle="modal" data-bs-target="#modalDetalhes"
+                                    data-resposta='{{ {
+                                        "paciente": p.nome if p else "",
+                                        "telefone": p.telefone if p else "",
+                                        "idade": (p.idade if p else "") or d.idade or "",
+                                        "campanha": c.nome if c else "",
+                                        "template": c.template if c else "",
+                                        "data_cirurgia": (p.data_cirurgia if p else "") or d.data_cirurgia or "",
+                                        "data_resposta": r.data_resposta.strftime("%d/%m/%Y %H:%M") if r.data_resposta else "",
+                                        "data_envio": p.data_envio_mensagem.strftime("%d/%m/%Y %H:%M") if p and p.data_envio_mensagem else "",
+                                        "apresentou_sintoma": r.apresentou_sintoma,
+                                        "sintomas": d.sintomas or [],
+                                        "severos": item.severos,
+                                        "buscou_atendimento": r.buscou_atendimento,
+                                        "usou_remedio": r.usou_remedio,
+                                        "qual_remedio": d.qual_remedio or "",
+                                        "observacoes": d.observacoes or "",
+                                        "tem_atencao": item.severos|length > 0
+                                    }|tojson|forceescape }}'>
+                                <i class="bi bi-eye"></i> Ver
+                            </button>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -276,6 +301,7 @@
                         <th class="text-center">Atend.</th>
                         <th class="text-center">Remédio</th>
                         <th>Obs.</th>
+                        <th></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -303,7 +329,31 @@
                         <td class="text-center">
                             {% if r.usou_remedio %}<i class="bi bi-capsule-pill text-warning" title="{{ d.qual_remedio or '' }}"></i>{% else %}<i class="bi bi-dash-circle text-muted"></i>{% endif %}
                         </td>
-                        <td><small>{{ d.observacoes or '' }}</small></td>
+                        <td><small>{{ (d.observacoes or '')|truncate(60) }}</small></td>
+                        <td>
+                            <button type="button" class="btn btn-sm btn-outline-primary btn-ver-detalhes"
+                                    data-bs-toggle="modal" data-bs-target="#modalDetalhes"
+                                    data-resposta='{{ {
+                                        "paciente": p.nome if p else "",
+                                        "telefone": p.telefone if p else "",
+                                        "idade": (p.idade if p else "") or d.idade or "",
+                                        "campanha": c.nome if c else "",
+                                        "template": c.template if c else "",
+                                        "data_cirurgia": (p.data_cirurgia if p else "") or d.data_cirurgia or "",
+                                        "data_resposta": r.data_resposta.strftime("%d/%m/%Y %H:%M") if r.data_resposta else "",
+                                        "data_envio": p.data_envio_mensagem.strftime("%d/%m/%Y %H:%M") if p and p.data_envio_mensagem else "",
+                                        "apresentou_sintoma": r.apresentou_sintoma,
+                                        "sintomas": d.sintomas or [],
+                                        "severos": item.severos,
+                                        "buscou_atendimento": r.buscou_atendimento,
+                                        "usou_remedio": r.usou_remedio,
+                                        "qual_remedio": d.qual_remedio or "",
+                                        "observacoes": d.observacoes or "",
+                                        "tem_atencao": item.severos|length > 0
+                                    }|tojson|forceescape }}'>
+                                <i class="bi bi-eye"></i> Ver
+                            </button>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -312,6 +362,103 @@
         {% else %}
         <div class="p-4 text-center text-muted">Nenhuma resposta encontrada para os filtros selecionados.</div>
         {% endif %}
+    </div>
+</div>
+
+<!-- MODAL DETALHES DA RESPOSTA -->
+<div class="modal fade" id="modalDetalhes" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header" id="md-header">
+                <h5 class="modal-title">
+                    <i class="bi bi-person-circle"></i> Detalhes da resposta —
+                    <span id="md-paciente"></span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="md-alerta-atencao" class="alert alert-danger d-none">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <strong>Caso de atenção:</strong> sintomas sugestivos de ISC reportados.
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <small class="text-muted d-block">Telefone</small>
+                        <strong id="md-telefone"></strong>
+                    </div>
+                    <div class="col-md-3">
+                        <small class="text-muted d-block">Idade</small>
+                        <strong id="md-idade"></strong>
+                    </div>
+                    <div class="col-md-3">
+                        <small class="text-muted d-block">Procedimento</small>
+                        <strong id="md-template"></strong>
+                    </div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Data da cirurgia</small>
+                        <strong id="md-data-cir"></strong>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Mensagem enviada</small>
+                        <strong id="md-data-env"></strong>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Respondida em</small>
+                        <strong id="md-data-resp"></strong>
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <small class="text-muted d-block">Campanha</small>
+                    <strong id="md-campanha"></strong>
+                </div>
+
+                <hr>
+
+                <h6 class="text-primary"><i class="bi bi-clipboard-check"></i> Respostas do questionário</h6>
+
+                <div class="mb-3">
+                    <strong>Apresentou algum sintoma?</strong>
+                    <span id="md-apresentou" class="ms-2"></span>
+                </div>
+
+                <div id="md-sintomas-bloco" class="mb-3 d-none">
+                    <strong>Sintomas reportados:</strong>
+                    <div id="md-sintomas-lista" class="mt-2"></div>
+                </div>
+
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <strong>Buscou atendimento médico?</strong>
+                        <div id="md-buscou" class="mt-1"></div>
+                    </div>
+                    <div class="col-md-6">
+                        <strong>Utilizou algum remédio?</strong>
+                        <div id="md-usou" class="mt-1"></div>
+                    </div>
+                </div>
+
+                <div id="md-remedio-bloco" class="mb-3 d-none">
+                    <strong>Qual remédio:</strong>
+                    <div id="md-qual-remedio" class="border rounded p-2 mt-1 bg-light"></div>
+                </div>
+
+                <div id="md-obs-bloco" class="mb-3 d-none">
+                    <strong>Observações da paciente:</strong>
+                    <div id="md-obs" class="border rounded p-2 mt-1 bg-light" style="white-space: pre-wrap;"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a id="md-whatsapp-link" class="btn btn-success" target="_blank" rel="noopener">
+                    <i class="bi bi-whatsapp"></i> Abrir no WhatsApp
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Fechar</button>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -387,6 +534,81 @@ new Chart(document.getElementById('chartCampanha'), {
         plugins: { legend: { display: false } },
         scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
     }
+});
+
+// === Modal de detalhes da resposta ===
+const SINTOMAS_ATENCAO = {{ sintomas_atencao|list|tojson }};
+
+function ynBadge(val, corOk='success') {
+    if (val) return `<span class="badge bg-${corOk}">Sim</span>`;
+    return `<span class="badge bg-secondary">Não</span>`;
+}
+
+function soDigitos(s) { return (s || '').toString().replace(/\D/g, ''); }
+
+document.querySelectorAll('.btn-ver-detalhes').forEach(btn => {
+    btn.addEventListener('click', () => {
+        const d = JSON.parse(btn.dataset.resposta);
+
+        // Header destacado se for caso de atenção
+        const header = document.getElementById('md-header');
+        header.className = 'modal-header ' + (d.tem_atencao ? 'bg-danger text-white' : 'bg-light');
+        document.getElementById('md-alerta-atencao').classList.toggle('d-none', !d.tem_atencao);
+
+        document.getElementById('md-paciente').textContent = d.paciente || '?';
+        document.getElementById('md-telefone').textContent = d.telefone || '-';
+        document.getElementById('md-idade').textContent = d.idade || '-';
+        document.getElementById('md-template').textContent = d.template || '-';
+        document.getElementById('md-data-cir').textContent = d.data_cirurgia || '-';
+        document.getElementById('md-data-env').textContent = d.data_envio || '-';
+        document.getElementById('md-data-resp').textContent = d.data_resposta || '-';
+        document.getElementById('md-campanha').textContent = d.campanha || '-';
+
+        document.getElementById('md-apresentou').innerHTML = ynBadge(d.apresentou_sintoma, 'danger');
+
+        const blocoSint = document.getElementById('md-sintomas-bloco');
+        const listaSint = document.getElementById('md-sintomas-lista');
+        if (d.apresentou_sintoma && d.sintomas && d.sintomas.length) {
+            blocoSint.classList.remove('d-none');
+            listaSint.innerHTML = d.sintomas.map(s => {
+                const critico = SINTOMAS_ATENCAO.includes(s);
+                return `<span class="badge badge-sintoma ${critico ? 'badge-atencao' : 'bg-secondary'} me-1 mb-1">${s}</span>`;
+            }).join('');
+        } else {
+            blocoSint.classList.add('d-none');
+        }
+
+        document.getElementById('md-buscou').innerHTML = ynBadge(d.buscou_atendimento, 'primary');
+        document.getElementById('md-usou').innerHTML = ynBadge(d.usou_remedio, 'warning');
+
+        const blocoRem = document.getElementById('md-remedio-bloco');
+        if (d.usou_remedio && d.qual_remedio) {
+            blocoRem.classList.remove('d-none');
+            document.getElementById('md-qual-remedio').textContent = d.qual_remedio;
+        } else {
+            blocoRem.classList.add('d-none');
+        }
+
+        const blocoObs = document.getElementById('md-obs-bloco');
+        if (d.observacoes) {
+            blocoObs.classList.remove('d-none');
+            document.getElementById('md-obs').textContent = d.observacoes;
+        } else {
+            blocoObs.classList.add('d-none');
+        }
+
+        // Botão pra abrir o WhatsApp Web/App com o número da paciente
+        const tel = soDigitos(d.telefone);
+        const linkWa = document.getElementById('md-whatsapp-link');
+        if (tel) {
+            const num = tel.startsWith('55') ? tel : ('55' + tel);
+            linkWa.href = `https://wa.me/${num}`;
+            linkWa.classList.remove('disabled');
+        } else {
+            linkWa.href = '#';
+            linkWa.classList.add('disabled');
+        }
+    });
 });
 </script>
 {% endblock %}

@@ -7170,7 +7170,11 @@ def webhook():
             for num in numeros_buscar:
                 tels = TelefoneConsulta.query.filter_by(numero=num).all()
                 for tel in tels:
-                    if tel.consulta and tel.consulta.status == 'AGUARDANDO_CONFIRMACAO':
+                    if (tel.consulta
+                        and tel.consulta.status == 'AGUARDANDO_CONFIRMACAO'
+                        # INTERCONSULTA é sempre informativa (procurar UBS / aguardar contato /
+                        # em análise) — não espera resposta do paciente, então não conta como pendência.
+                        and (tel.consulta.tipo or '').upper() != 'INTERCONSULTA'):
                         consultas_pendentes.append(tel.consulta)
 
             # Buscar TODAS as cirurgias pendentes deste telefone (de QUALQUER usuário)
@@ -7291,7 +7295,9 @@ def webhook():
             for num in numeros_buscar:
                 tels = TelefoneConsulta.query.filter_by(numero=num).all()
                 for tel in tels:
-                    if tel.consulta and tel.consulta.status == 'AGUARDANDO_CONFIRMACAO':
+                    if (tel.consulta
+                        and tel.consulta.status == 'AGUARDANDO_CONFIRMACAO'
+                        and (tel.consulta.tipo or '').upper() != 'INTERCONSULTA'):
                         consultas_pendentes.append((tel.consulta, tel.numero))
 
             cirurgias_pendentes = []
@@ -7457,7 +7463,9 @@ def webhook():
                     cirurgias_rest = []
                     for num_r in numeros_buscar:
                         for tel_r in TelefoneConsulta.query.filter_by(numero=num_r).all():
-                            if tel_r.consulta and tel_r.consulta.status == 'AGUARDANDO_CONFIRMACAO':
+                            if (tel_r.consulta
+                                and tel_r.consulta.status == 'AGUARDANDO_CONFIRMACAO'
+                                and (tel_r.consulta.tipo or '').upper() != 'INTERCONSULTA'):
                                 consultas_rest.append((tel_r.consulta, tel_r.numero))
                         for tel_fr in Telefone.query.filter_by(numero_fmt=num_r).all():
                             if tel_fr.contato and tel_fr.contato.status in ['enviado', 'pronto_envio']:

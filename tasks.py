@@ -1060,6 +1060,91 @@ def retomar_campanhas_consultas_automaticas():
 
 
 # =============================================================================
+# TASK PERIÓDICA - RETOMAR CAMPANHAS SCIH PAUSADAS AUTOMATICAMENTE
+# =============================================================================
+# Mesma lógica do retomar_campanhas_consultas_automaticas: campanhas que
+# pausaram sozinhas (fora do horário ou meta diária atingida) são retomadas
+# quando o horário volta a ser válido / meta diária reseta no novo dia.
+# Pausas manuais ("Pausado pelo usuário") NÃO são retomadas.
+
+@celery.task(
+    base=DatabaseTask,
+    name='tasks.retomar_campanhas_scih_automaticas'
+)
+def retomar_campanhas_scih_automaticas():
+    from app import db, CampanhaSCIH, PacienteSCIH, LogMsgSCIH
+    import os as _os
+    import re as _re
+
+    logger.info("Verificando campanhas SCIH pausadas para retomada automática")
+
+    try:
+        campanhas_pausadas = CampanhaSCIH.query.filter_by(status='pausado').all()
+        if not campanhas_pausadas:
+            return {'sucesso': True, 'retomadas': 0}
+
+        retomadas = 0
+        for camp in campanhas_pausadas:
+            motivo_horario = 'Fora do horário' in (camp.status_msg or '')
+            motivo_meta = 'Meta diária atingida' in (camp.status_msg or '')
+
+            if not (motivo_horario or motivo_meta):
+                logger.debug(f"Campanha SCIH {camp.id} pausada manualmente, não retomando")
+                continue
+
+            pendentes = PacienteSCIH.query.filter_by(
+                campanha_id=camp.id, status='AGUARDANDO_ENVIO'
+            ).count()
+
+            if pendentes == 0:
+                camp.status = 'concluido'
+                camp.status_msg = 'Todos os pacientes foram processados'
+                db.session.commit()
+                logger.info(f"Campanha SCIH {camp.id} ({camp.nome}) marcada como concluída - sem pendentes")
+                continue
+
+            if not (camp.pode_enviar_agora() and camp.pode_enviar_hoje()):
+                continue
+
+            # Recuperar base_url: 1) ENV BASE_URL, 2) último log com http://
+            base_url = (_os.environ.get('BASE_URL') or '').rstrip('/')
+            if not base_url:
+                log_anterior = LogMsgSCIH.query.filter_by(
+                    campanha_id=camp.id, direcao='enviada'
+                ).order_by(LogMsgSCIH.id.desc()).first()
+                if log_anterior and log_anterior.mensagem:
+                    m = _re.search(r'(https?://[^\s/]+)', log_anterior.mensagem)
+                    if m:
+                        base_url = m.group(1)
+
+            if not base_url:
+                logger.warning(
+                    f"Campanha SCIH {camp.id}: não consegui determinar base_url "
+                    f"(defina BASE_URL no ambiente). Pulando retomada."
+                )
+                continue
+
+            logger.info(f"Retomando campanha SCIH {camp.id} ({camp.nome}) com base_url={base_url}")
+            camp.status = 'enviando'
+            camp.status_msg = 'Retomado automaticamente'
+            db.session.commit()
+            result = enviar_campanha_scih_task.delay(camp.id, base_url)
+            camp.celery_task_id = result.id
+            db.session.commit()
+            retomadas += 1
+
+        logger.info(f"Retomada automática SCIH concluída: {retomadas} campanhas retomadas")
+        return {
+            'sucesso': True,
+            'retomadas': retomadas,
+            'verificadas': len(campanhas_pausadas)
+        }
+    except Exception as e:
+        logger.exception(f"Erro na retomada automática SCIH: {e}")
+        return {'sucesso': False, 'erro': str(e)}
+
+
+# =============================================================================
 # TASKS - MODO CONSULTA (Agendamento de Consultas)
 # =============================================================================
 

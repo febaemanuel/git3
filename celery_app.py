@@ -96,6 +96,14 @@ celery.conf.beat_schedule = {
         'options': {'expires': 1800}
     },
 
+    # Retomar campanhas SCIH pausadas automaticamente
+    # (fora do horário ou meta diária atingida -> retoma quando voltar a estar OK)
+    'retomar-campanhas-scih-automaticas': {
+        'task': 'tasks.retomar_campanhas_scih_automaticas',
+        'schedule': crontab(minute=5, hour='8-21'),  # 5min após cada hora, 8h05-21h05
+        'options': {'expires': 1800}
+    },
+
     # Limpar tasks antigas a cada 6 horas
     'limpar-tasks-antigas': {
         'task': 'tasks.limpar_tasks_antigas',

@@ -94,7 +94,11 @@ services:
         condition: service_healthy
     networks:
       - busca-ativa-network
-    command: celery -A celery_app.celery worker --loglevel=info --concurrency=4
+    # concurrency=12: cada task de envio fica presa em time.sleep() entre
+    # mensagens (até 10min). Com 4 workers ficava gargalado quando havia
+    # várias campanhas rodando. 12 dá folga pra Consultas + Fila + SCIH +
+    # tasks periódicas (retry, retomar, limpeza).
+    command: celery -A celery_app.celery worker --loglevel=info --concurrency=12
 
   # Celery Beat (Agendador de tarefas periódicas)
   celery_beat:

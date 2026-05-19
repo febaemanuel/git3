@@ -465,9 +465,41 @@
 
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
 <script>
+Chart.register(ChartDataLabels);
+
 const COR_PRIM = '#128C7E', COR_SEC = '#25D366', COR_VERM = '#dc3545', COR_AZUL = '#0d6efd', COR_AMAR = '#fd7e14', COR_CINZA = '#adb5bd';
-const opcoesBase = { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { font: { size: 11 } } } } };
+
+function calcPct(value, ctx) {
+    const total = ctx.dataset.data.reduce((a, b) => a + (Number(b) || 0), 0);
+    if (!total || !value) return '';
+    const pct = (value / total) * 100;
+    return pct >= 1 ? pct.toFixed(1) + '%' : '';
+}
+
+const opcoesBase = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 11 } } },
+        datalabels: {
+            color: '#fff', font: { weight: 'bold', size: 11 },
+            formatter: calcPct
+        }
+    }
+};
+
+// Datalabels p/ barras: número + porcentagem ao lado/dentro
+const datalabelsBar = {
+    color: '#333', anchor: 'end', align: 'right', offset: 4,
+    font: { size: 11, weight: '600' },
+    formatter: (v, ctx) => {
+        const total = ctx.dataset.data.reduce((a,b)=>a+(Number(b)||0), 0);
+        if (!v) return '';
+        const pct = total ? (v/total*100).toFixed(1) + '%' : '';
+        return `${v} (${pct})`;
+    }
+};
 
 // Sintomas (barras horizontais)
 new Chart(document.getElementById('chartSintomas'), {
@@ -483,12 +515,13 @@ new Chart(document.getElementById('chartSintomas'), {
     options: {
         ...opcoesBase,
         indexAxis: 'y',
-        plugins: { legend: { display: false } },
+        layout: { padding: { right: 60 } },
+        plugins: { legend: { display: false }, datalabels: datalabelsBar },
         scales: { x: { beginAtZero: true, ticks: { precision: 0 } } }
     }
 });
 
-// Timeline
+// Timeline (line: sem datalabels)
 new Chart(document.getElementById('chartTimeline'), {
     type: 'line',
     data: {
@@ -504,17 +537,30 @@ new Chart(document.getElementById('chartTimeline'), {
     },
     options: {
         ...opcoesBase,
-        plugins: { legend: { display: false } },
+        plugins: { legend: { display: false }, datalabels: { display: false } },
         scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
     }
 });
 
-// Donuts
+// Donuts (mostra n + %)
 function donut(elId, labels, data, cores) {
     return new Chart(document.getElementById(elId), {
         type: 'doughnut',
         data: { labels: labels, datasets: [{ data: data, backgroundColor: cores, borderWidth: 1 }] },
-        options: opcoesBase
+        options: {
+            ...opcoesBase,
+            plugins: {
+                ...opcoesBase.plugins,
+                datalabels: {
+                    color: '#fff', font: { weight: 'bold', size: 12 },
+                    formatter: (v, ctx) => {
+                        const total = ctx.dataset.data.reduce((a,b)=>a+(Number(b)||0), 0);
+                        if (!v || !total) return '';
+                        return `${v}\n${((v/total)*100).toFixed(1)}%`;
+                    }
+                }
+            }
+        }
     });
 }
 donut('chartApresentou', ['Sim', 'Não'], {{ chart.apresentou_data|tojson }}, [COR_VERM, COR_CINZA]);
@@ -522,7 +568,7 @@ donut('chartBuscou', ['Sim', 'Não'], {{ chart.buscou_data|tojson }}, [COR_AZUL,
 donut('chartRemedio', ['Sim', 'Não'], {{ chart.remedio_data|tojson }}, [COR_AMAR, COR_CINZA]);
 donut('chartTemplate', {{ chart.template_labels|tojson }}, {{ chart.template_data|tojson }}, [COR_PRIM, COR_SEC]);
 
-// Campanhas (bar vertical)
+// Campanhas (bar vertical: n + %)
 new Chart(document.getElementById('chartCampanha'), {
     type: 'bar',
     data: {
@@ -531,7 +577,13 @@ new Chart(document.getElementById('chartCampanha'), {
     },
     options: {
         ...opcoesBase,
-        plugins: { legend: { display: false } },
+        layout: { padding: { top: 20 } },
+        plugins: {
+            legend: { display: false },
+            datalabels: {
+                ...datalabelsBar, anchor: 'end', align: 'top', offset: 2
+            }
+        },
         scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }
     }
 });

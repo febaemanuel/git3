@@ -20,6 +20,10 @@
                    class="btn {% if modo_selecionado == 'fila' %}btn-dark{% else %}btn-outline-dark{% endif %}">
                     <i class="bi bi-people-fill me-1"></i> Modo Fila
                 </a>
+                <a href="{{ url_for('admin_dashboard', modo='scih') }}"
+                   class="btn {% if modo_selecionado == 'scih' %}btn-danger{% else %}btn-outline-danger{% endif %}">
+                    <i class="bi bi-clipboard-pulse me-1"></i> Modo SCIH
+                </a>
                 <a href="{{ url_for('admin_dashboard') }}"
                    class="btn {% if modo_selecionado == 'todos' %}btn-primary{% else %}btn-outline-primary{% endif %}">
                     <i class="bi bi-grid me-1"></i> Todos
@@ -36,11 +40,13 @@
 
     <!-- Indicador do Modo Selecionado -->
     {% if modo_selecionado != 'todos' %}
-    <div class="alert {% if modo_selecionado == 'consulta' %}alert-success{% else %}alert-dark{% endif %} mb-4">
-        <i class="bi {% if modo_selecionado == 'consulta' %}bi-calendar-check{% else %}bi-people-fill{% endif %} me-2"></i>
+    <div class="alert {% if modo_selecionado == 'consulta' %}alert-success{% elif modo_selecionado == 'scih' %}alert-danger{% else %}alert-dark{% endif %} mb-4">
+        <i class="bi {% if modo_selecionado == 'consulta' %}bi-calendar-check{% elif modo_selecionado == 'scih' %}bi-clipboard-pulse{% else %}bi-people-fill{% endif %} me-2"></i>
         <strong>Visualizando:</strong>
         {% if modo_selecionado == 'consulta' %}
         Modo Consulta (Agendamentos) - Exibindo apenas usuários e dados do sistema de agendamento de consultas
+        {% elif modo_selecionado == 'scih' %}
+        Modo SCIH (Pesquisa pós-cirúrgica) - Exibindo apenas usuários e dados do módulo SCIH
         {% else %}
         Modo Fila (Busca Ativa) - Exibindo apenas usuários e dados do sistema de busca ativa
         {% endif %}
@@ -245,7 +251,7 @@
     <!-- Comparativo Fila vs Consulta -->
     <div class="row g-4 mb-4">
         <!-- MODO FILA -->
-        {% if modo_selecionado != 'consulta' %}
+        {% if modo_selecionado not in ['consulta', 'scih'] %}
         <div class="{% if modo_selecionado == 'fila' %}col-lg-12{% else %}col-lg-6{% endif %}">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-header bg-dark text-white">
@@ -304,7 +310,7 @@
         {% endif %}
 
         <!-- MODO CONSULTA -->
-        {% if modo_selecionado != 'fila' %}
+        {% if modo_selecionado not in ['fila', 'scih'] %}
         <div class="{% if modo_selecionado == 'consulta' %}col-lg-12{% else %}col-lg-6{% endif %}">
             <div class="card border-0 shadow-sm h-100">
                 <div class="card-header" style="background: linear-gradient(135deg, #128C7E 0%, #25D366 100%); color: white;">
@@ -356,10 +362,113 @@
             </div>
         </div>
         {% endif %}
+
+        <!-- MODO SCIH -->
+        {% if modo_selecionado in ['todos', 'scih'] %}
+        <div class="col-lg-12 mt-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header" style="background: linear-gradient(135deg, #dc3545 0%, #fd7e14 100%); color: white;">
+                    <h5 class="mb-0"><i class="bi bi-clipboard-pulse me-2"></i>Modo SCIH (Pesquisa pós-cirúrgica)</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <div class="col-md-3 col-6">
+                            <div class="p-3 bg-light rounded">
+                                <div class="h4 mb-0">{{ total_campanhas_scih }}</div>
+                                <small class="text-muted">Campanhas ({{ campanhas_scih_ativas }} ativas)</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="p-3 bg-light rounded">
+                                <div class="h4 mb-0">{{ "{:,}".format(scih_total_pacientes).replace(",", ".") }}</div>
+                                <small class="text-muted">Pacientes</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="p-3 bg-light rounded">
+                                <div class="h4 mb-0">{{ usuarios_scih }}</div>
+                                <small class="text-muted">Usuários SCIH</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="p-3 bg-success bg-opacity-10 rounded text-center">
+                                <div class="h4 mb-0 text-success">{{ scih_taxa_resposta }}%</div>
+                                <small class="text-muted">Taxa de resposta</small>
+                            </div>
+                        </div>
+
+                        <div class="col-md-3 col-6">
+                            <div class="p-2 bg-info bg-opacity-10 rounded text-center">
+                                <div class="h5 mb-0 text-info">{{ "{:,}".format(scih_total_enviados).replace(",", ".") }}</div>
+                                <small class="text-muted">Enviadas</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="p-2 bg-success bg-opacity-10 rounded text-center">
+                                <div class="h5 mb-0 text-success">{{ "{:,}".format(scih_total_respondidos).replace(",", ".") }}</div>
+                                <small class="text-muted">Respondidas</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="p-2 bg-warning bg-opacity-10 rounded text-center">
+                                <div class="h5 mb-0 text-warning">{{ "{:,}".format(scih_total_sem_resposta).replace(",", ".") }}</div>
+                                <small class="text-muted">Sem resposta</small>
+                            </div>
+                        </div>
+                        <div class="col-md-3 col-6">
+                            <div class="p-2 bg-danger bg-opacity-10 rounded text-center">
+                                <div class="h5 mb-0 text-danger">{{ "{:,}".format(scih_total_erros).replace(",", ".") }}</div>
+                                <small class="text-muted">Erros de envio</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr class="my-3">
+                    <h6 class="text-muted small mb-2">Indicadores clínicos (agregado de todas as respostas)</h6>
+                    <div class="row g-2">
+                        <div class="col-md-4">
+                            <div class="p-2 border rounded d-flex justify-content-between">
+                                <span>Reportaram sintomas</span>
+                                <strong class="text-danger">{{ scih_com_sintoma }}</strong>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-2 border rounded d-flex justify-content-between">
+                                <span>Buscaram atendimento</span>
+                                <strong class="text-primary">{{ scih_buscou_atendimento }}</strong>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="p-2 border rounded d-flex justify-content-between">
+                                <span>Usaram remédio</span>
+                                <strong class="text-warning">{{ scih_usou_remedio }}</strong>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span>Taxa de resposta SCIH</span>
+                            <span class="fw-bold text-success">{{ scih_taxa_resposta }}%</span>
+                        </div>
+                        <div class="progress" style="height: 10px;">
+                            <div class="progress-bar" style="width: {{ scih_taxa_resposta }}%; background: linear-gradient(90deg, #dc3545, #fd7e14);"></div>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 text-end">
+                        <a href="{{ url_for('scih_respostas') }}" class="btn btn-sm btn-outline-danger">
+                            <i class="bi bi-graph-up"></i> Abrir análise detalhada de respostas
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
     </div>
 
     <!-- ==================== SEÇÕES EXCLUSIVAS DO MODO CONSULTA ==================== -->
-    {% if modo_selecionado != 'fila' %}
+    {% if modo_selecionado not in ['fila', 'scih'] %}
 
     <!-- Gráficos - MODO CONSULTA -->
     <div class="row g-4 mb-4">
@@ -841,7 +950,7 @@
     {% endif %}
 
     <!-- Explicação sobre Taxa de Confirmação - MODO CONSULTA -->
-    {% if modo_selecionado != 'fila' %}
+    {% if modo_selecionado not in ['fila', 'scih'] %}
     <div class="row g-4 mb-4">
         <div class="col-12">
             <div class="alert alert-info border-0 shadow-sm">
@@ -870,7 +979,7 @@
 {% block extra_js %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-{% if modo_selecionado != 'fila' %}
+{% if modo_selecionado not in ['fila', 'scih'] %}
 // Gráfico de Atividade (Baseado em MSG 1) - MODO CONSULTA
 const ctxAtividade = document.getElementById('chartAtividade').getContext('2d');
 new Chart(ctxAtividade, {

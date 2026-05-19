@@ -439,6 +439,48 @@ def init_scih_routes(app, db):
         if camp.criador_id != current_user.id and not current_user.is_admin:
             return jsonify({'erro': 'acesso negado'}), 403
         camp.atualizar_stats()
+
+        # Atividade ao vivo: último envio bem-sucedido + próximo previsto + erros recentes
+        ultimo_log = LogMsgSCIH.query.filter_by(
+            campanha_id=camp.id, direcao='enviada', status='sucesso'
+        ).order_by(LogMsgSCIH.id.desc()).first()
+
+        ultimo_nome = None
+        ultimo_telefone = None
+        ultimo_quando = None
+        proximo_em_segs = None
+        if ultimo_log:
+            pac_ult = db.session.get(PacienteSCIH, ultimo_log.paciente_id) if ultimo_log.paciente_id else None
+            ultimo_nome = pac_ult.nome if pac_ult else None
+            ultimo_telefone = ultimo_log.telefone
+            ultimo_quando = _fortaleza_dt(ultimo_log.data, '%d/%m %H:%M:%S')
+            if camp.status == 'enviando' and ultimo_log.data:
+                intervalo = camp.calcular_intervalo()
+                from datetime import datetime as _dt
+                segs_passados = (_dt.utcnow() - ultimo_log.data).total_seconds()
+                proximo_em_segs = max(int(intervalo - segs_passados), 0)
+
+        proximo_paciente = None
+        if camp.status == 'enviando':
+            prox = PacienteSCIH.query.filter_by(
+                campanha_id=camp.id, status='AGUARDANDO_ENVIO'
+            ).order_by(PacienteSCIH.id).first()
+            if prox:
+                proximo_paciente = {'nome': prox.nome, 'telefone': prox.telefone}
+
+        erros_recentes_q = LogMsgSCIH.query.filter_by(
+            campanha_id=camp.id, status='erro'
+        ).order_by(LogMsgSCIH.id.desc()).limit(5).all()
+        erros_recentes = []
+        for e in erros_recentes_q:
+            pac_err = db.session.get(PacienteSCIH, e.paciente_id) if e.paciente_id else None
+            erros_recentes.append({
+                'nome': pac_err.nome if pac_err else '-',
+                'telefone': e.telefone or '-',
+                'erro': (e.erro or '')[:200],
+                'quando': _fortaleza_dt(e.data, '%d/%m %H:%M'),
+            })
+
         return jsonify({
             'status': camp.status,
             'status_msg': camp.status_msg,
@@ -447,6 +489,18 @@ def init_scih_routes(app, db):
             'total_respondidos': camp.total_respondidos,
             'total_erros': camp.total_erros,
             'pct_resposta': camp.pct_resposta(),
+            'enviados_hoje': camp.enviados_hoje or 0,
+            'meta_diaria': camp.meta_diaria,
+            'intervalo_segs': camp.calcular_intervalo(),
+            # Atividade ao vivo
+            'ultimo_enviado': {
+                'nome': ultimo_nome,
+                'telefone': ultimo_telefone,
+                'quando': ultimo_quando,
+            } if ultimo_nome else None,
+            'proximo_paciente': proximo_paciente,
+            'proximo_em_segs': proximo_em_segs,
+            'erros_recentes': erros_recentes,
         })
 
     # =========================================================================

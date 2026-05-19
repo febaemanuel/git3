@@ -301,6 +301,26 @@ def init_consultas_routes(app, db):
                 comp.consulta_id = consulta_match.id
                 logger.info(f"[UPLOAD] Auto-vínculo: '{nome_paciente}' → consulta {consulta_match.id}")
 
+                # Extrair horário do PDF via OCR e gravar em consulta.hora_aghu
+                # (só se ainda não tem horário definido). Faz isso na hora do
+                # upload pra que a MSG1 do disparador já saia com 'às HHhMM'.
+                if not (consulta_match.hora_aghu or '').strip():
+                    try:
+                        from app import extrair_dados_comprovante
+                        dados_ocr = extrair_dados_comprovante(filepath) or {}
+                        hora_ocr = (dados_ocr.get('hora') or '').strip()
+                        if hora_ocr and hora_ocr != '00:00':
+                            consulta_match.hora_aghu = hora_ocr
+                            logger.info(
+                                f"[UPLOAD/OCR] Horário {hora_ocr} extraído do PDF e salvo "
+                                f"em consulta {consulta_match.id} ({consulta_match.paciente})"
+                            )
+                    except Exception as e_ocr:
+                        logger.warning(
+                            f"[UPLOAD/OCR] Falha ao extrair horário do PDF de "
+                            f"{nome_paciente}: {e_ocr}"
+                        )
+
             salvos.append({'nome_paciente': nome_paciente, 'filename': arquivo.filename, 'match': bool(consulta_match)})
 
         if salvos:

@@ -5555,6 +5555,9 @@ def admin_dashboard():
     elif modo_selecionado == 'fila':
         total_usuarios = Usuario.query.filter_by(tipo_sistema='BUSCA_ATIVA').count()
         usuarios_ativos = Usuario.query.filter_by(ativo=True, tipo_sistema='BUSCA_ATIVA').count()
+    elif modo_selecionado == 'scih':
+        total_usuarios = Usuario.query.filter_by(tipo_sistema='PESQUISA_SCIH').count()
+        usuarios_ativos = Usuario.query.filter_by(ativo=True, tipo_sistema='PESQUISA_SCIH').count()
     else:
         total_usuarios = Usuario.query.count()
         usuarios_ativos = Usuario.query.filter_by(ativo=True).count()
@@ -5610,6 +5613,33 @@ def admin_dashboard():
 
     # Taxa de confirmação de consultas
     consulta_taxa_confirmacao = round((consulta_confirmados / consulta_enviados * 100), 1) if consulta_enviados > 0 else 0
+
+    # =====================================================================
+    # ESTATÍSTICAS DO MODO SCIH (PESQUISA_SCIH)
+    # =====================================================================
+    total_campanhas_scih = CampanhaSCIH.query.count()
+    campanhas_scih_ativas = CampanhaSCIH.query.filter(
+        CampanhaSCIH.status.in_(['enviando', 'pausado'])
+    ).count()
+    usuarios_scih = Usuario.query.filter_by(tipo_sistema='PESQUISA_SCIH').count()
+
+    scih_total_pacientes = db.session.query(
+        func.coalesce(func.count(PacienteSCIH.id), 0)
+    ).scalar() or 0
+    scih_total_enviados = PacienteSCIH.query.filter(
+        PacienteSCIH.status.in_(['ENVIADO', 'RESPONDIDO', 'SEM_RESPOSTA'])
+    ).count()
+    scih_total_respondidos = PacienteSCIH.query.filter_by(status='RESPONDIDO').count()
+    scih_total_sem_resposta = PacienteSCIH.query.filter_by(status='SEM_RESPOSTA').count()
+    scih_total_erros = PacienteSCIH.query.filter_by(status='ERRO').count()
+    scih_taxa_resposta = round(
+        (scih_total_respondidos / scih_total_enviados * 100), 1
+    ) if scih_total_enviados > 0 else 0
+
+    # Indicadores das respostas SCIH (agregado de todas as campanhas)
+    scih_com_sintoma = RespostaSCIH.query.filter_by(apresentou_sintoma=True).count()
+    scih_buscou_atendimento = RespostaSCIH.query.filter_by(buscou_atendimento=True).count()
+    scih_usou_remedio = RespostaSCIH.query.filter_by(usou_remedio=True).count()
 
     # =====================================================================
     # ESTATÍSTICAS DETALHADAS - AGENDAMENTO DE CONSULTAS
@@ -5972,6 +6002,20 @@ def admin_dashboard():
         consulta_confirmados=consulta_confirmados,
         consulta_rejeitados=consulta_rejeitados,
         consulta_taxa_confirmacao=consulta_taxa_confirmacao,
+
+        # Modo SCIH
+        usuarios_scih=usuarios_scih,
+        total_campanhas_scih=total_campanhas_scih,
+        campanhas_scih_ativas=campanhas_scih_ativas,
+        scih_total_pacientes=scih_total_pacientes,
+        scih_total_enviados=scih_total_enviados,
+        scih_total_respondidos=scih_total_respondidos,
+        scih_total_sem_resposta=scih_total_sem_resposta,
+        scih_total_erros=scih_total_erros,
+        scih_taxa_resposta=scih_taxa_resposta,
+        scih_com_sintoma=scih_com_sintoma,
+        scih_buscou_atendimento=scih_buscou_atendimento,
+        scih_usou_remedio=scih_usou_remedio,
 
         # Estatísticas detalhadas de agendamento
         total_disparos_msg1=total_disparos_msg1,

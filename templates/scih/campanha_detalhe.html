@@ -79,6 +79,41 @@
     </div>
 </div>
 
+<!-- ATIVIDADE AO VIVO -->
+<div class="card mb-3" id="live-card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <strong><i class="bi bi-broadcast"></i> Atividade ao vivo</strong>
+        <span id="live-status-badge" class="badge bg-secondary">—</span>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-4">
+                <small class="text-muted d-block">Último envio</small>
+                <div id="live-ultimo" class="fw-semibold">—</div>
+                <small id="live-ultimo-quando" class="text-muted"></small>
+            </div>
+            <div class="col-md-4">
+                <small class="text-muted d-block">Próximo a ser enviado</small>
+                <div id="live-proximo" class="fw-semibold">—</div>
+                <small id="live-proximo-em" class="text-success"></small>
+            </div>
+            <div class="col-md-4">
+                <small class="text-muted d-block">Meta de hoje</small>
+                <div id="live-meta" class="fw-semibold">— / —</div>
+                <div class="progress mt-1" style="height: 6px;">
+                    <div id="live-meta-bar" class="progress-bar bg-success" style="width: 0%"></div>
+                </div>
+                <small id="live-intervalo" class="text-muted"></small>
+            </div>
+        </div>
+        <div id="live-erros-bloco" class="mt-3 d-none">
+            <hr class="my-2">
+            <small class="text-danger fw-semibold"><i class="bi bi-exclamation-triangle-fill"></i> Erros recentes</small>
+            <ul id="live-erros" class="list-unstyled small mb-0 mt-1"></ul>
+        </div>
+    </div>
+</div>
+
 <div class="row g-3 mb-4">
     <div class="col-md-6">
         <div class="card h-100">
@@ -190,21 +225,100 @@ if (ctx) {
     });
 }
 
-// Auto-refresh progresso quando enviando
-{% if campanha.status == 'enviando' %}
-setInterval(async () => {
+// Auto-refresh + painel ao vivo
+function fmtSegs(s) {
+    if (s == null) return '';
+    if (s <= 0) return 'enviando agora...';
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    if (m > 0) return `~${m}min ${sec.toString().padStart(2,'0')}s`;
+    return `~${sec}s`;
+}
+
+const STATUS_BADGES = {
+    'enviando':  ['bg-success',  'enviando'],
+    'pausado':   ['bg-warning text-dark', 'pausado'],
+    'concluido': ['bg-primary',  'concluído'],
+    'erro':      ['bg-danger',   'erro'],
+    'pendente':  ['bg-light text-dark', 'pendente'],
+};
+
+async function atualizarProgresso() {
     try {
         const r = await fetch('{{ url_for("scih_campanha_progresso", id=campanha.id) }}');
         if (!r.ok) return;
         const d = await r.json();
+
+        // Métricas principais
         document.getElementById('m-pac').textContent = d.total_pacientes;
         document.getElementById('m-env').textContent = d.total_enviados;
         document.getElementById('m-resp').textContent = d.total_respondidos;
         document.getElementById('m-pct').textContent = d.pct_resposta;
         document.getElementById('m-err').textContent = d.total_erros;
-        if (d.status !== 'enviando') location.reload();
-    } catch (e) {}
-}, 5000);
-{% endif %}
+
+        // Status badge
+        const badge = document.getElementById('live-status-badge');
+        const [cls, txt] = STATUS_BADGES[d.status] || ['bg-secondary', d.status];
+        badge.className = 'badge ' + cls;
+        badge.textContent = txt + (d.status_msg ? ' — ' + d.status_msg : '');
+
+        // Último enviado
+        if (d.ultimo_enviado && d.ultimo_enviado.nome) {
+            document.getElementById('live-ultimo').textContent =
+                `${d.ultimo_enviado.nome} (${d.ultimo_enviado.telefone || '-'})`;
+            document.getElementById('live-ultimo-quando').textContent = d.ultimo_enviado.quando || '';
+        } else {
+            document.getElementById('live-ultimo').textContent = '— nenhum envio ainda —';
+            document.getElementById('live-ultimo-quando').textContent = '';
+        }
+
+        // Próximo
+        if (d.proximo_paciente && d.proximo_paciente.nome) {
+            document.getElementById('live-proximo').textContent =
+                `${d.proximo_paciente.nome} (${d.proximo_paciente.telefone || '-'})`;
+            document.getElementById('live-proximo-em').textContent =
+                d.proximo_em_segs != null ? `próximo envio em ${fmtSegs(d.proximo_em_segs)}` : '';
+        } else if (d.status === 'concluido') {
+            document.getElementById('live-proximo').textContent = '— campanha concluída —';
+            document.getElementById('live-proximo-em').textContent = '';
+        } else {
+            document.getElementById('live-proximo').textContent = '—';
+            document.getElementById('live-proximo-em').textContent = '';
+        }
+
+        // Meta hoje
+        const meta = d.meta_diaria || 0;
+        const hoje = d.enviados_hoje || 0;
+        document.getElementById('live-meta').textContent = `${hoje} / ${meta}`;
+        const pct = meta > 0 ? Math.min(100, Math.round(hoje / meta * 100)) : 0;
+        document.getElementById('live-meta-bar').style.width = pct + '%';
+        document.getElementById('live-intervalo').textContent =
+            d.intervalo_segs ? `1 envio a cada ${fmtSegs(d.intervalo_segs)}` : '';
+
+        // Erros recentes
+        const blocoErros = document.getElementById('live-erros-bloco');
+        const listaErros = document.getElementById('live-erros');
+        if (d.erros_recentes && d.erros_recentes.length > 0) {
+            blocoErros.classList.remove('d-none');
+            listaErros.innerHTML = d.erros_recentes.map(e =>
+                `<li class="mb-1"><span class="text-danger">●</span>
+                 <strong>${e.nome}</strong> (${e.telefone})
+                 — <em>${e.erro}</em>
+                 <span class="text-muted">${e.quando}</span></li>`
+            ).join('');
+        } else {
+            blocoErros.classList.add('d-none');
+        }
+
+        // Se status mudou pra final, faz último refresh em 2s pra mostrar pendente/concluido
+        if (d.status !== 'enviando' && d.status !== 'pausado') {
+            // mantém polling rodando ao mostrar finalização
+        }
+    } catch (e) { /* silencia */ }
+}
+
+// Roda imediatamente e depois a cada 5s, sempre (não só em 'enviando')
+atualizarProgresso();
+setInterval(atualizarProgresso, 5000);
 </script>
 {% endblock %}

@@ -2897,13 +2897,48 @@ class WhatsApp:
                 pass
         return result
 
+    def enviar_presence(self, numero, presence='composing', delay=0):
+        """
+        Envia status de presença (typing/recording/paused) pra um número.
+        Útil pra "aquecer" a sessão antes da MSG1 — força o WhatsApp do
+        destinatário a estabelecer a sessão criptográfica, evitando que a
+        primeira mensagem fique presa com 'Aguardando mensagem...'.
+
+        Args:
+            numero: telefone do destinatário (qualquer formato)
+            presence: 'composing' (digitando), 'recording', 'paused', 'available', 'unavailable'
+            delay: ms (opcional). Tempo que o WhatsApp vai mostrar o status antes de parar.
+
+        Retorna: (ok, response_or_error)
+        """
+        if not self.ok():
+            return False, "Nao configurado"
+
+        num = ''.join(filter(str.isdigit, str(numero)))
+        payload = {
+            'number': num,
+            'options': {
+                'presence': presence,
+            }
+        }
+        if delay > 0:
+            payload['options']['delay'] = int(delay)
+
+        try:
+            ok, r = self._req('POST', f"/chat/sendPresence/{self.instance}", payload)
+            if ok and r.status_code in [200, 201]:
+                return True, ''
+            return False, (r.text[:100] if ok else str(r))
+        except Exception as e:
+            return False, str(e)[:100]
+
     def enviar(self, numero, texto):
         if not self.ok():
             return False, "Nao configurado"
 
         num = ''.join(filter(str.isdigit, str(numero)))
         ok, r = self._req('POST', f"/message/sendText/{self.instance}", {
-            'number': num, 
+            'number': num,
             'text': texto,
             'linkPreview': False  # Desabilita preview de links
         })
@@ -2915,6 +2950,25 @@ class WhatsApp:
             except:
                 return True, ''
         return False, r.text[:100] if ok else r
+
+    def enviar_com_warmup(self, numero, texto, warmup_seg=3):
+        """
+        Envia mensagem precedida de presence 'composing' (digitando) por N segundos.
+        Resolve o problema da primeira mensagem ficar com 1 tracinho só / 'Aguardando
+        mensagem...' do lado do paciente — o presence força a sessão criptográfica
+        a ser estabelecida antes da mensagem real ser entregue.
+
+        Falhas de presence (404 em Evolution antiga, timeout, etc) são silenciosas
+        e não impedem o envio da mensagem.
+        """
+        try:
+            self.enviar_presence(numero, presence='composing')
+            time.sleep(max(warmup_seg, 1))
+            self.enviar_presence(numero, presence='paused')
+            time.sleep(0.3)
+        except Exception:
+            pass  # warmup é best-effort, não pode bloquear o envio real
+        return self.enviar(numero, texto)
 
     def enviar_arquivo(self, numero, caminho_arquivo, caption=None):
         """

@@ -2915,30 +2915,18 @@ class WhatsApp:
             return False, "Nao configurado"
 
         num = ''.join(filter(str.isdigit, str(numero)))
-        # Evolution API v2 espera 'presence' no root do payload.
-        # (algumas versões antigas esperavam dentro de 'options' — abaixo
-        # caímos no fallback se a primeira tentativa falhar com 400)
+        # Evolution v2 exige number + presence + delay, todos no root e
+        # todos obrigatórios. Default delay = 1000ms quando não informado.
         payload = {
             'number': num,
             'presence': presence,
+            'delay': int(delay) if delay > 0 else 1000,
         }
-        if delay > 0:
-            payload['delay'] = int(delay)
 
         try:
             ok, r = self._req('POST', f"/chat/sendPresence/{self.instance}", payload)
             if ok and r.status_code in [200, 201]:
                 return True, ''
-            # Fallback pra formato antigo (options.presence)
-            if ok and r.status_code == 400:
-                payload_legacy = {
-                    'number': num,
-                    'options': {'presence': presence, 'delay': int(delay)} if delay > 0 else {'presence': presence},
-                }
-                ok2, r2 = self._req('POST', f"/chat/sendPresence/{self.instance}", payload_legacy)
-                if ok2 and r2.status_code in [200, 201]:
-                    return True, ''
-                return False, (r2.text[:100] if ok2 else str(r2))
             return False, (r.text[:100] if ok else str(r))
         except Exception as e:
             return False, str(e)[:100]

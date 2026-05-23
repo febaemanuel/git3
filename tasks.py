@@ -327,7 +327,7 @@ def enviar_campanha_task(self, campanha_id):
                 sucesso_pessoa = False
 
                 for t in telefones_validos:
-                    ok, result = ws.enviar(t.numero_fmt, msg)
+                    ok, result = ws.enviar_com_warmup(t.numero_fmt, msg)
 
                     if ok:
                         t.enviado = True
@@ -523,7 +523,7 @@ Caso contrário, sua vaga será disponibilizada."""
             enviado = False
 
             for t in telefones:
-                ok, _ = ws.enviar(t.numero_fmt, msg)
+                ok, _ = ws.enviar_com_warmup(t.numero_fmt, msg)
                 if ok:
                     enviado = True
 
@@ -1363,7 +1363,7 @@ def enviar_campanha_consultas_task(self, campanha_id):
                 if telefone.enviado:
                     continue
 
-                ok, result = ws.enviar(telefone.numero, msg)
+                ok, result = ws.enviar_com_warmup(telefone.numero, msg)
 
                 if ok:
                     telefone.enviado = True
@@ -1592,7 +1592,7 @@ def enviar_campanha_scih_task(self, campanha_id, base_url):
                 f"Clique no link abaixo e responda:\n{link}"
             )
 
-            ok, result = ws.enviar(numero_fmt, msg)
+            ok, result = ws.enviar_com_warmup(numero_fmt, msg)
 
             if ok:
                 paciente.status = 'ENVIADO'
@@ -1731,7 +1731,7 @@ def retry_scih_sem_resposta():
                 f"*Serviço de Controle de Infecção Hospitalar* da MEAC sobre sua {cirurgia_label}.\n\n"
                 f"Sua participação ajuda muito! Por favor, clique no link abaixo:\n{link}"
             )
-            ok, result = ws.enviar(numero_fmt, msg)
+            ok, result = ws.enviar_com_warmup(numero_fmt, msg)
             paciente.retry_enviado = True
             paciente.data_retry = agora
             db.session.add(LogMsgSCIH(
@@ -2099,7 +2099,7 @@ def retry_fila_sem_resposta():
             if horas_desde_envio >= 24 and contato.tentativas_contato == 0:
                 msg = formatar_mensagem_fila_retry1(contato)
 
-                ok, result = ws.enviar(telefone_envio, msg)
+                ok, result = ws.enviar_com_warmup(telefone_envio, msg)
 
                 log = LogMsg(
                     campanha_id=contato.campanha_id,
@@ -2126,7 +2126,7 @@ def retry_fila_sem_resposta():
                 if horas_desde_retry1 >= 48:
                     msg = formatar_mensagem_fila_retry2(contato)
 
-                    ok, result = ws.enviar(telefone_envio, msg)
+                    ok, result = ws.enviar_com_warmup(telefone_envio, msg)
 
                     log = LogMsg(
                         campanha_id=contato.campanha_id,
@@ -2153,7 +2153,7 @@ def retry_fila_sem_resposta():
                 if horas_desde_retry2 >= 24:
                     msg = formatar_mensagem_fila_sem_resposta(contato)
 
-                    ok, result = ws.enviar(telefone_envio, msg)
+                    ok, result = ws.enviar_com_warmup(telefone_envio, msg)
 
                     log = LogMsg(
                         campanha_id=contato.campanha_id,

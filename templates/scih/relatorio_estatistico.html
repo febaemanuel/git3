@@ -121,44 +121,45 @@
             </p>
 
             <hr class="my-2">
-            <p class="mb-1"><strong>📏 Limitações conforme o tamanho da amostra (N)</strong></p>
+            <p class="mb-1"><strong>📏 Limitações conforme o tamanho da amostra (N) — calibrado pra MEAC</strong></p>
             <p class="text-muted mb-2 ms-3">
                 O <strong>N</strong> é o número de pacientes que efetivamente responderam.
-                Quanto maior, mais confiável o resultado. Veja a régua:
+                A régua abaixo considera o fluxo real da MEAC (~150-200 cesáreas/mês,
+                ~40% de taxa de resposta WhatsApp):
             </p>
-            <table class="table table-sm table-bordered ms-3 mb-2" style="max-width: 700px;">
+            <table class="table table-sm table-bordered ms-3 mb-2" style="max-width: 720px;">
                 <thead class="table-light small">
                     <tr>
-                        <th>N de respostas</th>
+                        <th>N respondidos</th>
                         <th>Confiabilidade</th>
                         <th>O que dá pra fazer</th>
                     </tr>
                 </thead>
                 <tbody class="small">
                     <tr class="table-danger">
-                        <td><strong>&lt; 10</strong></td>
-                        <td>❌ Muito baixa</td>
-                        <td>Apenas descritivo. Não use pra decisão clínica nem comparação.</td>
+                        <td><strong>&lt; 20</strong></td>
+                        <td>❌ Insuficiente</td>
+                        <td>Acumular mais dados (estender o período). Não use pra decisão.</td>
                     </tr>
                     <tr class="table-warning">
-                        <td><strong>10 – 30</strong></td>
-                        <td>⚠️ Baixa</td>
-                        <td>IC 95% muito largo (±15-25 pontos). Tendências apenas, sem afirmação forte.</td>
+                        <td><strong>20 – 50</strong></td>
+                        <td>⚠️ Tendência</td>
+                        <td>Comparar com benchmark histórico da MEAC. Não comparar subgrupos.</td>
                     </tr>
                     <tr>
-                        <td><strong>30 – 100</strong></td>
-                        <td>🟡 Razoável</td>
-                        <td>Dá pra estimar proporções e fazer associações simples (qui-quadrado/Fisher).</td>
+                        <td><strong>50 – 150</strong></td>
+                        <td>🟡 Análise mensal</td>
+                        <td>Estimar prevalência mensal com IC. Comparar com mês anterior.</td>
                     </tr>
                     <tr class="table-success">
-                        <td><strong>100 – 300</strong></td>
-                        <td>✅ Boa</td>
-                        <td>IC 95% mais estreito (±5-8 pontos). Comparações entre grupos confiáveis.</td>
+                        <td><strong>150 – 500</strong></td>
+                        <td>✅ Análise trimestral</td>
+                        <td>Comparar subgrupos (cesárea eletiva × urgência, cirurgião, equipe).</td>
                     </tr>
                     <tr class="table-success">
-                        <td><strong>&gt; 300</strong></td>
-                        <td>✅ Muito boa</td>
-                        <td>Permite análise multivariada e detecção de efeitos pequenos.</td>
+                        <td><strong>&gt; 500</strong></td>
+                        <td>✅ Vigilância robusta</td>
+                        <td>Modelo multivariado, ajuste de risco (NNIS), comparação ano a ano.</td>
                     </tr>
                 </tbody>
             </table>
@@ -185,6 +186,32 @@
                     "porque não tem nada"; quem está mal pode não responder "porque tá na emergência".
                     Os 2 vieses podem se cancelar — ou não.</li>
             </ul>
+
+            <p class="mb-1"><strong>📋 Contexto ANVISA — o que essa pesquisa cobre vs não cobre</strong></p>
+            <p class="text-muted small ms-3 mb-1">
+                A ANVISA define 3 níveis de ISC (Infecção de Sítio Cirúrgico). Veja o que
+                o questionário captura de cada:
+            </p>
+            <ul class="text-muted small ms-3 mb-2">
+                <li><strong>ISC Incisional Superficial</strong> (até 30 dias):
+                    pele/tecido subcutâneo — pus, calor, rubor, dor.
+                    ✅ <strong>Bem coberta</strong> pelo questionário (perguntas sobre vermelhidão,
+                    inchaço, dor, secreção, pus, sangramento, mau cheiro).</li>
+                <li><strong>ISC Incisional Profunda</strong> (até 30-90 dias):
+                    fáscia/músculo — abscesso, deiscência, febre persistente.
+                    🟡 <strong>Parcialmente coberta</strong> — pega febre e sintomas gerais,
+                    mas diagnóstico precisa imagem/reabordagem.</li>
+                <li><strong>ISC de Órgão/Espaço</strong> (até 30-90 dias):
+                    endometrite, peritonite, abscesso pélvico.
+                    ❌ <strong>Não coberta diretamente</strong> — precisa avaliação clínica,
+                    imagem ou cultura. Auto-relato subestima.</li>
+            </ul>
+            <p class="text-muted small ms-3 mb-2">
+                <strong>Janela temporal recomendada (ANVISA/CDC NHSN):</strong> vigilância
+                de 30 dias pra cesárea (sem implante) e 90 dias pra mastologia com prótese.
+                O envio único atual cobre o momento da resposta — ISC tardia pode escapar.
+                Considere enviar em D+7 e D+30 pra ampliar cobertura.
+            </p>
 
             <p class="mb-1"><strong>✅ Como interpretar com responsabilidade</strong></p>
             <ul class="text-muted small ms-3 mb-2">
@@ -238,16 +265,16 @@
                 <div><strong>Recebeu mensagem:</strong> {{ relatorio.total_recebeu_msg }}</div>
                 <div>
                     <strong>Respondidos:</strong> {{ relatorio.n_respondidos }}
-                    {% if relatorio.n_respondidos < 10 %}
-                        <span class="badge bg-danger ms-1" title="Muito baixa confiabilidade">❌ N muito baixo</span>
-                    {% elif relatorio.n_respondidos < 30 %}
-                        <span class="badge bg-warning text-dark ms-1" title="Baixa confiabilidade">⚠️ N baixo</span>
-                    {% elif relatorio.n_respondidos < 100 %}
-                        <span class="badge bg-info text-dark ms-1" title="Confiabilidade razoável">🟡 N razoável</span>
-                    {% elif relatorio.n_respondidos < 300 %}
-                        <span class="badge bg-success ms-1" title="Boa confiabilidade">✅ N bom</span>
+                    {% if relatorio.n_respondidos < 20 %}
+                        <span class="badge bg-danger ms-1" title="Insuficiente — acumular mais dados">❌ N insuficiente</span>
+                    {% elif relatorio.n_respondidos < 50 %}
+                        <span class="badge bg-warning text-dark ms-1" title="Apenas tendência — comparar com histórico">⚠️ N tendência</span>
+                    {% elif relatorio.n_respondidos < 150 %}
+                        <span class="badge bg-info text-dark ms-1" title="Suficiente para análise mensal">🟡 N mensal</span>
+                    {% elif relatorio.n_respondidos < 500 %}
+                        <span class="badge bg-success ms-1" title="Suficiente para análise trimestral e comparação de subgrupos">✅ N trimestral</span>
                     {% else %}
-                        <span class="badge bg-success ms-1" title="Muito boa confiabilidade">✅ N muito bom</span>
+                        <span class="badge bg-success ms-1" title="Vigilância robusta — análise multivariada possível">✅ N robusto</span>
                     {% endif %}
                 </div>
                 <div><strong>Taxa de resposta:</strong> {{ relatorio.taxa_resposta }}%</div>

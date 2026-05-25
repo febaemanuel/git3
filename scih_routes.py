@@ -957,13 +957,19 @@ def init_scih_routes(app, db):
                     'significativo': (p is not None and p < 0.05),
                 }
 
-            # === Alertas metodológicos ===
+            # === Alertas metodológicos (régua calibrada pra MEAC) ===
             alertas = []
-            if n_respondidos < 30:
+            if n_respondidos < 20:
+                alertas.append({
+                    'tipo': 'danger',
+                    'msg': f'Amostra insuficiente (N={n_respondidos}). Considere estender o período '
+                           f'ou agregar mais campanhas antes de tirar conclusões.'
+                })
+            elif n_respondidos < 50:
                 alertas.append({
                     'tipo': 'warning',
-                    'msg': f'Amostra pequena (N={n_respondidos}). Resultados têm baixa precisão estatística — '
-                           f'usar com cuidado para inferência populacional.'
+                    'msg': f'Amostra pequena (N={n_respondidos}). Trate os números como TENDÊNCIA — '
+                           f'compare com o histórico da MEAC, mas evite comparações entre subgrupos.'
                 })
             if total_recebeu_msg > 0 and (total_sem_resposta_real / total_recebeu_msg) > 0.4:
                 taxa_nr = round(total_sem_resposta_real / total_recebeu_msg * 100, 1)

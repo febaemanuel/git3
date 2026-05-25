@@ -121,10 +121,89 @@
             </p>
 
             <hr class="my-2">
+            <p class="mb-1"><strong>📏 Limitações conforme o tamanho da amostra (N)</strong></p>
+            <p class="text-muted mb-2 ms-3">
+                O <strong>N</strong> é o número de pacientes que efetivamente responderam.
+                Quanto maior, mais confiável o resultado. Veja a régua:
+            </p>
+            <table class="table table-sm table-bordered ms-3 mb-2" style="max-width: 700px;">
+                <thead class="table-light small">
+                    <tr>
+                        <th>N de respostas</th>
+                        <th>Confiabilidade</th>
+                        <th>O que dá pra fazer</th>
+                    </tr>
+                </thead>
+                <tbody class="small">
+                    <tr class="table-danger">
+                        <td><strong>&lt; 10</strong></td>
+                        <td>❌ Muito baixa</td>
+                        <td>Apenas descritivo. Não use pra decisão clínica nem comparação.</td>
+                    </tr>
+                    <tr class="table-warning">
+                        <td><strong>10 – 30</strong></td>
+                        <td>⚠️ Baixa</td>
+                        <td>IC 95% muito largo (±15-25 pontos). Tendências apenas, sem afirmação forte.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>30 – 100</strong></td>
+                        <td>🟡 Razoável</td>
+                        <td>Dá pra estimar proporções e fazer associações simples (qui-quadrado/Fisher).</td>
+                    </tr>
+                    <tr class="table-success">
+                        <td><strong>100 – 300</strong></td>
+                        <td>✅ Boa</td>
+                        <td>IC 95% mais estreito (±5-8 pontos). Comparações entre grupos confiáveis.</td>
+                    </tr>
+                    <tr class="table-success">
+                        <td><strong>&gt; 300</strong></td>
+                        <td>✅ Muito boa</td>
+                        <td>Permite análise multivariada e detecção de efeitos pequenos.</td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="text-muted small ms-3 mb-2">
+                <strong>Exemplo prático:</strong> Se você vê <code>32% (IC 95%: 18% – 50%)</code>
+                com N=31, isso significa "no recorte de pacientes que responderam, vimos 32%, mas
+                pra toda a população pode ser qualquer coisa entre 18% e 50%". Pra reduzir essa
+                incerteza pela metade, precisaria de ~120 respostas (regra prática: N×4 reduz a
+                margem de erro pela metade).
+            </p>
+
+            <p class="mb-1"><strong>⚠️ Limitações específicas dessa pesquisa</strong></p>
+            <ul class="text-muted small ms-3 mb-2">
+                <li><strong>Auto-relato:</strong> a paciente diz o que sente, sem exame clínico.
+                    Pode haver subnotificação (não percebe sintoma) ou supernotificação (interpreta
+                    desconforto normal como infecção).</li>
+                <li><strong>Acesso digital:</strong> pacientes sem smartphone ou com pouca
+                    intimidade tecnológica não conseguem responder — viés socioeconômico.</li>
+                <li><strong>Tempo:</strong> a pergunta cobre o momento atual, não a evolução
+                    desde a alta. ISC tardia pode ser perdida.</li>
+                <li><strong>Definição de ISC:</strong> os sintomas reportados sugerem,
+                    mas <strong>não confirmam</strong> infecção. O diagnóstico final é clínico.</li>
+                <li><strong>Não-resposta seletiva:</strong> quem está bem tende a não responder
+                    "porque não tem nada"; quem está mal pode não responder "porque tá na emergência".
+                    Os 2 vieses podem se cancelar — ou não.</li>
+            </ul>
+
+            <p class="mb-1"><strong>✅ Como interpretar com responsabilidade</strong></p>
+            <ul class="text-muted small ms-3 mb-2">
+                <li>Use o relatório como <strong>sinalizador</strong> ("parece que há mais sintoma
+                    em cesariana que em mastologia"), não como <strong>medida absoluta</strong>
+                    ("X% das cesáreas têm ISC").</li>
+                <li>Sempre olhe o <strong>IC 95%</strong>, não só o número observado.</li>
+                <li>Quando o p-valor for próximo de 0,05, considere "tendência" — não diferença
+                    confirmada. Reproduza com mais dados.</li>
+                <li>Pacientes nos <strong>"casos de atenção"</strong> precisam de avaliação
+                    clínica individual, independente da estatística.</li>
+            </ul>
+
+            <hr class="my-2">
             <p class="mb-0"><strong class="text-success">Dica de leitura:</strong>
                 comece pelos cards coloridos (números principais com IC 95%), depois veja
                 a <em>Prevalência por sintoma</em> pra saber o que é mais comum, e use as
-                <em>Associações</em> pra entender o que tá ligado a quê.</p>
+                <em>Associações</em> pra entender o que tá ligado a quê. <strong>Sempre olhe o N
+                antes de afirmar qualquer coisa.</strong></p>
         </div>
     </div>
 </div>
@@ -157,7 +236,20 @@
                 <div><strong>Gerado em:</strong> {{ relatorio.gerado_em }}</div>
                 <div><strong>Total cadastrados:</strong> {{ relatorio.total_cadastrados }}</div>
                 <div><strong>Recebeu mensagem:</strong> {{ relatorio.total_recebeu_msg }}</div>
-                <div><strong>Respondidos:</strong> {{ relatorio.n_respondidos }}</div>
+                <div>
+                    <strong>Respondidos:</strong> {{ relatorio.n_respondidos }}
+                    {% if relatorio.n_respondidos < 10 %}
+                        <span class="badge bg-danger ms-1" title="Muito baixa confiabilidade">❌ N muito baixo</span>
+                    {% elif relatorio.n_respondidos < 30 %}
+                        <span class="badge bg-warning text-dark ms-1" title="Baixa confiabilidade">⚠️ N baixo</span>
+                    {% elif relatorio.n_respondidos < 100 %}
+                        <span class="badge bg-info text-dark ms-1" title="Confiabilidade razoável">🟡 N razoável</span>
+                    {% elif relatorio.n_respondidos < 300 %}
+                        <span class="badge bg-success ms-1" title="Boa confiabilidade">✅ N bom</span>
+                    {% else %}
+                        <span class="badge bg-success ms-1" title="Muito boa confiabilidade">✅ N muito bom</span>
+                    {% endif %}
+                </div>
                 <div><strong>Taxa de resposta:</strong> {{ relatorio.taxa_resposta }}%</div>
             </div>
         </div>

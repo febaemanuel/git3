@@ -1252,10 +1252,20 @@ class CampanhaSCIH(db.Model):
     def atualizar_stats(self):
         base = PacienteSCIH.query.filter_by(campanha_id=self.id)
         self.total_pacientes = base.count()
-        self.total_enviados = base.filter(PacienteSCIH.status.in_(['ENVIADO', 'RESPONDIDO'])).count()
+        # total_enviados agora inclui SEM_RESPOSTA — todo paciente que recebeu
+        # mensagem em algum momento (mesmo que tenha desistido depois do retry).
+        self.total_enviados = base.filter(
+            PacienteSCIH.status.in_(['ENVIADO', 'RESPONDIDO', 'SEM_RESPOSTA'])
+        ).count()
         self.total_respondidos = base.filter_by(status='RESPONDIDO').count()
         self.total_erros = base.filter_by(status='ERRO').count()
         db.session.commit()
+
+    def total_sem_resposta_count(self):
+        """Pacientes que receberam a mensagem (incluindo retry) e não responderam."""
+        return PacienteSCIH.query.filter_by(
+            campanha_id=self.id, status='SEM_RESPOSTA'
+        ).count()
 
     def pct_resposta(self):
         if not self.total_enviados:

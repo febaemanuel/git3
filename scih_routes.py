@@ -793,14 +793,19 @@ def init_scih_routes(app, db):
             camp_q = camp_q.filter_by(criador_id=current_user.id)
         campanhas_disponiveis = camp_q.order_by(CampanhaSCIH.id.desc()).all()
 
-        # Campanhas selecionadas (via query param ?campanhas=1,2,3 ou só ?campanhas=1)
-        camp_ids_raw = request.args.get('campanhas', '').strip()
+        # Campanhas selecionadas.
+        # Aceita 2 formatos:
+        # - <select multiple>: envia ?campanhas=1&campanhas=2&campanhas=3 (getlist)
+        # - Link/URL direta: ?campanhas=1,2,3 (CSV)
         camp_ids = []
-        if camp_ids_raw:
-            for x in camp_ids_raw.split(','):
+        valores = request.args.getlist('campanhas')
+        for v in valores:
+            for x in str(v).split(','):
                 x = x.strip()
                 if x.isdigit():
-                    camp_ids.append(int(x))
+                    n = int(x)
+                    if n not in camp_ids:
+                        camp_ids.append(n)
 
         relatorio = None
         if camp_ids:

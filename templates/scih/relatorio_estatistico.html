@@ -57,6 +57,78 @@
 
 {% if relatorio %}
 
+{# COMO LER (explicação simples, colapsável) #}
+<div class="card mb-3 border-info">
+    <div class="card-header bg-info bg-opacity-10">
+        <button class="btn btn-link p-0 text-decoration-none text-info fw-bold" type="button"
+                data-bs-toggle="collapse" data-bs-target="#comoLer">
+            <i class="bi bi-question-circle-fill"></i> Como ler este relatório? (clique pra abrir)
+        </button>
+    </div>
+    <div id="comoLer" class="collapse">
+        <div class="card-body small">
+            <p class="mb-2"><strong>Em poucas palavras:</strong> esse relatório olha as respostas
+            que a gente recebeu e tenta dizer o que provavelmente é verdade
+            <em>pra todas as pacientes</em> (não só as que responderam).</p>
+
+            <hr class="my-2">
+
+            <p class="mb-1"><strong>Intervalo de Confiança 95% (IC 95%)</strong></p>
+            <p class="text-muted mb-2 ms-3">
+                "Tenho 95% de certeza que o número real tá nessa faixa".
+                Ex.: <code>32% (IC 95%: 18% – 50%)</code> = vi 32% na amostra,
+                mas no total de pacientes pode ser qualquer coisa entre 18% e 50%.
+                Quanto mais respostas, mais estreita a faixa.
+            </p>
+
+            <p class="mb-1"><strong>p-valor (p)</strong></p>
+            <p class="text-muted mb-2 ms-3">
+                Mede se uma diferença é "de verdade" ou foi só sorte/coincidência.
+                <strong>p &lt; 0,05</strong> = pouca chance de ser coincidência (chamamos de
+                "estatisticamente significativo"). <strong>p ≥ 0,05</strong> = pode ser só
+                acaso, não dá pra afirmar nada.
+            </p>
+
+            <p class="mb-1"><strong>Odds Ratio (OR)</strong></p>
+            <p class="text-muted mb-2 ms-3">
+                "Quantas vezes mais provável" uma coisa acontece quando outra está presente.
+                Ex.: OR=3 entre "sintoma" e "buscou atendimento" → quem tem sintoma é
+                <strong>3× mais propenso</strong> a buscar atendimento. OR=1 = sem relação.
+                OR &lt; 1 = relação inversa.
+            </p>
+
+            <p class="mb-1"><strong>Qui-quadrado vs Fisher exato</strong></p>
+            <p class="text-muted mb-2 ms-3">
+                São testes pra ver se duas variáveis estão relacionadas.
+                Qui-quadrado é o padrão. Fisher é mais cuidadoso quando a amostra é pequena.
+                O sistema escolhe automaticamente o melhor.
+            </p>
+
+            <p class="mb-1"><strong>Análise de sensibilidade</strong></p>
+            <p class="text-muted mb-2 ms-3">
+                As pacientes que <em>não responderam</em> podem ter sintoma ou não — não dá pra saber.
+                Por isso mostramos 2 cenários extremos: o <strong>otimista</strong> (assume que
+                ninguém delas teve sintoma) e o <strong>pessimista</strong> (assume que todas tiveram).
+                A verdade está em algum ponto entre os dois.
+            </p>
+
+            <p class="mb-1"><strong>Viés de não-resposta</strong></p>
+            <p class="text-muted mb-0 ms-3">
+                Quem responde formulário no WhatsApp pode ser sistematicamente diferente
+                de quem não responde (por ex., quem tá com sintoma é mais motivada a responder).
+                Por isso os resultados são <strong>indicativos</strong> — servem pra triagem
+                e tendência, não pra dizer "exatamente X% das cesáreas têm ISC".
+            </p>
+
+            <hr class="my-2">
+            <p class="mb-0"><strong class="text-success">Dica de leitura:</strong>
+                comece pelos cards coloridos (números principais com IC 95%), depois veja
+                a <em>Prevalência por sintoma</em> pra saber o que é mais comum, e use as
+                <em>Associações</em> pra entender o que tá ligado a quê.</p>
+        </div>
+    </div>
+</div>
+
 {# ALERTAS METODOLÓGICOS #}
 {% if relatorio.alertas %}
 <div class="mb-3">

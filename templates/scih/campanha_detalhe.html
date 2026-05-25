@@ -45,7 +45,7 @@
 
 <!-- Métricas -->
 <div class="row g-3 mb-4">
-    <div class="col-md-3">
+    <div class="col-md-2-4 col-md-3">
         <div class="card stat-card" style="border-left-color: #128C7E;">
             <div class="card-body">
                 <small class="text-muted">Pacientes</small>
@@ -56,20 +56,32 @@
     <div class="col-md-3">
         <div class="card stat-card" style="border-left-color: #0d6efd;">
             <div class="card-body">
-                <small class="text-muted">Enviadas</small>
+                <small class="text-muted" title="Todos que receberam mensagem em algum momento (inclui sem resposta)">
+                    Recebeu mensagem
+                </small>
                 <h3 class="mb-0" id="m-env">{{ campanha.total_enviados or 0 }}</h3>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
         <div class="card stat-card" style="border-left-color: #25D366;">
             <div class="card-body">
-                <small class="text-muted">Respondidas (<span id="m-pct">{{ campanha.pct_resposta() }}</span>%)</small>
+                <small class="text-muted">Respondeu (<span id="m-pct">{{ campanha.pct_resposta() }}</span>%)</small>
                 <h3 class="mb-0" id="m-resp">{{ campanha.total_respondidos or 0 }}</h3>
             </div>
         </div>
     </div>
-    <div class="col-md-3">
+    <div class="col-md-2">
+        <div class="card stat-card" style="border-left-color: #fd7e14;">
+            <div class="card-body">
+                <small class="text-muted" title="Recebeu mensagem inicial + reenvio, mas não respondeu nenhum">
+                    Sem resposta
+                </small>
+                <h3 class="mb-0" id="m-sem">{{ campanha.total_sem_resposta_count() }}</h3>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-2">
         <div class="card stat-card" style="border-left-color: #dc3545;">
             <div class="card-body">
                 <small class="text-muted">Erros de envio</small>
@@ -254,6 +266,9 @@ async function atualizarProgresso() {
         document.getElementById('m-env').textContent = d.total_enviados;
         document.getElementById('m-resp').textContent = d.total_respondidos;
         document.getElementById('m-pct').textContent = d.pct_resposta;
+        if (document.getElementById('m-sem')) {
+            document.getElementById('m-sem').textContent = d.total_sem_resposta || 0;
+        }
         document.getElementById('m-err').textContent = d.total_erros;
 
         // Status badge

@@ -487,6 +487,7 @@ def init_scih_routes(app, db):
             'total_pacientes': camp.total_pacientes,
             'total_enviados': camp.total_enviados,
             'total_respondidos': camp.total_respondidos,
+            'total_sem_resposta': camp.total_sem_resposta_count(),
             'total_erros': camp.total_erros,
             'pct_resposta': camp.pct_resposta(),
             'enviados_hoje': camp.enviados_hoje or 0,

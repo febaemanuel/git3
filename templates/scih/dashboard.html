@@ -56,8 +56,9 @@
                         <th>Template</th>
                         <th>Status</th>
                         <th class="text-center">Pacientes</th>
-                        <th class="text-center">Enviados</th>
+                        <th class="text-center" title="Recebeu mensagem em algum momento">Enviados</th>
                         <th class="text-center">Respondidos</th>
+                        <th class="text-center" title="Recebeu mensagem + reenvio mas não respondeu">Sem resposta</th>
                         <th class="text-center">Taxa</th>
                         <th>Criada</th>
                         <th></th>
@@ -79,6 +80,7 @@
                         <td class="text-center">{{ c.total_pacientes or 0 }}</td>
                         <td class="text-center">{{ c.total_enviados or 0 }}</td>
                         <td class="text-center">{{ c.total_respondidos or 0 }}</td>
+                        <td class="text-center text-warning">{{ c.total_sem_resposta_count() }}</td>
                         <td class="text-center">{{ c.pct_resposta() }}%</td>
                         <td><small>{{ c.created_at|fortaleza_dt }}</small></td>
                         <td>

@@ -741,6 +741,269 @@ def init_scih_routes(app, db):
         )
 
     # =========================================================================
+    # RELATÓRIO ESTATÍSTICO (proporções com IC 95% + qui-quadrado/Fisher)
+    # =========================================================================
+    def _wilson_ci(k, n, alpha=0.05):
+        """Intervalo de confiança Wilson pra proporção. Mais robusto que normal pra N pequeno."""
+        import math
+        if n == 0:
+            return (0.0, 0.0, 0.0)
+        from scipy.stats import norm
+        z = norm.ppf(1 - alpha / 2)
+        p = k / n
+        denom = 1 + z * z / n
+        center = (p + z * z / (2 * n)) / denom
+        margin = (z * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))) / denom
+        return (p, max(0.0, center - margin), min(1.0, center + margin))
+
+    def _testar_associacao_2x2(a, b, c, d):
+        """
+        Tabela 2x2:
+                  exposto    nao_exposto
+        evento       a            b
+        nao_evento   c            d
+
+        Retorna: (teste_nome, p_value, odds_ratio, recomenda_fisher)
+        """
+        from scipy.stats import chi2_contingency, fisher_exact
+        table = [[a, b], [c, d]]
+        # Se alguma célula esperada < 5, prefere Fisher
+        try:
+            chi2, p_chi, dof, expected = chi2_contingency(table, correction=False)
+            min_exp = min(min(row) for row in expected)
+            usar_fisher = min_exp < 5
+            if usar_fisher:
+                odds, p = fisher_exact(table)
+                return ('Fisher exato', p, odds, True)
+            odds = (a * d) / (b * c) if (b * c) > 0 else float('inf')
+            return ('Qui-quadrado', p_chi, odds, False)
+        except Exception:
+            return ('-', None, None, False)
+
+    @app.route('/scih/relatorio-estatistico')
+    @login_required
+    def scih_relatorio_estatistico():
+        if not _exige_scih():
+            return redirect(url_for('login'))
+
+        # Carrega campanhas do usuário
+        camp_q = CampanhaSCIH.query
+        if not current_user.is_admin:
+            camp_q = camp_q.filter_by(criador_id=current_user.id)
+        campanhas_disponiveis = camp_q.order_by(CampanhaSCIH.id.desc()).all()
+
+        # Campanhas selecionadas (via query param ?campanhas=1,2,3 ou só ?campanhas=1)
+        camp_ids_raw = request.args.get('campanhas', '').strip()
+        camp_ids = []
+        if camp_ids_raw:
+            for x in camp_ids_raw.split(','):
+                x = x.strip()
+                if x.isdigit():
+                    camp_ids.append(int(x))
+
+        relatorio = None
+        if camp_ids:
+            # Filtra respostas das campanhas escolhidas (do usuário)
+            q = RespostaSCIH.query.join(
+                CampanhaSCIH, RespostaSCIH.campanha_id == CampanhaSCIH.id
+            ).filter(RespostaSCIH.campanha_id.in_(camp_ids))
+            if not current_user.is_admin:
+                q = q.filter(CampanhaSCIH.criador_id == current_user.id)
+            respostas = q.all()
+
+            # Conta pacientes das campanhas pra denominadores
+            pac_q = PacienteSCIH.query.filter(PacienteSCIH.campanha_id.in_(camp_ids))
+            total_cadastrados = pac_q.count()
+            total_recebeu_msg = pac_q.filter(
+                PacienteSCIH.status.in_(['ENVIADO', 'RESPONDIDO', 'SEM_RESPOSTA'])
+            ).count()
+            total_sem_resposta_real = pac_q.filter_by(status='SEM_RESPOSTA').count()
+            total_erros = pac_q.filter_by(status='ERRO').count()
+
+            n_respondidos = len(respostas)
+            taxa_resposta = (n_respondidos / total_recebeu_msg * 100) if total_recebeu_msg else 0
+
+            # Parse dos JSONs
+            parsed = []
+            for r in respostas:
+                try:
+                    dados = json.loads(r.dados_json or '{}')
+                except Exception:
+                    dados = {}
+                parsed.append({
+                    'r': r,
+                    'd': dados,
+                    'sintomas': dados.get('sintomas', []) or [],
+                    'paciente': r.paciente,
+                    'campanha': r.paciente.campanha if r.paciente else None,
+                })
+
+            # === Proporções gerais (com IC 95% Wilson) ===
+            indicadores_principais = []
+            for label, key, color in [
+                ('Apresentou algum sintoma', 'apresentou_sintoma', 'danger'),
+                ('Buscou atendimento médico', 'buscou_atendimento', 'primary'),
+                ('Utilizou algum remédio', 'usou_remedio', 'warning'),
+            ]:
+                k = sum(1 for it in parsed if getattr(it['r'], key))
+                p, lo, hi = _wilson_ci(k, n_respondidos)
+                indicadores_principais.append({
+                    'label': label, 'k': k, 'n': n_respondidos,
+                    'pct': round(p * 100, 1),
+                    'ic_lo': round(lo * 100, 1), 'ic_hi': round(hi * 100, 1),
+                    'color': color,
+                })
+
+            # === Prevalência por sintoma específico (IC 95%) ===
+            prevalencia_sintomas = []
+            for s in SINTOMAS_OPCOES:
+                k = sum(1 for it in parsed if s in it['sintomas'])
+                p, lo, hi = _wilson_ci(k, n_respondidos)
+                prevalencia_sintomas.append({
+                    'sintoma': s, 'k': k, 'n': n_respondidos,
+                    'pct': round(p * 100, 1),
+                    'ic_lo': round(lo * 100, 1), 'ic_hi': round(hi * 100, 1),
+                })
+            prevalencia_sintomas.sort(key=lambda x: -x['k'])
+
+            # === Análise de sensibilidade (não-resposta) ===
+            # Cenário PESSIMISTA: todos sem_resposta tiveram o desfecho
+            # Cenário OTIMISTA: nenhum sem_resposta teve
+            sensibilidade = []
+            for label, key in [
+                ('Apresentou sintoma', 'apresentou_sintoma'),
+                ('Buscou atendimento', 'buscou_atendimento'),
+            ]:
+                k_obs = sum(1 for it in parsed if getattr(it['r'], key))
+                pessimista_k = k_obs + total_sem_resposta_real
+                otimista_k = k_obs
+                base = total_recebeu_msg
+                if base > 0:
+                    p_obs = round(k_obs / n_respondidos * 100, 1) if n_respondidos else 0
+                    p_pess = round(pessimista_k / base * 100, 1)
+                    p_otim = round(otimista_k / base * 100, 1)
+                else:
+                    p_obs = p_pess = p_otim = 0
+                sensibilidade.append({
+                    'label': label,
+                    'observado': p_obs,
+                    'pessimista': p_pess,
+                    'otimista': p_otim,
+                })
+
+            # === Associações 2x2 (Qui-quadrado / Fisher) ===
+            def cell_count(filtro_a, filtro_b):
+                return sum(1 for it in parsed if filtro_a(it) and filtro_b(it))
+
+            associacoes = []
+            pares = [
+                ('Sintoma × Buscou atendimento',
+                 lambda it: it['r'].apresentou_sintoma,
+                 lambda it: it['r'].buscou_atendimento),
+                ('Sintoma × Usou remédio',
+                 lambda it: it['r'].apresentou_sintoma,
+                 lambda it: it['r'].usou_remedio),
+                ('Buscou atendimento × Usou remédio',
+                 lambda it: it['r'].buscou_atendimento,
+                 lambda it: it['r'].usou_remedio),
+            ]
+            for label, fa, fb in pares:
+                a = cell_count(fa, fb)          # ambos sim
+                b = cell_count(fa, lambda it: not fb(it))  # A sim, B não
+                c = cell_count(lambda it: not fa(it), fb)  # A não, B sim
+                d = cell_count(lambda it: not fa(it), lambda it: not fb(it))  # ambos não
+                teste, p, odds, usou_fisher = _testar_associacao_2x2(a, b, c, d)
+                associacoes.append({
+                    'label': label,
+                    'tabela': {'a': a, 'b': b, 'c': c, 'd': d},
+                    'teste': teste,
+                    'p_value': round(p, 4) if p is not None else None,
+                    'odds_ratio': round(odds, 2) if odds is not None and odds != float('inf') else None,
+                    'significativo': (p is not None and p < 0.05),
+                    'usou_fisher': usou_fisher,
+                })
+
+            # === Comparação por procedimento (Cesariana × Mastologia) ===
+            por_procedimento = []
+            grupos = {'CESARIANA': [], 'MASTOLOGIA': []}
+            for it in parsed:
+                t = it['campanha'].template if it['campanha'] else None
+                if t in grupos:
+                    grupos[t].append(it)
+
+            comparacao_proc = None
+            if len(grupos['CESARIANA']) >= 5 and len(grupos['MASTOLOGIA']) >= 5:
+                # Comparar taxa de "apresentou sintoma" entre os 2 grupos
+                a = sum(1 for it in grupos['CESARIANA'] if it['r'].apresentou_sintoma)
+                c = len(grupos['CESARIANA']) - a
+                b = sum(1 for it in grupos['MASTOLOGIA'] if it['r'].apresentou_sintoma)
+                d = len(grupos['MASTOLOGIA']) - b
+                teste, p, odds, _ = _testar_associacao_2x2(a, b, c, d)
+                comparacao_proc = {
+                    'cesariana': {
+                        'n': len(grupos['CESARIANA']),
+                        'com_sintoma': a,
+                        'pct': round(a / len(grupos['CESARIANA']) * 100, 1) if grupos['CESARIANA'] else 0,
+                    },
+                    'mastologia': {
+                        'n': len(grupos['MASTOLOGIA']),
+                        'com_sintoma': b,
+                        'pct': round(b / len(grupos['MASTOLOGIA']) * 100, 1) if grupos['MASTOLOGIA'] else 0,
+                    },
+                    'teste': teste,
+                    'p_value': round(p, 4) if p is not None else None,
+                    'odds_ratio': round(odds, 2) if odds is not None and odds != float('inf') else None,
+                    'significativo': (p is not None and p < 0.05),
+                }
+
+            # === Alertas metodológicos ===
+            alertas = []
+            if n_respondidos < 30:
+                alertas.append({
+                    'tipo': 'warning',
+                    'msg': f'Amostra pequena (N={n_respondidos}). Resultados têm baixa precisão estatística — '
+                           f'usar com cuidado para inferência populacional.'
+                })
+            if total_recebeu_msg > 0 and (total_sem_resposta_real / total_recebeu_msg) > 0.4:
+                taxa_nr = round(total_sem_resposta_real / total_recebeu_msg * 100, 1)
+                alertas.append({
+                    'tipo': 'danger',
+                    'msg': f'Alta taxa de não-resposta ({taxa_nr}%). Forte risco de viés de seleção — '
+                           f'pacientes que responderam podem ser sistematicamente diferentes das que não responderam. '
+                           f'Veja a análise de sensibilidade abaixo.'
+                })
+            if any(a['usou_fisher'] for a in associacoes):
+                alertas.append({
+                    'tipo': 'info',
+                    'msg': 'Algumas associações usaram teste exato de Fisher porque a frequência esperada '
+                           'em alguma célula era menor que 5 (mais robusto para N pequeno).'
+                })
+
+            relatorio = {
+                'campanhas': [c for c in campanhas_disponiveis if c.id in camp_ids],
+                'n_respondidos': n_respondidos,
+                'total_cadastrados': total_cadastrados,
+                'total_recebeu_msg': total_recebeu_msg,
+                'total_sem_resposta_real': total_sem_resposta_real,
+                'total_erros': total_erros,
+                'taxa_resposta': round(taxa_resposta, 1),
+                'indicadores_principais': indicadores_principais,
+                'prevalencia_sintomas': prevalencia_sintomas,
+                'sensibilidade': sensibilidade,
+                'associacoes': associacoes,
+                'comparacao_proc': comparacao_proc,
+                'alertas': alertas,
+                'gerado_em': _fortaleza_dt(datetime.utcnow()),
+            }
+
+        return render_template(
+            'scih/relatorio_estatistico.html',
+            campanhas_disponiveis=campanhas_disponiveis,
+            camp_ids=camp_ids,
+            relatorio=relatorio,
+        )
+
+    # =========================================================================
     # PÁGINA PÚBLICA DA PESQUISA (sem login, acesso por token)
     # =========================================================================
     # CSRF isento: a autenticação aqui é o token único na URL (já é um secret

@@ -1,0 +1,312 @@
+{% extends 'base.html' %}
+{% block title %}Relatório Estatístico - SCIH{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stat-box { padding: 16px; border-radius: 8px; border: 1px solid #dee2e6; }
+    .stat-box .h2 { margin-bottom: 4px; }
+    .ic-text { font-size: 0.8rem; color: #6c757d; }
+    .alert-meto { border-left: 4px solid; padding-left: 16px; }
+    .sig-yes { background: #d1e7dd; padding: 2px 8px; border-radius: 4px; font-weight: 600; }
+    .sig-no  { background: #f8f9fa; padding: 2px 8px; border-radius: 4px; color: #6c757d; }
+    .pequeno { font-size: 0.85rem; color: #495057; }
+    .table-stats th { font-size: 0.85rem; color: #495057; font-weight: 600; }
+    .table-stats td { font-size: 0.9rem; vertical-align: middle; }
+    .bar-mini { height: 8px; background: #e9ecef; border-radius: 4px; overflow: hidden; }
+    .bar-mini .fill { height: 100%; background: linear-gradient(90deg, #128C7E, #25D366); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h3 class="mb-0"><i class="bi bi-bar-chart-line"></i> Relatório Estatístico</h3>
+        <small class="text-muted">Análise inferencial das respostas SCIH</small>
+    </div>
+    {% if relatorio %}
+    <button class="btn btn-outline-secondary btn-sm" onclick="window.print()">
+        <i class="bi bi-printer"></i> Imprimir / PDF
+    </button>
+    {% endif %}
+</div>
+
+<!-- Seletor de campanhas -->
+<div class="card mb-4">
+    <div class="card-header">Selecionar campanhas</div>
+    <div class="card-body">
+        <form method="GET" class="row g-2 align-items-end">
+            <div class="col-md-9">
+                <label class="form-label small mb-1">Campanhas (segura Ctrl/Cmd pra selecionar várias)</label>
+                <select name="campanhas" class="form-select" multiple size="6">
+                    {% for c in campanhas_disponiveis %}
+                    <option value="{{ c.id }}" {% if c.id in camp_ids %}selected{% endif %}>
+                        #{{ c.id }} — {{ c.nome }} ({{ c.template }}) — {{ c.total_respondidos or 0 }} respostas
+                    </option>
+                    {% endfor %}
+                </select>
+                <small class="text-muted">Selecione 1 ou mais campanhas. O relatório agrega todas as respostas selecionadas.</small>
+            </div>
+            <div class="col-md-3 text-end">
+                <button class="btn btn-whatsapp w-100" type="submit">
+                    <i class="bi bi-magic"></i> Gerar relatório
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if relatorio %}
+
+{# ALERTAS METODOLÓGICOS #}
+{% if relatorio.alertas %}
+<div class="mb-3">
+    {% for a in relatorio.alertas %}
+    <div class="alert alert-{{ a.tipo }} alert-meto mb-2">
+        <i class="bi bi-info-circle-fill"></i> {{ a.msg }}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+
+{# CABEÇALHO RELATÓRIO #}
+<div class="card mb-3">
+    <div class="card-body">
+        <h5>Recorte analisado</h5>
+        <div class="row g-3 small">
+            <div class="col-md-6">
+                <strong>Campanhas:</strong>
+                <ul class="mb-1">
+                {% for c in relatorio.campanhas %}
+                    <li>#{{ c.id }} — {{ c.nome }} ({{ c.template }})</li>
+                {% endfor %}
+                </ul>
+            </div>
+            <div class="col-md-6 text-end">
+                <div><strong>Gerado em:</strong> {{ relatorio.gerado_em }}</div>
+                <div><strong>Total cadastrados:</strong> {{ relatorio.total_cadastrados }}</div>
+                <div><strong>Recebeu mensagem:</strong> {{ relatorio.total_recebeu_msg }}</div>
+                <div><strong>Respondidos:</strong> {{ relatorio.n_respondidos }}</div>
+                <div><strong>Taxa de resposta:</strong> {{ relatorio.taxa_resposta }}%</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+{# INDICADORES PRINCIPAIS (com IC 95%) #}
+<div class="card mb-3">
+    <div class="card-header">
+        <strong>Indicadores principais (proporção observada com IC 95% — método Wilson)</strong>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            {% for ind in relatorio.indicadores_principais %}
+            <div class="col-md-4">
+                <div class="stat-box" style="border-left: 4px solid var(--bs-{{ ind.color }});">
+                    <small class="text-muted">{{ ind.label }}</small>
+                    <div class="h2 text-{{ ind.color }}">{{ ind.pct }}%</div>
+                    <div class="pequeno">{{ ind.k }} de {{ ind.n }}</div>
+                    <div class="ic-text">IC 95%: {{ ind.ic_lo }}% – {{ ind.ic_hi }}%</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <hr>
+        <small class="text-muted">
+            <strong>Interpretação:</strong> A proporção observada na amostra é estimativa pontual.
+            O IC 95% indica a faixa em que a verdadeira proporção populacional provavelmente está
+            (com 95% de confiança). Faixas largas indicam baixa precisão devido ao tamanho amostral.
+        </small>
+    </div>
+</div>
+
+{# PREVALÊNCIA POR SINTOMA #}
+<div class="card mb-3">
+    <div class="card-header">
+        <strong>Prevalência por sintoma específico (IC 95%)</strong>
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-stats table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Sintoma</th>
+                    <th class="text-center">N reportaram</th>
+                    <th class="text-center">% (IC 95%)</th>
+                    <th style="width: 40%;">Visualização</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in relatorio.prevalencia_sintomas %}
+                <tr>
+                    <td>{{ s.sintoma }}</td>
+                    <td class="text-center">{{ s.k }} / {{ s.n }}</td>
+                    <td class="text-center">
+                        <strong>{{ s.pct }}%</strong>
+                        <div class="ic-text">{{ s.ic_lo }}% – {{ s.ic_hi }}%</div>
+                    </td>
+                    <td>
+                        <div class="bar-mini"><div class="fill" style="width: {{ s.pct }}%"></div></div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{# COMPARAÇÃO CESARIANA × MASTOLOGIA #}
+{% if relatorio.comparacao_proc %}
+{% set cp = relatorio.comparacao_proc %}
+<div class="card mb-3">
+    <div class="card-header">
+        <strong>Comparação entre procedimentos</strong>
+        <small class="text-muted">— Apresentou sintomas (Cesariana vs Mastologia)</small>
+    </div>
+    <div class="card-body">
+        <div class="row g-3 mb-3">
+            <div class="col-md-5">
+                <div class="stat-box">
+                    <small class="text-muted">Cesariana</small>
+                    <div class="h3">{{ cp.cesariana.pct }}%</div>
+                    <div class="pequeno">{{ cp.cesariana.com_sintoma }} de {{ cp.cesariana.n }} com sintoma</div>
+                </div>
+            </div>
+            <div class="col-md-5">
+                <div class="stat-box">
+                    <small class="text-muted">Mastologia</small>
+                    <div class="h3">{{ cp.mastologia.pct }}%</div>
+                    <div class="pequeno">{{ cp.mastologia.com_sintoma }} de {{ cp.mastologia.n }} com sintoma</div>
+                </div>
+            </div>
+            <div class="col-md-2 text-center">
+                <small class="text-muted d-block">{{ cp.teste }}</small>
+                <strong>p = {{ cp.p_value }}</strong>
+                {% if cp.significativo %}
+                    <div class="sig-yes mt-1">Significativo</div>
+                {% else %}
+                    <div class="sig-no mt-1">Não significativo</div>
+                {% endif %}
+                {% if cp.odds_ratio %}
+                <small class="d-block text-muted mt-1">OR: {{ cp.odds_ratio }}</small>
+                {% endif %}
+            </div>
+        </div>
+        <small class="text-muted">
+            <strong>Interpretação:</strong> Se p < 0,05, há evidência estatística de diferença
+            entre os grupos. OR (odds ratio) > 1 sugere maior chance de sintoma na cesariana;
+            < 1 sugere maior chance na mastologia.
+        </small>
+    </div>
+</div>
+{% endif %}
+
+{# ASSOCIAÇÕES (2x2) #}
+<div class="card mb-3">
+    <div class="card-header">
+        <strong>Associações entre variáveis (qui-quadrado / Fisher)</strong>
+    </div>
+    <div class="card-body p-0">
+        <table class="table table-stats table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Variáveis comparadas</th>
+                    <th class="text-center">Tabela 2×2 (a/b/c/d)</th>
+                    <th class="text-center">Teste</th>
+                    <th class="text-center">Odds Ratio</th>
+                    <th class="text-center">p-valor</th>
+                    <th class="text-center">Significância</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in relatorio.associacoes %}
+                <tr>
+                    <td><strong>{{ a.label }}</strong></td>
+                    <td class="text-center pequeno">
+                        {{ a.tabela.a }} / {{ a.tabela.b }} / {{ a.tabela.c }} / {{ a.tabela.d }}
+                    </td>
+                    <td class="text-center"><small>{{ a.teste }}</small></td>
+                    <td class="text-center">{{ a.odds_ratio if a.odds_ratio is not none else '-' }}</td>
+                    <td class="text-center">{{ a.p_value if a.p_value is not none else '-' }}</td>
+                    <td class="text-center">
+                        {% if a.significativo %}
+                            <span class="sig-yes">p &lt; 0,05</span>
+                        {% else %}
+                            <span class="sig-no">n.s.</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    <div class="card-footer">
+        <small class="text-muted">
+            <strong>Leitura:</strong> Tabela <code>a/b/c/d</code> =
+            (ambos SIM / 1º SIM e 2º NÃO / 1º NÃO e 2º SIM / ambos NÃO).
+            <code>n.s.</code> = não significativo. OR > 1 indica associação positiva
+            (presença de uma variável aumenta chance da outra).
+        </small>
+    </div>
+</div>
+
+{# ANÁLISE DE SENSIBILIDADE #}
+<div class="card mb-3">
+    <div class="card-header">
+        <strong>Análise de sensibilidade — viés de não-resposta</strong>
+    </div>
+    <div class="card-body">
+        <p class="text-muted small">
+            Como temos {{ relatorio.total_sem_resposta_real }} pacientes que não responderam, a estatística
+            observada pode estar enviesada. Aqui mostramos a faixa de variação considerando
+            os cenários extremos:
+        </p>
+        <table class="table table-stats">
+            <thead class="table-light">
+                <tr>
+                    <th>Indicador</th>
+                    <th class="text-center">Otimista <small class="text-muted">(nenhum sem-resposta teve)</small></th>
+                    <th class="text-center"><strong>Observado</strong></th>
+                    <th class="text-center">Pessimista <small class="text-muted">(todos sem-resposta tiveram)</small></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in relatorio.sensibilidade %}
+                <tr>
+                    <td><strong>{{ s.label }}</strong></td>
+                    <td class="text-center text-success">{{ s.otimista }}%</td>
+                    <td class="text-center"><strong>{{ s.observado }}%</strong></td>
+                    <td class="text-center text-danger">{{ s.pessimista }}%</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        <small class="text-muted">
+            <strong>Interpretação:</strong> A verdadeira taxa na população está em algum lugar
+            entre o otimista e o pessimista. Se a faixa for muito larga (>20 pontos),
+            o resultado observado é pouco confiável para extrapolação populacional.
+        </small>
+    </div>
+</div>
+
+{# RODAPÉ METODOLÓGICO #}
+<div class="card mb-3 border-secondary">
+    <div class="card-header bg-light"><small><strong>Notas metodológicas</strong></small></div>
+    <div class="card-body small text-muted">
+        <ul class="mb-0">
+            <li><strong>Intervalo de Confiança:</strong> calculado pelo método de Wilson, mais robusto que normal para N pequeno e proporções extremas.</li>
+            <li><strong>Qui-quadrado vs Fisher exato:</strong> usamos Fisher quando alguma frequência esperada é menor que 5 (regra padrão).</li>
+            <li><strong>Significância estatística:</strong> consideramos p &lt; 0,05 como significativo (5% de risco de falso positivo).</li>
+            <li><strong>Limitações:</strong> resultados representam a amostra de respondentes via WhatsApp e podem não refletir a população total devido a possíveis vieses de seleção (não-resposta, acesso digital, etc).</li>
+            <li><strong>Uso clínico:</strong> este relatório é um instrumento de triagem/sinalização. Não substitui análise clínica individual.</li>
+        </ul>
+    </div>
+</div>
+
+{% else %}
+<div class="card">
+    <div class="card-body text-center text-muted py-5">
+        <i class="bi bi-arrow-up display-4 d-block mb-3"></i>
+        <p class="mb-0">Selecione uma ou mais campanhas acima e clique em <strong>"Gerar relatório"</strong>.</p>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

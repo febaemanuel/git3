@@ -51,6 +51,14 @@ temp_uploads/
 .coverage
 htmlcov/
 
+# Node
+node_modules/
+package.json
+package-lock.json
+
+# Screenshots (generated)
+screenshots/
+
 # Temporary files
 *.tmp
 *.bak

@@ -2803,70 +2803,87 @@ class WhatsApp:
                 sucesso, msg = self.criar_instancia()
                 if not sucesso:
                     return False, f"Erro ao criar instancia: {msg}"
-                logger.info("Instancia criada, aguardando...")
-                time.sleep(2)
+                logger.info("Instancia criada, aguardando inicializacao...")
+                time.sleep(5)
 
-            # Passo 3: Conecta e obtem QR Code
-            ok, r = self._req('GET', f"/instance/connect/{self.instance}")
+            # Passo 3: Conecta e obtem QR Code (com retry)
+            for tentativa in range(1, 4):
+                if tentativa > 1:
+                    logger.info(f"Tentativa {tentativa}/3 de obter QR Code...")
+                    time.sleep(3 * tentativa)
 
-            logger.info(f"Response Status: {r.status_code if ok else 'erro'}")
+                ok, r = self._req('GET', f"/instance/connect/{self.instance}")
+                logger.info(f"Tentativa {tentativa}: Response Status: {r.status_code if ok else 'erro'}")
 
-            if ok and r.status_code == 200:
-                data = r.json()
-                logger.info(f"Response data keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
+                if ok and r.status_code == 200:
+                    data = r.json()
+                    logger.info(f"Response data keys: {list(data.keys()) if isinstance(data, dict) else type(data)}")
 
-                qrcode = None
+                    qrcode = None
 
-                # Formato 1: { "base64": "data:image..." }
-                if isinstance(data, dict):
-                    if 'base64' in data:
-                        qrcode = data['base64']
-                        logger.info("QR Code encontrado (formato: base64)")
+                    # Formato 1: { "base64": "data:image..." }
+                    if isinstance(data, dict):
+                        if 'base64' in data:
+                            qrcode = data['base64']
+                            logger.info("QR Code encontrado (formato: base64)")
 
-                    # Formato 2: { "qrcode": { "base64": "..." } }
-                    elif 'qrcode' in data:
-                        qr_obj = data['qrcode']
-                        if isinstance(qr_obj, dict):
-                            qrcode = qr_obj.get('base64') or qr_obj.get('code')
-                        elif isinstance(qr_obj, str):
-                            qrcode = qr_obj
-                        if qrcode:
-                            logger.info("QR Code encontrado (formato: qrcode)")
+                        # Formato 2: { "qrcode": { "base64": "..." } }
+                        elif 'qrcode' in data:
+                            qr_obj = data['qrcode']
+                            if isinstance(qr_obj, dict):
+                                qrcode = qr_obj.get('base64') or qr_obj.get('code')
+                            elif isinstance(qr_obj, str):
+                                qrcode = qr_obj
+                            if qrcode:
+                                logger.info("QR Code encontrado (formato: qrcode)")
 
-                    # Formato 3: { "code": "..." }
-                    elif 'code' in data:
-                        qrcode = data['code']
-                        logger.info("QR Code encontrado (formato: code)")
+                        # Formato 3: { "code": "..." }
+                        elif 'code' in data:
+                            qrcode = data['code']
+                            logger.info("QR Code encontrado (formato: code)")
 
-                    # Formato 4: Pairing code
-                    elif 'pairingCode' in data:
-                        pairing = data['pairingCode']
-                        logger.info(f"Pairing code: {pairing}")
-                        return False, f"Use o codigo de pareamento: {pairing}"
+                        # Formato 4: Pairing code
+                        elif 'pairingCode' in data:
+                            pairing = data['pairingCode']
+                            logger.info(f"Pairing code: {pairing}")
+                            return False, f"Use o codigo de pareamento: {pairing}"
 
-                    # Formato 5: Ja conectado
-                    elif data.get('instance', {}).get('state') == 'open':
-                        return False, "WhatsApp ja esta conectado!"
+                        # Formato 5: Ja conectado
+                        elif data.get('instance', {}).get('state') == 'open':
+                            return False, "WhatsApp ja esta conectado!"
 
-                if qrcode:
-                    if not qrcode.startswith('data:image'):
-                        qrcode = f"data:image/png;base64,{qrcode}"
-                    logger.info(f"QR Code retornado ({len(qrcode)} chars)")
-                    return True, qrcode
+                    if qrcode:
+                        if not qrcode.startswith('data:image'):
+                            qrcode = f"data:image/png;base64,{qrcode}"
+                        logger.info(f"QR Code retornado ({len(qrcode)} chars)")
+                        return True, qrcode
+                    else:
+                        logger.warning(f"Tentativa {tentativa}: QR nao encontrado na resposta. Resposta: {str(data)[:300]}")
+                        if tentativa < 3:
+                            continue
+                        return False, "QR Code nao disponivel. Tente novamente em alguns segundos."
+
+                elif ok and r.status_code == 404:
+                    # Instancia pode nao estar pronta ainda, tenta de novo
+                    if tentativa < 3:
+                        logger.warning(f"Tentativa {tentativa}: instancia nao encontrada, aguardando...")
+                        continue
+                    return False, "Instancia nao encontrada. Tente novamente."
+
+                elif ok and r.status_code == 400:
+                    return False, "Erro na requisicao. Verifique o nome da instancia."
+
+                elif ok and r.status_code in [401, 403]:
+                    return False, "API Key invalida."
+
                 else:
-                    logger.warning(f"QR nao encontrado. Resposta: {str(data)[:300]}")
-                    return False, "QR Code nao disponivel. Tente novamente em alguns segundos."
+                    error_msg = f"HTTP {r.status_code}: {r.text[:200]}" if ok else str(r)
+                    logger.error(f"Erro tentativa {tentativa}: {error_msg}")
+                    if tentativa < 3:
+                        continue
+                    return False, error_msg
 
-            elif ok and r.status_code == 404:
-                return False, "Instancia nao encontrada. Verifique o nome da instancia."
-
-            elif ok and r.status_code in [401, 403]:
-                return False, "API Key invalida."
-
-            else:
-                error_msg = f"HTTP {r.status_code}: {r.text[:200]}" if ok else str(r)
-                logger.error(f"Erro: {error_msg}")
-                return False, error_msg
+            return False, "QR Code nao disponivel apos 3 tentativas. Aguarde um momento e tente novamente."
 
         except requests.exceptions.ConnectionError as e:
             logger.error(f"Erro de conexao: {e}")

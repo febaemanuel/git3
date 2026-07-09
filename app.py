@@ -2785,19 +2785,28 @@ class WhatsApp:
 
             # Verifica se nossa instancia existe
             instance_exists = False
+            instance_state = None
             if isinstance(instances, list):
                 for inst in instances:
                     inst_name = inst.get('instance', {}).get('instanceName') or inst.get('instanceName')
                     if inst_name == self.instance:
                         instance_exists = True
-                        state = inst.get('instance', {}).get('status') or inst.get('state') or inst.get('instance', {}).get('state')
-                        logger.info(f"Instancia encontrada - Estado: {state}")
+                        instance_state = inst.get('instance', {}).get('status') or inst.get('state') or inst.get('instance', {}).get('state')
+                        logger.info(f"Instancia encontrada - Estado: {instance_state}")
 
-                        if state == 'open':
+                        if instance_state == 'open':
                             return False, "WhatsApp ja esta conectado!"
                         break
 
-            # Passo 2: Se nao existe, cria
+            # Passo 2: Se a instancia existe mas nao esta aberta, remove e recria do zero
+            # Isso resolve casos de instancia corrompida apos falha de desconexao anterior
+            if instance_exists:
+                logger.info(f"Instancia existe com estado '{instance_state}', removendo para recriar limpa...")
+                self._req('DELETE', f"/instance/delete/{self.instance}")
+                time.sleep(3)
+                instance_exists = False
+
+            # Passo 3: Se nao existe (ou foi removida), cria nova
             if not instance_exists:
                 logger.info("Instancia nao existe, criando...")
                 sucesso, msg = self.criar_instancia()
@@ -2806,7 +2815,7 @@ class WhatsApp:
                 logger.info("Instancia criada, aguardando inicializacao...")
                 time.sleep(5)
 
-            # Passo 3: Conecta e obtem QR Code (com retry)
+            # Passo 4: Conecta e obtem QR Code (com retry)
             for tentativa in range(1, 4):
                 if tentativa > 1:
                     logger.info(f"Tentativa {tentativa}/3 de obter QR Code...")

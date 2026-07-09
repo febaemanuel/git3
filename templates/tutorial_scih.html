@@ -1,0 +1,890 @@
+{% extends "base.html" %}
+
+{% block title %}Tutorial - Modo SCIH{% endblock %}
+
+{% block extra_css %}
+<style>
+    .tut-step { margin-bottom: 2.5rem; }
+    .tut-mock { background: #f8f9fa; border-radius: 12px; padding: 20px 24px; border: 1px solid #dee2e6; box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
+    .tut-mock-header { border-bottom: 1px solid #dee2e6; padding-bottom: 12px; margin-bottom: 16px; }
+    .mock-btn-wpp { background: linear-gradient(135deg, #128C7E 0%, #25D366 100%); color: #fff; border: none; padding: 8px 18px; border-radius: 8px; font-size: 0.9rem; display: inline-flex; align-items: center; gap: 6px; }
+    .mock-btn-success { background: #198754; color: #fff; border: none; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; }
+    .mock-btn-warning { background: #ffc107; color: #000; border: none; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; }
+    .mock-btn-primary { background: #0d6efd; color: #fff; border: none; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; }
+    .mock-btn-danger { background: #dc3545; color: #fff; border: none; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; }
+    .mock-btn-outline { background: #fff; color: #0d6efd; border: 1px solid #0d6efd; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; }
+    .mock-btn-outline-green { background: #fff; color: #198754; border: 1px solid #198754; padding: 6px 14px; border-radius: 6px; font-size: 0.85rem; }
+    .mock-stat { border-left: 4px solid; padding: 10px 16px; background: #fff; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .mock-navbar { background: #212529; color: #fff; padding: 10px 16px; border-radius: 8px 8px 0 0; font-size: 0.85rem; }
+    .mock-navbar a { color: rgba(255,255,255,0.7); text-decoration: none; margin-right: 16px; }
+    .mock-navbar a.active { color: #fff; font-weight: 600; }
+    .mock-badge-enviando { background: #198754; color: #fff; padding: 3px 10px; border-radius: 10px; font-size: 0.75rem; }
+    .mock-badge-pausado { background: #ffc107; color: #000; padding: 3px 10px; border-radius: 10px; font-size: 0.75rem; }
+    .mock-badge-concluído { background: #0d6efd; color: #fff; padding: 3px 10px; border-radius: 10px; font-size: 0.75rem; }
+    .mock-badge-pendente { background: #e9ecef; color: #495057; padding: 3px 10px; border-radius: 10px; font-size: 0.75rem; }
+    .mock-badge-erro { background: #dc3545; color: #fff; padding: 3px 10px; border-radius: 10px; font-size: 0.75rem; }
+    .mock-form-control { border: 1px solid #ced4da; border-radius: 6px; padding: 8px 12px; width: 100%; font-size: 0.85rem; background: #fff; }
+    .mock-form-select { border: 1px solid #ced4da; border-radius: 6px; padding: 8px 12px; width: 100%; font-size: 0.85rem; background: #fff; }
+    .arrow-seta { font-size: 1.5rem; color: #adb5bd; }
+    .highlight-box { border: 2px dashed #fd7e14; border-radius: 8px; padding: 6px; position: relative; }
+    .highlight-box::after { content: "VEJA AQUI"; position: absolute; top: -12px; right: 12px; background: #fd7e14; color: #fff; font-size: 0.65rem; padding: 2px 8px; border-radius: 4px; font-weight: 700; }
+    .step-number { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, #128C7E, #25D366); color: #fff; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.2rem; flex-shrink: 0; }
+    .phone-mock { background: #fff; border-radius: 20px; padding: 16px; border: 3px solid #333; max-width: 300px; margin: 0 auto; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+    .phone-mock-screen { background: #e5ddd5; border-radius: 8px; padding: 12px; min-height: 200px; }
+    .phone-msg { background: #fff; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px; font-size: 0.8rem; box-shadow: 0 1px 2px rgba(0,0,0,0.1); }
+    .phone-msg.link { background: #dcf8c6; }
+    .tutorial-nav { position: sticky; top: 70px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- CABEÇALHO -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <nav aria-label="breadcrumb">
+                <ol class="breadcrumb">
+                    <li class="breadcrumb-item"><a href="{{ url_for('scih_dashboard') }}">Dashboard SCIH</a></li>
+                    <li class="breadcrumb-item active">Tutorial</li>
+                </ol>
+            </nav>
+
+            <div class="d-flex align-items-center gap-3 mb-3">
+                <div style="width: 56px; height: 56px; border-radius: 14px; background: linear-gradient(135deg, #128C7E, #25D366); display: flex; align-items: center; justify-content: center;">
+                    <i class="bi bi-clipboard-pulse text-white" style="font-size: 1.8rem;"></i>
+                </div>
+                <div>
+                    <h2 class="mb-0">Tutorial do Modo SCIH</h2>
+                    <p class="text-muted mb-0">Guia visual passo a passo — Serviço de Controle de Infecção Hospitalar</p>
+                </div>
+            </div>
+
+            <div class="alert alert-info d-flex align-items-center gap-2">
+                <i class="bi bi-clock fs-5"></i>
+                <div><strong>Fuso Horário:</strong> Todas as operações usam o horário de <strong>Fortaleza (UTC-3)</strong>.</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- SIDEBAR DE NAVEGACAO -->
+        <div class="col-md-3 d-none d-md-block">
+            <div class="tutorial-nav">
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <strong><i class="bi bi-list-ol"></i> Navegação Rápida</strong>
+                    </div>
+                    <div class="card-body p-2">
+                        <div class="list-group list-group-flush small">
+                            <a href="#passo1" class="list-group-item list-group-item-action"><span class="badge bg-success me-1">1</span> Dashboard SCIH</a>
+                            <a href="#passo2" class="list-group-item list-group-item-action"><span class="badge bg-success me-1">2</span> Preparar Planilha</a>
+                            <a href="#passo3" class="list-group-item list-group-item-action"><span class="badge bg-success me-1">3</span> Criar Campanha</a>
+                            <a href="#passo4" class="list-group-item list-group-item-action"><span class="badge bg-success me-1">4</span> Iniciar Envio</a>
+                            <a href="#passo5" class="list-group-item list-group-item-action"><span class="badge bg-success me-1">5</span> Acompanhar Progresso</a>
+                            <a href="#passo6" class="list-group-item list-group-item-action"><span class="badge bg-success me-1">6</span> O que a Paciente Ve</a>
+                            <a href="#passo7" class="list-group-item list-group-item-action"><span class="badge bg-success me-1">7</span> Analisar Respostas</a>
+                            <a href="#passo8" class="list-group-item list-group-item-action"><span class="badge bg-success me-1">8</span> Relatório Estatístico</a>
+                            <a href="#passo9" class="list-group-item list-group-item-action"><span class="badge bg-success me-1">9</span> Exportar Dados</a>
+                            <a href="#passo10" class="list-group-item list-group-item-action"><span class="badge bg-success me-1">10</span> Dicas Práticas</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CONTEÚDO PRINCIPAL -->
+        <div class="col-md-9">
+
+            {# ========== PASSO 1: DASHBOARD SCIH ========== #}
+            <div class="card tut-step" id="passo1">
+                <div class="card-header d-flex align-items-center gap-3" style="background: linear-gradient(135deg, #128C7E, #25D366); color: #fff;">
+                    <div class="step-number" style="background: rgba(255,255,255,0.3);">1</div>
+                    <h5 class="mb-0">Tela Inicial — Dashboard SCIH</h5>
+                </div>
+                <div class="card-body">
+                    <p>Esta é a <strong>primeira tela</strong> que você ve ao entrar no modo SCIH. Aqui você gerencia todas as suas campanhas de pesquisa.</p>
+
+                    <!-- MOCK DO NAVBAR -->
+                    <div class="tut-mock mb-4">
+                        <div class="mock-navbar mb-3">
+                            <i class="bi bi-list me-2"></i>
+                            <a href="#" class="active"><i class="bi bi-clipboard-pulse"></i> Pesquisas SCIH</a>
+                            <a href="#"><i class="bi bi-list-check"></i> Respostas</a>
+                            <a href="#"><i class="bi bi-bar-chart-line"></i> Estatistica</a>
+                            <a href="#"><i class="bi bi-upload"></i> Nova Campanha</a>
+                            <a href="#"><i class="bi bi-book"></i> Tutorial</a>
+                        </div>
+
+                        <div class="d-flex justify-content-between align-items-center mb-3">
+                            <div><strong><i class="bi bi-clipboard-pulse"></i> Pesquisas SCIH</strong></div>
+                            <div class="highlight-box d-inline-block">
+                                <span class="mock-btn-wpp"><i class="bi bi-upload"></i> Nova campanha</span>
+                            </div>
+                        </div>
+
+                        <!-- STAT CARDS -->
+                        <div class="row g-2 mb-3">
+                            <div class="col-3"><div class="mock-stat" style="border-left-color:#128C7E;"><small class="text-muted">Campanhas</small><h4 class="mb-0">5</h4></div></div>
+                            <div class="col-3"><div class="mock-stat" style="border-left-color:#25D366;"><small class="text-muted">Pacientes</small><h4 class="mb-0">384</h4></div></div>
+                            <div class="col-3"><div class="mock-stat" style="border-left-color:#0d6efd;"><small class="text-muted">Mensagens enviadas</small><h4 class="mb-0">312</h4></div></div>
+                            <div class="col-3"><div class="mock-stat" style="border-left-color:#fd7e14;"><small class="text-muted">Respostas (67%)</small><h4 class="mb-0">209</h4></div></div>
+                        </div>
+
+                        <!-- TABELA DE CAMPANHAS -->
+                        <table class="table table-sm table-hover mb-0" style="font-size: 0.82rem;">
+                            <thead class="table-light"><tr><th>Nome</th><th>Template</th><th>Status</th><th class="text-center">Pac.</th><th class="text-center">Env.</th><th class="text-center">Resp.</th><th class="text-center">Taxa</th><th>Criada</th><th></th></tr></thead>
+                            <tbody>
+                                <tr>
+                                    <td><strong>Cesareas - Janeiro 2026</strong></td>
+                                    <td><span class="badge bg-secondary">CESARIANA</span></td>
+                                    <td><span class="mock-badge-enviando">enviando</span></td>
+                                    <td class="text-center">100</td><td class="text-center">87</td><td class="text-center">58</td><td class="text-center">67%</td>
+                                    <td><small>05/01/2026</small></td>
+                                    <td><span class="mock-btn-outline" style="font-size:0.75rem;"><i class="bi bi-arrow-right"></i> Abrir</span></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Mastologia - Dez/25</strong></td>
+                                    <td><span class="badge bg-secondary">MASTOLOGIA</span></td>
+                                    <td><span class="mock-badge-concluído">concluído</span></td>
+                                    <td class="text-center">45</td><td class="text-center">45</td><td class="text-center">39</td><td class="text-center">87%</td>
+                                    <td><small>12/12/2025</small></td>
+                                    <td><span class="mock-btn-outline" style="font-size:0.75rem;"><i class="bi bi-arrow-right"></i> Abrir</span></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Cesareas - Fevereiro</strong></td>
+                                    <td><span class="badge bg-secondary">CESARIANA</span></td>
+                                    <td><span class="mock-badge-pausado">pausado</span></td>
+                                    <td class="text-center">50</td><td class="text-center">20</td><td class="text-center">5</td><td class="text-center">10%</td>
+                                    <td><small>01/02/2026</small></td>
+                                    <td><span class="mock-btn-outline" style="font-size:0.75rem;"><i class="bi bi-arrow-right"></i> Abrir</span></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="alert alert-light border">
+                                <h6><i class="bi bi-info-circle text-success"></i> O que você ve aqui:</h6>
+                                <ul class="mb-0 small">
+                                    <li><strong>4 cards</strong> no topo com totais gerais de todas as campanhas</li>
+                                    <li><strong>Tabela</strong> com cada campanha, seu status, quantos pacientes, quantos responderam, taxa de resposta</li>
+                                    <li>Botão <span class="mock-btn-wpp" style="font-size:0.7rem; padding:2px 10px;">Nova campanha</span> para comecar uma pesquisa nova</li>
+                                    <li>Cada linha tem um botão <span class="mock-btn-outline" style="font-size:0.7rem; padding:2px 8px;">Abrir</span> para ver detalhes</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="alert alert-warning">
+                                <h6><i class="bi bi-exclamation-triangle"></i> Importante:</h6>
+                                <p class="mb-0 small">Antes de criar qualquer campanha, o <strong>WhatsApp precisa estar conectado</strong>. Va em <em>Configurações > WhatsApp</em> e conecte o QR Code.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# ========== PASSO 2: PREPARAR PLANILHA ========== #}
+            <div class="card tut-step" id="passo2">
+                <div class="card-header d-flex align-items-center gap-3" style="background: linear-gradient(135deg, #25D366, #128C7E); color: #fff;">
+                    <div class="step-number" style="background: rgba(255,255,255,0.3);">2</div>
+                    <h5 class="mb-0">Preparar a Planilha Excel</h5>
+                </div>
+                <div class="card-body">
+                    <p>Antes de importar, prepare sua planilha com os dados das pacientes. O sistema detecta automáticamente as colunas pelo nome (case-insensitive).</p>
+
+                    <!-- EXEMPLO VISUAL DA PLANILHA -->
+                    <div class="tut-mock mb-3">
+                        <div class="mock-navbar mb-2" style="font-size:0.8rem;">
+                            <i class="bi bi-file-earmark-excel me-1"></i> pacientes_cesarea_janeiro.xlsx — <small class="text-white-50">Planilha no Excel</small>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-bordered table-sm mb-0" style="font-size:0.78rem;">
+                                <thead class="table-success">
+                                    <tr>
+                                        <th>PACIENTE</th>
+                                        <th>FONE</th>
+                                        <th>IDADE</th>
+                                        <th>DATA CIRURGIA</th>
+                                        <th>CIRURGIA</th>
+                                        <th>OBSERVACOES</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>MARIA SILVA SANTOS</td>
+                                        <td class="text-nowrap text-success fw-bold">85998765432</td>
+                                        <td>28</td>
+                                        <td>15/01/2026</td>
+                                        <td>CESARIANA</td>
+                                        <td>Alta em 17/01</td>
+                                    </tr>
+                                    <tr>
+                                        <td>JULIA OLIVEIRA</td>
+                                        <td class="text-nowrap text-success fw-bold">85912345678</td>
+                                        <td>32</td>
+                                        <td>18/01/2026</td>
+                                        <td>CESARIANA</td>
+                                        <td></td>
+                                    </tr>
+                                    <tr>
+                                        <td>ANA PEREIRA</td>
+                                        <td class="text-nowrap text-success fw-bold">85987654321</td>
+                                        <td>25</td>
+                                        <td>22/01/2026</td>
+                                        <td>CESARIANA</td>
+                                        <td>Retorno marcado</td>
+                                    </tr>
+                                    <tr>
+                                        <td>CARLA MENDES</td>
+                                        <td class="text-nowrap text-success fw-bold">85911112222</td>
+                                        <td>41</td>
+                                        <td>05/01/2026</td>
+                                        <td>MASTOLOGIA</td>
+                                        <td></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="alert alert-light border">
+                                <h6 class="text-danger"><i class="bi bi-check-circle-fill"></i> Colunas Obrigatórias:</h6>
+                                <p class="mb-0 small">
+                                    <code>PACIENTE</code> (ou <code>NOME</code>) + <code>FONE</code> (ou <code>TELEFONE</code> ou <code>CELULAR</code>)
+                                </p>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="alert alert-light border">
+                                <h6 class="text-secondary"><i class="bi bi-dash-circle"></i> Colunas Opcionais:</h6>
+                                <p class="mb-0 small">
+                                    <code>IDADE</code>, <code>DATA CIRURGIA</code> (ou <code>DATA</code>), <code>CIRURGIA</code> (ou <code>PROCEDIMENTO</code>), <code>OBSERVACOES</code> (ou <code>OBS</code>)
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mt-2">
+                        <div class="col-md-4">
+                            <div class="card bg-success bg-opacity-10 border-success">
+                                <div class="card-body small">
+                                    <i class="bi bi-check-lg text-success"></i> <strong>Múltiplas abas:</strong> O sistema detecta todas as abas do Excel e você escolhe qual usar.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-success bg-opacity-10 border-success">
+                                <div class="card-body small">
+                                    <i class="bi bi-check-lg text-success"></i> <strong>Telefone automático:</strong> <code>85998765432</code> vira <code>5585998765432</code>.
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card bg-success bg-opacity-10 border-success">
+                                <div class="card-body small">
+                                    <i class="bi bi-check-lg text-success"></i> <strong>Linhas vazias:</strong> Pacientes sem nome ou telefone são ignorados automáticamente.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# ========== PASSO 3: CRIAR CAMPANHA ========== #}
+            <div class="card tut-step" id="passo3">
+                <div class="card-header d-flex align-items-center gap-3" style="background: linear-gradient(135deg, #128C7E, #25D366); color: #fff;">
+                    <div class="step-number" style="background: rgba(255,255,255,0.3);">3</div>
+                    <h5 class="mb-0">Criar Nova Campanha (Tela de Importacao)</h5>
+                </div>
+                <div class="card-body">
+                    <p>Clique no botão <span class="mock-btn-wpp" style="font-size:0.8rem; padding:4px 12px;"><i class="bi bi-upload"></i> Nova campanha</span> no dashboard para abrir esta tela:</p>
+
+                    <!-- MOCK DO FORMULARIO DE IMPORTACAO -->
+                    <div class="tut-mock">
+                        <div class="tut-mock-header">
+                            <h5 class="mb-0"><i class="bi bi-upload"></i> Nova campanha SCIH</h5>
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold"><span class="text-danger">*</span> Nome da campanha</label>
+                                <div class="mock-form-control text-muted">Ex: Cesareas Maio/2026</div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold"><span class="text-danger">*</span> Template</label>
+                                <div class="mock-form-select text-muted">Pesquisa pós-cesarea</div>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label small">Descricao (opcional)</label>
+                            <div class="mock-form-control text-muted">Pesquisa pós-cirúrgica - ala B</div>
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-4">
+                                <label class="form-label small fw-bold"><span class="text-danger">*</span> Hora início (0-23)</label>
+                                <div class="mock-form-control text-muted">8</div>
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small fw-bold"><span class="text-danger">*</span> Hora fim (0-23)</label>
+                                <div class="mock-form-control text-muted">18</div>
+                            </div>
+                            <div class="col-4">
+                                <label class="form-label small fw-bold"><span class="text-danger">*</span> Meta diária</label>
+                                <div class="mock-form-control text-muted">100</div>
+                            </div>
+                        </div>
+
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-8">
+                                <label class="form-label small fw-bold"><span class="text-danger">*</span> Planilha Excel</label>
+                                <div class="highlight-box">
+                                    <div class="mock-form-control bg-light" style="cursor:pointer;">
+                                        <i class="bi bi-paperclip text-success"></i> Escolher arquivo... Nenhum arquivo selecionado
+                                    </div>
+                                </div>
+                                <div class="form-text" style="font-size:0.7rem;">Colunas aceitas: <code>PACIENTE</code> (ou NOME), <code>FONE</code> (ou TELEFONE / CELULAR). Opcionais: <code>IDADE</code>, <code>DATA CIRURGIA</code>, <code>CIRURGIA</code>, <code>OBSERVACOES</code>.</div>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label small">Aba da planilha</label>
+                                <div class="mock-form-control text-muted">(primeira aba)</div>
+                                <div class="form-text" style="font-size:0.7rem;">Deixe em branco pra usar a primeira aba.</div>
+                            </div>
+                        </div>
+
+                        <hr>
+                        <div class="d-flex justify-content-between">
+                            <span class="mock-btn-outline">Cancelar</span>
+                            <span class="mock-btn-wpp"><i class="bi bi-check2"></i> Criar campanha</span>
+                        </div>
+                    </div>
+
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <div class="alert alert-info small mb-0">
+                                <h6><i class="bi bi-lightbulb"></i> Os campos chave:</h6>
+                                <ul class="mb-0">
+                                    <li><strong>Template:</strong> CESARIANA ou MASTOLOGIA — define o texto da mensagem enviada</li>
+                                    <li><strong>Meta diária:</strong> máximo de envios por dia. Reseta a meia-noite.</li>
+                                    <li><strong>Hora início/fim:</strong> só envia mensagens dentro desse intervalo</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="alert alert-success small mb-0">
+                                <h6><i class="bi bi-check-circle"></i> Após clicar em "Criar campanha":</h6>
+                                <p class="mb-0">O sistema processa a planilha, cria um <strong>token único</strong> para cada paciente, e redireciona para a <strong>tela de detalhes da campanha</strong> com status <span class="mock-badge-pendente">pendente</span>.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# ========== PASSO 4: INICIAR ENVIO ========== #}
+            <div class="card tut-step" id="passo4">
+                <div class="card-header d-flex align-items-center gap-3" style="background: linear-gradient(135deg, #25D366, #128C7E); color: #fff;">
+                    <div class="step-number" style="background: rgba(255,255,255,0.3);">4</div>
+                    <h5 class="mb-0">Iniciar o Envio — Tela de Detalhes</h5>
+                </div>
+                <div class="card-body">
+                    <p>Após criar a campanha, você cai nesta tela. Aqui você <strong>inicia, pausa e controlá</strong> o envio das mensagens.</p>
+
+                    <!-- MOCK DA TELA DE DETALHES -->
+                    <div class="tut-mock">
+                        <div class="d-flex justify-content-between align-items-start mb-3">
+                            <div>
+                                <h5 class="mb-0">Cesareas - Janeiro 2026</h5>
+                                <span class="badge bg-secondary">CESARIANA</span>
+                                <span class="mock-badge-pendente">pendente</span>
+                            </div>
+                            <div class="d-flex gap-2 align-items-center">
+                                <span class="text-muted small">Ações:</span>
+                                <div class="highlight-box d-inline-flex gap-1">
+                                    <span class="mock-btn-success"><i class="bi bi-play-fill"></i> Iniciar envio</span>
+                                </div>
+                                <span class="mock-btn-outline-green"><i class="bi bi-file-earmark-excel"></i> Exportar Excel</span>
+                                <span class="mock-btn-danger" style="padding:4px 8px;"><i class="bi bi-trash"></i></span>
+                            </div>
+                        </div>
+
+                        <!-- STATS -->
+                        <div class="row g-2 mb-3">
+                            <div class="col"><div class="mock-stat" style="border-left-color:#128C7E;"><small class="text-muted">Pacientes</small><h5 class="mb-0">100</h5></div></div>
+                            <div class="col"><div class="mock-stat" style="border-left-color:#0d6efd;"><small class="text-muted">Recebeu mensagem</small><h5 class="mb-0">0</h5></div></div>
+                            <div class="col"><div class="mock-stat" style="border-left-color:#25D366;"><small class="text-muted">Respondeu</small><h5 class="mb-0">0</h5></div></div>
+                            <div class="col"><div class="mock-stat" style="border-left-color:#fd7e14;"><small class="text-muted">Sem resposta</small><h5 class="mb-0">0</h5></div></div>
+                            <div class="col"><div class="mock-stat" style="border-left-color:#dc3545;"><small class="text-muted">Erros</small><h5 class="mb-0">0</h5></div></div>
+                        </div>
+                    </div>
+
+                    <div class="row mt-3">
+                        <div class="col-md-4">
+                            <div class="card border-success text-center">
+                                <div class="card-body py-3">
+                                    <h6 class="text-success"><i class="bi bi-play-fill fs-4"></i></h6>
+                                    <strong>Iniciar envio</strong>
+                                    <p class="small text-muted mb-0">Comeca a enviar as mensagens para todas as pacientes. O sistema respeita a meta diária é o horário configurado.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card border-warning text-center">
+                                <div class="card-body py-3">
+                                    <h6 class="text-warning"><i class="bi bi-pause-fill fs-4"></i></h6>
+                                    <strong>Pausar</strong>
+                                    <p class="small text-muted mb-0">Interrompe temporariamente. Os dados não são perdidos — você pode continuar depois.</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card border-primary text-center">
+                                <div class="card-body py-3">
+                                    <h6 class="text-primary"><i class="bi bi-play-fill fs-4"></i></h6>
+                                    <strong>Continuar</strong>
+                                    <p class="small text-muted mb-0">Retoma o envio exatamente de onde parou, sem reenviar para quem já recebeu.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <div class="alert alert-danger small mb-0">
+                                <i class="bi bi-trash"></i> <strong>Excluir</strong> — Remove a campanha <strong>para sempre</strong>. Todas as respostas são perdidas. Não tem volta.
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="alert alert-info small mb-0">
+                                <i class="bi bi-check-circle"></i> Os botões mudam conforme o status:
+                                <br>Pendente → <span class="mock-btn-success" style="font-size:0.7rem; padding:1px 6px;">Iniciar envio</span>
+                                | Enviando → <span class="mock-btn-warning" style="font-size:0.7rem; padding:1px 6px; color:#000;">Pausar</span>
+                                | Pausado → <span class="mock-btn-success" style="font-size:0.7rem; padding:1px 6px;">Continuar</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# ========== PASSO 5: PROGRESSO EM TEMPO REAL ========== #}
+            <div class="card tut-step" id="passo5">
+                <div class="card-header d-flex align-items-center gap-3" style="background: linear-gradient(135deg, #128C7E, #25D366); color: #fff;">
+                    <div class="step-number" style="background: rgba(255,255,255,0.3);">5</div>
+                    <h5 class="mb-0">Acompanhar Progresso em Tempo Real</h5>
+                </div>
+                <div class="card-body">
+                    <p>Enquanto a campanha esta <span class="mock-badge-enviando">enviando</span>, a tela de detalhes mostra <strong>informações ao vivo</strong> que atualizam automáticamente:</p>
+
+                    <!-- MOCK DO LIVE CARD -->
+                    <div class="tut-mock mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <strong><i class="bi bi-broadcast text-success"></i> Atividade ao vivo</strong>
+                            <span class="mock-badge-enviando">ENVIANDO</span>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-4">
+                                <small class="text-muted d-block">Último envio</small>
+                                <div class="fw-semibold">MARIA SILVA SANTOS</div>
+                                <small class="text-muted">55985998765432</small>
+                                <small class="text-info">05/01 14:32:15</small>
+                            </div>
+                            <div class="col-4">
+                                <small class="text-muted d-block">Próximo a ser enviado</small>
+                                <div class="fw-semibold">JULIA OLIVEIRA</div>
+                                <small class="text-muted">55985912345678</small>
+                                <small class="text-success"><i class="bi bi-hourglass-split"></i> em ~8 segundos</small>
+                            </div>
+                            <div class="col-4">
+                                <small class="text-muted d-block">Meta de hoje</small>
+                                <div class="fw-semibold">87 / 100</div>
+                                <div class="progress mt-1" style="height:8px;">
+                                    <div class="progress-bar bg-success" style="width:87%"></div>
+                                </div>
+                                <small class="text-muted">Intervalo: 15s entre envios</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-8">
+                            <p class="small">Alem da atividade ao vivo, a tela também mostra:</p>
+                            <ul class="small">
+                                <li><strong>Gráfico de sintomas</strong> — distribuicao dos sintomas entre as pacientes que já responderam</li>
+                                <li><strong>Tabela de pacientes</strong> — cada paciente com seu status atual (aguardando, enviado, respondido, erro)</li>
+                                <li><strong>Tabela de respostas</strong> — cada resposta com os sintomas marcados, se buscou atendimento, etc.</li>
+                                <li><strong>Link do questionário</strong> — copiável para cada paciente (útil se precisar reenviar manualmente)</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="alert alert-warning small mb-0">
+                                <h6><i class="bi bi-exclamation-triangle"></i> Erros de envio:</h6>
+                                <p class="mb-0">Se o WhatsApp do paciente for invalido ou estiver offline, o sistema marca como <span class="mock-badge-erro">erro</span> e mostra o motivo na tabela.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# ========== PASSO 6: O QUE A PACIENTE VE ========== #}
+            <div class="card tut-step" id="passo6">
+                <div class="card-header d-flex align-items-center gap-3" style="background: linear-gradient(135deg, #25D366, #128C7E); color: #fff;">
+                    <div class="step-number" style="background: rgba(255,255,255,0.3);">6</div>
+                    <h5 class="mb-0">O que a Paciente Ve no Celular</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <!-- CELULAR MOCK 1: WHATSAPP -->
+                        <div class="col-md-5">
+                            <h6 class="text-center mb-3">1. Mensagem no WhatsApp</h6>
+                            <div class="phone-mock">
+                                <div class="phone-mock-screen">
+                                    <div style="text-align:center; color:#999; font-size:0.7rem; margin-bottom:8px;">WhatsApp</div>
+                                    <div class="phone-msg">
+                                        <strong>Maternidade MEAC</strong>
+                                        <p class="mb-1 mt-1">Olá <strong>MARIA SILVA SANTOS</strong>!</p>
+                                        <p class="mb-1">A Maternidade-Escolá Assis Chateaubriand esta realizando uma pesquisa sobre a sua recuperacao após a <strong>cesarea</strong>.</p>
+                                        <p class="mb-1">Suas respostas nos ajudam a melhorar o cuidado com nossas pacientes.</p>
+                                        <p class="mb-2">Para participar, acesse o link abaixo:</p>
+                                        <p class="mb-0 text-primary text-decoration-underline">https://chsistemas.cloud/p/abc123def456...</p>
+                                    </div>
+                                    <div style="text-align:right;font-size:0.7rem;color:#999;">14:32 <i class="bi bi-check2-all text-primary"></i></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- CELULAR MOCK 2: QUESTIONARIO -->
+                        <div class="col-md-7">
+                            <h6 class="text-center mb-3">2. Questionário no Navegador</h6>
+                            <div class="tut-mock" style="max-width:400px; margin: 0 auto;">
+                                <div class="text-white rounded-top p-2" style="background:#128C7E; font-size:0.8rem;">
+                                    <strong><i class="bi bi-clipboard-pulse"></i> Pesquisa pós-cesarea</strong><br>
+                                    <small>Serviço de Controle de Infecção Hospitalar — MEAC</small>
+                                </div>
+                                <div class="p-3" style="font-size:0.78rem;">
+                                    <p class="mb-2">Prezada <strong>MARIA SILVA SANTOS</strong>, sua participacao e muito importante!</p>
+
+                                    <div class="mb-2">
+                                        <strong>1. Você apresentou algum destes sintomas?</strong><br>
+                                        <small class="text-muted">Febre, ferida avermelhada, inchada, com dor, secreção, pus, sangramento ou mau cheiro.</small><br>
+                                        <span class="badge bg-success me-1">Sim</span> <span class="badge bg-secondary me-1">Nao</span>
+                                    </div>
+
+                                    <div class="mb-2" style="background:#f0fff0; padding:6px; border-radius:4px; border-left:3px solid #198754;">
+                                        <small class="text-success">→ Se marcar "Sim", abre lista de 8 sintomas para selecionar</small>
+                                        <br><small>☐ Febre  ☐ Ferida avermelhada  ☐ Ferida inchada ...</small>
+                                    </div>
+
+                                    <div class="mb-2">
+                                        <strong>2. Você buscou atendimento médico?</strong><br>
+                                        <span class="badge bg-success me-1">Sim</span> <span class="badge bg-secondary me-1">Nao</span>
+                                    </div>
+
+                                    <div class="mb-2">
+                                        <strong>3. Você utilizou algum remédio?</strong><br>
+                                        <span class="badge bg-success me-1">Sim</span> <span class="badge bg-secondary me-1">Nao</span>
+                                    </div>
+
+                                    <div class="mb-2">
+                                        <strong>4. Observações (opcional)</strong><br>
+                                        <textarea class="mock-form-control" rows="2" style="font-size:0.75rem;"></textarea>
+                                    </div>
+
+                                    <button class="btn btn-success w-100 btn-sm"><i class="bi bi-send-check"></i> Enviar resposta</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-success mt-3 small">
+                        <i class="bi bi-check-circle"></i> <strong>Pós-envio:</strong> A paciente ve uma tela de <strong>"Obrigado!"</strong> confirmando que a resposta foi registrada. Se tentar acessar o link novamente, o sistema mostra que ela já respondeu.
+                    </div>
+                </div>
+            </div>
+
+            {# ========== PASSO 7: ANALISAR RESPOSTAS ========== #}
+            <div class="card tut-step" id="passo7">
+                <div class="card-header d-flex align-items-center gap-3" style="background: linear-gradient(135deg, #128C7E, #25D366); color: #fff;">
+                    <div class="step-number" style="background: rgba(255,255,255,0.3);">7</div>
+                    <h5 class="mb-0">Analisar Respostas — Tela de Filtros e Gráficos</h5>
+                </div>
+                <div class="card-body">
+                    <p>Acesse pelo menu <i class="bi bi-list-check"></i> <strong>Respostas</strong>. Esta é a tela mais poderosa para análise dos dados.</p>
+
+                    <!-- MOCK DOS FILTROS -->
+                    <div class="tut-mock mb-3">
+                        <div class="tut-mock-header">
+                            <strong><i class="bi bi-funnel"></i> Filtros</strong>
+                        </div>
+                        <div class="row g-2" style="font-size:0.75rem;">
+                            <div class="col-3">
+                                <label class="small fw-bold">Campanha</label>
+                                <select class="mock-form-select" style="font-size:0.75rem;"><option>Todas</option></select>
+                            </div>
+                            <div class="col-2">
+                                <label class="small fw-bold">Template</label>
+                                <select class="mock-form-select" style="font-size:0.75rem;"><option>Todos</option></select>
+                            </div>
+                            <div class="col-3">
+                                <label class="small fw-bold">Sintoma específico</label>
+                                <select class="mock-form-select" style="font-size:0.75rem;"><option>Ferida com pus</option></select>
+                            </div>
+                            <div class="col-2">
+                                <label class="small fw-bold">Apresentou?</label>
+                                <select class="mock-form-select" style="font-size:0.75rem;"><option>Sim</option></select>
+                            </div>
+                            <div class="col-2">
+                                <label class="small fw-bold">Buscou atend.?</label>
+                                <select class="mock-form-select" style="font-size:0.75rem;"><option>Todas</option></select>
+                            </div>
+                            <div class="col-3">
+                                <label class="small fw-bold">De</label>
+                                <input type="date" class="mock-form-control" style="font-size:0.75rem;" value="2026-01-01">
+                            </div>
+                            <div class="col-3">
+                                <label class="small fw-bold">Ate</label>
+                                <input type="date" class="mock-form-control" style="font-size:0.75rem;" value="2026-01-31">
+                            </div>
+                            <div class="col-6 d-flex align-items-end justify-content-end gap-2">
+                                <span class="mock-btn-outline" style="font-size:0.75rem;">Limpar</span>
+                                <span class="mock-btn-wpp" style="font-size:0.75rem;"><i class="bi bi-search"></i> Aplicar</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- METRIC CARDS -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-3"><div class="mock-stat" style="border-left-color:#128C7E;"><small class="text-muted">Total respondidos</small><h4 class="mb-0">209</h4></div></div>
+                        <div class="col-3"><div class="mock-stat" style="border-left-color:#dc3545;"><small class="text-muted">Com sintomas</small><h4 class="mb-0">54 <small class="text-muted">(25.8%)</small></h4></div></div>
+                        <div class="col-3"><div class="mock-stat" style="border-left-color:#0d6efd;"><small class="text-muted">Buscaram atendimento</small><h4 class="mb-0">31 <small class="text-muted">(14.8%)</small></h4></div></div>
+                        <div class="col-3"><div class="mock-stat" style="border-left-color:#fd7e14;"><small class="text-muted">Usaram remédio</small><h4 class="mb-0">42 <small class="text-muted">(20.1%)</small></h4></div></div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <ul class="small">
+                                <li><strong>Top 5 sintomas</strong> mais reportados em destaque</li>
+                                <li><strong>Gráficos interátivos:</strong> barras (sintomas), pizza (sim/nao), linha do tempo (respostas/dia), comparativo entre templates</li>
+                                <li><strong>Tabela detalhada:</strong> cada linha = uma resposta, com colunas para sintomas, atendimento, remédio, observações</li>
+                            </ul>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="alert alert-info small mb-0">
+                                <i class="bi bi-funnel"></i> <strong>Dica:</strong> Use os filtros para isolár casos específicos. Ex: filtre por "Ferida com pus" + "Buscou atendimento = Sim" para analisar os casos mais graves.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# ========== PASSO 8: RELATORIO ESTATISTICO ========== #}
+            <div class="card tut-step" id="passo8">
+                <div class="card-header d-flex align-items-center gap-3" style="background: linear-gradient(135deg, #25D366, #128C7E); color: #fff;">
+                    <div class="step-number" style="background: rgba(255,255,255,0.3);">8</div>
+                    <h5 class="mb-0">Relatório Estatístico — Análise Avancada</h5>
+                </div>
+                <div class="card-body">
+                    <p>Acesse pelo menu <i class="bi bi-bar-chart-line"></i> <strong>Estatistica</strong>. Esta tela gera um relatorio estatístico inferencial para <strong>apoiar decisões clínicas</strong> com rigor metodológico.</p>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Selecione as campanhas e clique em <span class="mock-btn-wpp" style="font-size:0.7rem; padding:2px 10px;">Gerar Relatório</span>:</h6>
+
+                            <div class="tut-mock" style="font-size:0.8rem;">
+                                <div class="d-flex gap-2 align-items-center mb-2">
+                                    <input type="checkbox" checked> Cesareas - Janeiro 2026 <span class="badge bg-secondary">CESARIANA</span>
+                                </div>
+                                <div class="d-flex gap-2 align-items-center mb-2">
+                                    <input type="checkbox" checked> Mastologia - Dez/25 <span class="badge bg-secondary">MASTOLOGIA</span>
+                                </div>
+                                <div class="d-flex gap-2 align-items-center mb-3">
+                                    <input type="checkbox"> Cesareas - Fevereiro <span class="badge bg-secondary">CESARIANA</span>
+                                </div>
+                                <button class="btn btn-success btn-sm w-100">Gerar Relatório</button>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>O relatorio inclui:</h6>
+                            <div class="list-group list-group-flush small">
+                                <div class="list-group-item px-2 py-2"><i class="bi bi-percent text-success me-1"></i> <strong>Indicadores Principais</strong> — proporções com IC 95% (Wilson)</div>
+                                <div class="list-group-item px-2 py-2"><i class="bi bi-clipboard-data text-primary me-1"></i> <strong>Prevalência por Sintoma</strong> — cada sintoma com taxa e IC 95%</div>
+                                <div class="list-group-item px-2 py-2"><i class="bi bi-arrow-left-right text-warning me-1"></i> <strong>Análise de Sensibilidade</strong> — cenários otimista e pessimista (nao-respostas)</div>
+                                <div class="list-group-item px-2 py-2"><i class="bi bi-table text-info me-1"></i> <strong>Associações 2x2</strong> — Qui-quadrado/Fisher + Odds Ratio</div>
+                                <div class="list-group-item px-2 py-2"><i class="bi bi-diagram-3 text-danger me-1"></i> <strong>Comparação Cesarea vs Mastologia</strong> — com teste estatístico</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row mt-3">
+                        <div class="col-md-6">
+                            <div class="alert alert-warning small mb-0">
+                                <h6><i class="bi bi-exclamation-diamond"></i> Alertas metodológicos:</h6>
+                                <ul class="mb-0">
+                                    <li><strong>N &lt; 20:</strong> Amostra insuficiente — estenda o período ou agregue campanhas</li>
+                                    <li><strong>N &lt; 50:</strong> Amostra pequena — traté como tendencia, não conclusao</li>
+                                    <li><strong>Nao-resposta &gt; 40%:</strong> Risco de viés — vejá análise de sensibilidade</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="alert alert-info small mb-0">
+                                <i class="bi bi-info-circle"></i> <strong>Nota técnica:</strong> O IC de Wilson e mais robusto que a aproximacao normal. Celulas esperadas &lt; 5 usam automáticamente o teste exato de Fisher.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            {# ========== PASSO 9: EXPORTAR ========== #}
+            <div class="card tut-step" id="passo9">
+                <div class="card-header d-flex align-items-center gap-3" style="background: linear-gradient(135deg, #128C7E, #25D366); color: #fff;">
+                    <div class="step-number" style="background: rgba(255,255,255,0.3);">9</div>
+                    <h5 class="mb-0">Exportar Dados para Excel</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6><i class="bi bi-box-arrow-down"></i> Opção 1: Exportar da campanha</h6>
+                            <div class="tut-mock">
+                                <p class="small">Na tela de detalhes da campanha, clique em:</p>
+                                <div class="text-center">
+                                    <span class="mock-btn-outline-green"><i class="bi bi-file-earmark-excel"></i> Exportar Excel</span>
+                                </div>
+                                <p class="small mt-2 mb-0">O arquivo contem <strong>todos os pacientes</strong> da campanha com:</p>
+                                <ul class="small mb-0">
+                                    <li>Nome, telefone, idade, data cirurgia</li>
+                                    <li>Status do envio, data de envio</li>
+                                    <li>Sintomas reportados, buscou atendimento, usou remédio</li>
+                                    <li>Observações da paciente</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6><i class="bi bi-box-arrow-down"></i> Opção 2: Exportar da análise</h6>
+                            <div class="tut-mock">
+                                <p class="small">Na tela de Respostas, após aplicar filtros, clique em:</p>
+                                <div class="text-center">
+                                    <span class="mock-btn-outline-green"><i class="bi bi-file-earmark-excel"></i> Exportar (filtrado)</span>
+                                </div>
+                                <p class="small mt-2 mb-0">Exporta <strong>apenas os resultados filtrados</strong> com:</p>
+                                <ul class="small mb-0">
+                                    <li>Nome da campanha e template</li>
+                                    <li>Dados da paciente e respostas do questionário</li>
+                                    <li>Sintomas detalhados</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-success mt-3 small mb-0">
+                        <i class="bi bi-check-circle"></i> Ambos geram arquivo <strong>.xlsx</strong> padrão, pronto para abrir no Excel e fazer análises customizadas.
+                    </div>
+                </div>
+            </div>
+
+            {# ========== PASSO 10: DICAS PRATICAS ========== #}
+            <div class="card tut-step" id="passo10">
+                <div class="card-header d-flex align-items-center gap-3" style="background: linear-gradient(135deg, #25D366, #128C7E); color: #fff;">
+                    <div class="step-number" style="background: rgba(255,255,255,0.3);">10</div>
+                    <h5 class="mb-0">Dicas Práticas e Boas Práticas</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="card border-success h-100">
+                                <div class="card-body">
+                                    <h6 class="text-success"><i class="bi bi-file-earmark-excel"></i> Planilha</h6>
+                                    <ul class="small mb-0">
+                                        <li>Confira os <strong>telefones</strong> antes de importar</li>
+                                        <li>Remova <strong>duplicatas</strong> (mesmo número em duas linhas)</li>
+                                        <li>Use <strong>abas nomeadas</strong> para organizar lotes</li>
+                                        <li>Prefira <strong>.xlsx</strong> (mais confiável que .xls)</li>
+                                        <li>Linhas sem nome/telefone são <strong>ignoradas</strong></li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card border-primary h-100">
+                                <div class="card-body">
+                                    <h6 class="text-primary"><i class="bi bi-send"></i> Envio</h6>
+                                    <ul class="small mb-0">
+                                        <li>Comece com <strong>meta diária de 50-100</strong></li>
+                                        <li>Respeite <strong>horário comercial</strong> (8h-18h)</li>
+                                        <li>Pause se houver <strong>muitos erros</strong> de envio</li>
+                                        <li>Monitore o <strong>progresso ao vivo</strong></li>
+                                        <li>WhatsApp <strong>precisa ficar conectado</strong> durante o envio</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="card border-warning h-100">
+                                <div class="card-body">
+                                    <h6 class="text-warning"><i class="bi bi-bar-chart"></i> Análise</h6>
+                                    <ul class="small mb-0">
+                                        <li>Agregue <strong>várias campanhas</strong> para amostras maiores</li>
+                                        <li>Use o <strong>relatorio estatístico</strong> antes de conclusoes</li>
+                                        <li>Exporte para Excel para <strong>análises customizadas</strong></li>
+                                        <li>Compare <strong>períodos diferentes</strong></li>
+                                        <li>Cada paciente tem <strong>token único</strong> — seguro</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <h6><i class="bi bi-question-circle"></i> Perguntas Frequentes</h6>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="card bg-light mb-2">
+                                <div class="card-body py-2 small">
+                                    <strong>P: Posso pausar e retomar?</strong><br>
+                                    <span class="text-muted">R: Sim. O sistema continua de onde parou.</span>
+                                </div>
+                            </div>
+                            <div class="card bg-light mb-2">
+                                <div class="card-body py-2 small">
+                                    <strong>P: WhatsApp desconectou durante envio?</strong><br>
+                                    <span class="text-muted">R: A campanha pausa automáticamente. Reconecte e retome.</span>
+                                </div>
+                            </div>
+                            <div class="card bg-light mb-2">
+                                <div class="card-body py-2 small">
+                                    <strong>P: Posso editar pacientes?</strong><br>
+                                    <span class="text-muted">R: Não. Crie uma nova campanha se precisar corrigir dados.</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-light mb-2">
+                                <div class="card-body py-2 small">
+                                    <strong>P: O link expira?</strong><br>
+                                    <span class="text-muted">R: Não. O sistema faz até 3 reenvios automáticos para quem não respondeu.</span>
+                                </div>
+                            </div>
+                            <div class="card bg-light mb-2">
+                                <div class="card-body py-2 small">
+                                    <strong>P: Posso ver o que cada paciente respondeu?</strong><br>
+                                    <span class="text-muted">R: Sim. Na tela de respostas, cada linha mostra os detalhes completos.</span>
+                                </div>
+                            </div>
+                            <div class="card bg-light mb-2">
+                                <div class="card-body py-2 small">
+                                    <strong>P: Da pra usar o mesmo Excel com múltiplas abas?</strong><br>
+                                    <span class="text-muted">R: Sim. Na importacao, escolha a aba desejada no campo "Aba da planilha".</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /col-md-9 -->
+    </div><!-- /row -->
+</div>
+{% endblock %}

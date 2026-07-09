@@ -1108,3 +1108,14 @@ def init_scih_routes(app, db):
         )
 
     logger.info("Rotas SCIH registradas")
+
+    # =========================================================================
+    # TUTORIAL
+    # =========================================================================
+    @app.route('/scih/tutorial')
+    @login_required
+    def scih_tutorial():
+        if not _exige_scih():
+            return redirect(url_for('login'))
+
+        return render_template('tutorial_scih.html')

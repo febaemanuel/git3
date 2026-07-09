@@ -2874,6 +2874,20 @@ class WhatsApp:
             logger.error(f"Excecao ao obter QR Code: {e}", exc_info=True)
             return False, f"Erro: {str(e)}"
 
+    def desconectar(self):
+        """Desconecta/logout da instancia WhatsApp via Evolution API"""
+        if not self.ok():
+            return False, "Nao configurado"
+        ok, r = self._req('DELETE', f"/instance/logout/{self.instance}")
+        if ok and r.status_code in [200, 201, 204]:
+            self.cfg_user.conectado = False
+            self.cfg_user.atualizado_em = datetime.utcnow()
+            db.session.commit()
+            return True, "WhatsApp desconectado com sucesso"
+        if ok and r.status_code == 404:
+            return False, "Instancia nao encontrada no servidor"
+        return False, f"Erro ao desconectar: {r.status_code if ok else r}"
+
     def verificar_numeros(self, numeros):
         """Verifica lista de numeros no WhatsApp"""
         if not self.ok():
@@ -7086,6 +7100,25 @@ def api_ws_status():
         return jsonify({'conectado': False, 'mensagem': 'Nao configurado'})
     conn, msg = ws.conectado()
     return jsonify({'conectado': conn, 'mensagem': msg})
+
+
+@app.route('/api/whatsapp/desconectar', methods=['POST'])
+@login_required
+def api_desconectar_whatsapp():
+    """Desconectar/logout WhatsApp"""
+    try:
+        ws = WhatsApp(current_user.id)
+        if not ws.ok():
+            return jsonify({'erro': 'WhatsApp nao configurado'}), 400
+
+        sucesso, msg = ws.desconectar()
+        if sucesso:
+            return jsonify({'sucesso': True, 'mensagem': msg})
+        else:
+            return jsonify({'erro': msg}), 400
+    except Exception as e:
+        logger.error(f"Erro ao desconectar WhatsApp: {str(e)}")
+        return jsonify({'erro': str(e)}), 500
 
 
 # Funcao auxiliar para verificar respostas validas

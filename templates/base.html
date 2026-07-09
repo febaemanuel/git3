@@ -215,6 +215,11 @@
                             <i class="bi bi-upload"></i> Nova Campanha
                         </a>
                     </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('scih_tutorial') }}">
+                            <i class="bi bi-book"></i> Tutorial
+                        </a>
+                    </li>
                     {% else %}
                     <!-- FILA CIRÚRGICA (padrão) -->
                     <li class="nav-item">
@@ -310,6 +315,19 @@
             {% endif %}
         {% endwith %}
 
+        <!-- Alerta de Conexao WhatsApp (dismissivel via localStorage) -->
+        {% if current_user.is_authenticated %}
+        <div class="alert alert-warning alert-dismissible fade show d-flex align-items-center" role="alert" id="alerta-whatsapp-erros">
+            <i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>
+            <div>
+                <strong>Atencao:</strong> Caso enfrente erros de envio nas campanhas, verifique a conexao do WhatsApp em
+                <a href="{{ url_for('configuracoes') }}" class="alert-link">Configuracoes &raquo; WhatsApp</a>.
+                Certifique-se de que o QR Code foi escaneado e o status esta <strong>"Conectado"</strong>.
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" id="btn-fechar-alerta-wpp"></button>
+        </div>
+        {% endif %}
+
         {% block content %}{% endblock %}
     </div>
 
@@ -323,6 +341,20 @@
                 new bootstrap.Alert(alert).close();
             });
         }, 5000);
+
+        // Alerta WhatsApp: persistir "nao mostrar novamente" via localStorage
+        (function() {
+            if (localStorage.getItem('ocultar_alerta_whatsapp') === 'true') {
+                var alerta = document.getElementById('alerta-whatsapp-erros');
+                if (alerta) alerta.style.display = 'none';
+            }
+            var btn = document.getElementById('btn-fechar-alerta-wpp');
+            if (btn) {
+                btn.addEventListener('click', function() {
+                    localStorage.setItem('ocultar_alerta_whatsapp', 'true');
+                });
+            }
+        })();
     </script>
 
     {% block extra_js %}{% endblock %}

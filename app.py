@@ -2575,6 +2575,8 @@ class WhatsApp:
             url = f"{self.url}{endpoint}"
             if method == 'GET':
                 r = requests.get(url, headers=self._headers(), timeout=30)
+            elif method == 'DELETE':
+                r = requests.delete(url, headers=self._headers(), timeout=30)
             else:
                 r = requests.post(url, headers=self._headers(), json=data, timeout=30)
             return True, r
@@ -2875,17 +2877,20 @@ class WhatsApp:
             return False, f"Erro: {str(e)}"
 
     def desconectar(self):
-        """Desconecta/logout da instancia WhatsApp via Evolution API"""
+        """Desconecta/remove a instancia WhatsApp via Evolution API (delete)"""
         if not self.ok():
             return False, "Nao configurado"
-        ok, r = self._req('DELETE', f"/instance/logout/{self.instance}")
+        ok, r = self._req('DELETE', f"/instance/delete/{self.instance}")
         if ok and r.status_code in [200, 201, 204]:
             self.cfg_user.conectado = False
             self.cfg_user.atualizado_em = datetime.utcnow()
             db.session.commit()
-            return True, "WhatsApp desconectado com sucesso"
+            return True, "WhatsApp desconectado com sucesso. Clique em Conectar WhatsApp para gerar um novo QR Code."
         if ok and r.status_code == 404:
-            return False, "Instancia nao encontrada no servidor"
+            self.cfg_user.conectado = False
+            self.cfg_user.atualizado_em = datetime.utcnow()
+            db.session.commit()
+            return True, "Instancia ja foi removida do servidor. Clique em Conectar WhatsApp para gerar um novo QR Code."
         return False, f"Erro ao desconectar: {r.status_code if ok else r}"
 
     def verificar_numeros(self, numeros):

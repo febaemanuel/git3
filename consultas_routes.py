@@ -34,7 +34,8 @@ def init_consultas_routes(app, db):
         LogMsgConsulta, WhatsApp, formatar_numero,
         formatar_mensagem_comprovante, formatar_mensagem_voltar_posto,
         extrair_dados_comprovante, PesquisaSatisfacao, enviar_e_registrar_consulta,
-        Paciente, HistoricoConsulta, ComprovanteAntecipado, normalizar_nome_paciente
+        Paciente, HistoricoConsulta, ComprovanteAntecipado, normalizar_nome_paciente,
+        TZ_FORTALEZA, obter_hoje_fortaleza, obter_hora_fortaleza
     )
 
     try:
@@ -1257,6 +1258,91 @@ _Hospital Universitário Walter Cantídio_"""
             return redirect(url_for('consultas_dashboard'))
 
         return render_template('progresso_campanha_consultas.html', campanha=campanha, task_id=task_id)
+
+
+    @app.route('/api/consultas/campanha/<int:id>/progresso')
+    @login_required
+    def api_consultas_campanha_progresso(id):
+        """Endpoint JSON com dados de progresso ao vivo (Atividade ao vivo)"""
+        campanha = CampanhaConsulta.query.get_or_404(id)
+
+        if campanha.criador_id != current_user.id and not current_user.is_admin:
+            return jsonify({'erro': 'Acesso negado'}), 403
+
+        campanha.pode_enviar_hoje()
+        db.session.commit()
+
+        ultimo_log = LogMsgConsulta.query.filter_by(
+            campanha_id=campanha.id, direcao='enviada', status='sucesso'
+        ).order_by(LogMsgConsulta.id.desc()).first()
+
+        ultimo_nome = None
+        ultimo_telefone = None
+        ultimo_quando = None
+        proximo_em_segs = None
+        if ultimo_log:
+            consulta_ult = db.session.get(AgendamentoConsulta, ultimo_log.consulta_id) if ultimo_log.consulta_id else None
+            ultimo_nome = consulta_ult.paciente if consulta_ult else None
+            ultimo_telefone = ultimo_log.telefone
+            try:
+                import pytz
+                if ultimo_log.data.tzinfo is None:
+                    dt_local = pytz.utc.localize(ultimo_log.data).astimezone(TZ_FORTALEZA)
+                else:
+                    dt_local = ultimo_log.data.astimezone(TZ_FORTALEZA)
+                ultimo_quando = dt_local.strftime('%d/%m %H:%M:%S')
+            except Exception:
+                ultimo_quando = ultimo_log.data.strftime('%d/%m %H:%M:%S')
+            if campanha.status == 'enviando' and ultimo_log.data:
+                intervalo = campanha.tempo_entre_envios or 15
+                segs_passados = (datetime.utcnow() - ultimo_log.data).total_seconds()
+                proximo_em_segs = max(int(intervalo - segs_passados), 0)
+
+        proximo_paciente = None
+        if campanha.status == 'enviando':
+            prox = AgendamentoConsulta.query.filter_by(
+                campanha_id=campanha.id, status='AGUARDANDO_ENVIO'
+            ).order_by(AgendamentoConsulta.id).first()
+            if prox:
+                telefones = [t for t in [
+                    prox.telefone_cadastro,
+                    prox.telefone_registro if prox.telefone_registro != prox.telefone_cadastro else None
+                ] if t]
+                proximo_paciente = {'nome': prox.paciente, 'telefone': ', '.join(telefones)}
+
+        erros_recentes = []
+        erros_q = LogMsgConsulta.query.filter_by(
+            campanha_id=campanha.id, status='erro'
+        ).order_by(LogMsgConsulta.id.desc()).limit(5).all()
+        for e in erros_q:
+            cons_err = db.session.get(AgendamentoConsulta, e.consulta_id) if e.consulta_id else None
+            erros_recentes.append({
+                'nome': cons_err.paciente if cons_err else '-',
+                'telefone': e.telefone or '-',
+                'erro': (e.erro or '')[:200],
+                'quando': e.data.strftime('%d/%m %H:%M') if e.data else '-',
+            })
+
+        return jsonify({
+            'status': campanha.status,
+            'status_msg': campanha.status_msg,
+            'total_consultas': campanha.total_consultas,
+            'total_enviados': campanha.total_enviados,
+            'total_confirmados': campanha.total_confirmados,
+            'total_rejeitados': campanha.total_rejeitados,
+            'total_aguardando_comprovante': campanha.total_aguardando_comprovante or 0,
+            'enviados_hoje': campanha.enviados_hoje or 0,
+            'meta_diaria': campanha.meta_diaria or 50,
+            'intervalo_segs': campanha.tempo_entre_envios or 15,
+            'ultimo_enviado': {
+                'nome': ultimo_nome,
+                'telefone': ultimo_telefone,
+                'quando': ultimo_quando,
+            } if ultimo_nome else None,
+            'proximo_paciente': proximo_paciente,
+            'proximo_em_segs': proximo_em_segs,
+            'erros_recentes': erros_recentes,
+        })
 
 
     # =========================================================================

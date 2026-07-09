@@ -27,6 +27,19 @@
         </div>
     </div>
 
+    <!-- Alerta de Novidade: Atividade ao Vivo (dismissivel via localStorage) -->
+    <div class="col-12 mb-4">
+        <div class="alert alert-info alert-dismissible fade show d-flex align-items-center border-start border-info border-4" role="alert" id="alerta-novidade-consultas">
+            <i class="bi bi-broadcast me-2 fs-3 text-info"></i>
+            <div class="flex-grow-1">
+                <strong class="fs-5">Novidade!</strong> Agora voce acompanha o envio das campanhas <strong>em tempo real</strong>.
+                <br>Abra qualquer campanha que esteja <span class="badge bg-success">enviando</span> e veja o painel <strong>"Atividade ao vivo"</strong> com:
+                <span class="text-muted">ultimo envio, proximo paciente, meta do dia e erros em tempo real.</span>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" id="btn-fechar-novidade-consultas"></button>
+        </div>
+    </div>
+
     <!-- Lista de Campanhas -->
     <div class="col-12">
         {% if campanhas %}
@@ -103,4 +116,21 @@
         {% endif %}
     </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+(function() {
+    if (localStorage.getItem('ocultar_novidade_consultas') === 'true') {
+        var alerta = document.getElementById('alerta-novidade-consultas');
+        if (alerta) alerta.style.display = 'none';
+    }
+    var btn = document.getElementById('btn-fechar-novidade-consultas');
+    if (btn) {
+        btn.addEventListener('click', function() {
+            localStorage.setItem('ocultar_novidade_consultas', 'true');
+        });
+    }
+})();
+</script>
 {% endblock %}

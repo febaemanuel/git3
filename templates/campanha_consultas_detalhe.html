@@ -213,6 +213,41 @@
         </div>
     </div>
 
+    <!-- Atividade ao Vivo (apenas quando campanha esta enviando/pausado) -->
+    {% if campanha.status in ['enviando', 'pausado'] %}
+    <div class="col-12 mb-4">
+        <div class="card" id="live-card">
+            <div class="card-header d-flex justify-content-between align-items-center" style="background: linear-gradient(135deg, #128C7E, #25D366); color: #fff;">
+                <strong><i class="bi bi-broadcast"></i> Atividade ao vivo</strong>
+                <span id="live-status-badge" class="badge bg-light text-dark">—</span>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Ultimo envio</small>
+                        <div id="live-ultimo" class="fw-semibold">—</div>
+                        <small id="live-ultimo-quando" class="text-muted"></small>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Proximo a ser enviado</small>
+                        <div id="live-proximo" class="fw-semibold">—</div>
+                        <small id="live-proximo-em" class="text-success"></small>
+                    </div>
+                    <div class="col-md-4">
+                        <small class="text-muted d-block">Meta de hoje</small>
+                        <div id="live-meta" class="fw-semibold">— / —</div>
+                        <div class="progress mt-1" style="height: 6px;">
+                            <div id="live-meta-bar" class="progress-bar bg-success" style="width: 0%"></div>
+                        </div>
+                        <small id="live-intervalo" class="text-muted"></small>
+                    </div>
+                </div>
+                <div id="live-erros" class="mt-3"></div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
     <!-- Barra de Progresso -->
     <div class="col-12 mb-4">
         <div class="card">
@@ -761,6 +796,71 @@
             })
             .catch(err => alert('Erro: ' + err));
     }
+
+    // ======== ATIVIDADE AO VIVO - Polling ========
+    {% if campanha.status in ['enviando', 'pausado'] %}
+    let _consultasPollIdx = null;
+    function pollProgressoConsultas() {
+        fetch('/api/consultas/campanha/{{ campanha.id }}/progresso', {
+            headers: { 'X-CSRFToken': '{{ csrf_token() }}' }
+        })
+        .then(r => r.json())
+        .then(d => {
+            var badge = document.getElementById('live-status-badge');
+            if (badge) {
+                badge.textContent = d.status === 'enviando' ? 'ENVIANDO' : (d.status === 'pausado' ? 'PAUSADO' : d.status.toUpperCase());
+                badge.className = 'badge ' + (d.status === 'enviando' ? 'bg-success' : 'bg-warning text-dark');
+            }
+
+            var ult = document.getElementById('live-ultimo');
+            if (ult) ult.textContent = d.ultimo_enviado ? d.ultimo_enviado.nome : '—';
+            var ultQ = document.getElementById('live-ultimo-quando');
+            if (ultQ) {
+                ultQ.textContent = d.ultimo_enviado
+                    ? (d.ultimo_enviado.telefone || '') + '  ' + (d.ultimo_enviado.quando || '')
+                    : '';
+            }
+
+            var prox = document.getElementById('live-proximo');
+            if (prox) prox.textContent = d.proximo_paciente ? d.proximo_paciente.nome : '—';
+            var proxEm = document.getElementById('live-proximo-em');
+            if (proxEm) {
+                proxEm.textContent = d.proximo_em_segs != null ? 'em ~' + d.proximo_em_segs + ' segundos' : '';
+            }
+
+            var metaEl = document.getElementById('live-meta');
+            if (metaEl) metaEl.textContent = (d.enviados_hoje || 0) + ' / ' + (d.meta_diaria || 50);
+            var metaBar = document.getElementById('live-meta-bar');
+            if (metaBar) {
+                var pct = d.meta_diaria ? Math.min((d.enviados_hoje || 0) / d.meta_diaria * 100, 100) : 0;
+                metaBar.style.width = pct + '%';
+            }
+            var intervalo = document.getElementById('live-intervalo');
+            if (intervalo) intervalo.textContent = 'Intervalo: ' + (d.intervalo_segs || 15) + 's entre envios';
+
+            var errosDiv = document.getElementById('live-erros');
+            if (errosDiv && d.erros_recentes && d.erros_recentes.length > 0) {
+                errosDiv.innerHTML = '<hr><small class="text-danger fw-bold"><i class="bi bi-exclamation-triangle"></i> Erros recentes:</small>' +
+                    d.erros_recentes.map(function(e) {
+                        return '<div class="small text-danger"><strong>' + e.nome + '</strong> (' + e.telefone + ') — ' + e.erro + ' <small class="text-muted">' + e.quando + '</small></div>';
+                    }).join('');
+            } else if (errosDiv) {
+                errosDiv.innerHTML = '';
+            }
+        })
+        .catch(function() {});
+    }
+    pollProgressoConsultas();
+    _consultasPollIdx = setInterval(pollProgressoConsultas, 5000);
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            if (_consultasPollIdx) { clearInterval(_consultasPollIdx); _consultasPollIdx = null; }
+        } else {
+            if (!_consultasPollIdx) { pollProgressoConsultas(); _consultasPollIdx = setInterval(pollProgressoConsultas, 5000); }
+        }
+    });
+    {% endif %}
+    // ======== FIM ATIVIDADE AO VIVO ========
 </script>
 
 <!-- Modal Comprovante Antecipado -->
